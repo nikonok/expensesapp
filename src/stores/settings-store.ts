@@ -34,6 +34,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   isLoaded: false,
 
   load: async () => {
+    if (get().isLoaded) return;
     const rows = await db.settings.toArray();
     const map: Record<string, unknown> = {};
     for (const row of rows) {

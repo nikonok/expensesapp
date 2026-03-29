@@ -136,7 +136,7 @@ export default function TransactionList() {
       })),
       txById,
     };
-  }, [transactions, hasActiveTransactionFilters]);
+  }, [transactions, transactionNoteFilter, transactionCategoryFilter, transactionAccountFilter]);
 
   // Compute day totals (income/expense) per day
   function getDayTotals(txs: Transaction[]): { income: number; expense: number } {

@@ -1237,9 +1237,13 @@ export default function TransactionInput() {
     }
   }, [searchParams]);
 
+  const initialised = useRef(false);
+
   // Populate edit fields when existing tx loads
   useEffect(() => {
     if (!isEdit || !existingTx || allAccounts.length === 0 || allCategories.length === 0) return;
+    if (initialised.current) return;
+    initialised.current = true;
 
     const typeMap: Record<TransactionType, TxTab> = {
       INCOME: 'income',

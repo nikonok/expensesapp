@@ -7,10 +7,12 @@ export function useExchangeRate(from: string, to: string) {
 
   useEffect(() => {
     if (from === to) { setRate(1); setIsLoading(false); return; }
+    let cancelled = false;
     setIsLoading(true);
     exchangeRateService.getRate(from, to)
-      .then(r => { setRate(r); setIsLoading(false); })
-      .catch(() => { setRate(null); setIsLoading(false); });
+      .then(r => { if (!cancelled) { setRate(r); setIsLoading(false); } })
+      .catch(() => { if (!cancelled) { setRate(null); setIsLoading(false); } });
+    return () => { cancelled = true; };
   }, [from, to]);
 
   return { rate, isLoading };
