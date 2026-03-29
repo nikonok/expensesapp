@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { Edit2, Trash2, X } from 'lucide-react';
 
 interface SelectionToolbarProps {
@@ -16,18 +15,9 @@ export default function SelectionToolbar({
 }: SelectionToolbarProps) {
   const count = selectedIds.size;
   const isSingle = count === 1;
+  const visible = count > 0;
 
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    if (count > 0) {
-      setVisible(true);
-    } else {
-      setVisible(false);
-    }
-  }, [count]);
-
-  if (count === 0 && !visible) return null;
+  if (!visible) return null;
 
   return (
     <div

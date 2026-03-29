@@ -8,15 +8,11 @@ export function useCategories(
 ): Category[] {
   return (
     useLiveQuery(async () => {
-      let collection = db.categories.orderBy('displayOrder');
-
-      const all = await collection.toArray();
-
-      return all.filter((c) => {
-        if (!includeTrashed && c.isTrashed) return false;
-        if (type && c.type !== type) return false;
-        return true;
-      });
+      const query = type
+        ? db.categories.where('type').equals(type)
+        : db.categories.toCollection();
+      const results = await query.sortBy('displayOrder');
+      return includeTrashed ? results : results.filter((c) => !c.isTrashed);
     }, [type, includeTrashed]) ?? []
   );
 }

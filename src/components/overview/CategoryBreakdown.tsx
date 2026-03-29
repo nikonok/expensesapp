@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useCategories } from '../../hooks/use-categories';
 import { getLucideIcon } from '../shared/IconPicker';
 import { formatAmount } from '../../utils/currency-utils';
@@ -11,27 +12,29 @@ interface CategoryBreakdownProps {
 export default function CategoryBreakdown({ transactions, currency }: CategoryBreakdownProps) {
   const categories = useCategories('EXPENSE');
 
-  const expenses = transactions.filter((t) => t.type === 'EXPENSE');
+  const { rows, totalsMap, maxAmount } = useMemo(() => {
+    const expenses = transactions.filter((t) => t.type === 'EXPENSE');
 
-  // Aggregate by categoryId
-  const totalsMap = new Map<number, number>();
-  for (const tx of expenses) {
-    if (tx.categoryId === null) continue;
-    totalsMap.set(tx.categoryId, (totalsMap.get(tx.categoryId) ?? 0) + tx.amountMainCurrency);
-  }
+    // Aggregate by categoryId
+    const totalsMap = new Map<number, number>();
+    for (const tx of expenses) {
+      if (tx.categoryId === null) continue;
+      totalsMap.set(tx.categoryId, (totalsMap.get(tx.categoryId) ?? 0) + tx.amountMainCurrency);
+    }
 
-  const maxAmount = Math.max(...Array.from(totalsMap.values()), 0);
+    // Build rows: categories with spending (sorted desc), then zero-spend (sorted alpha)
+    const withSpend = categories
+      .filter((c) => totalsMap.has(c.id!) && (totalsMap.get(c.id!) ?? 0) > 0)
+      .sort((a, b) => (totalsMap.get(b.id!) ?? 0) - (totalsMap.get(a.id!) ?? 0));
 
-  // Build rows: categories with spending (sorted desc), then zero-spend (sorted alpha)
-  const withSpend = categories
-    .filter((c) => totalsMap.has(c.id!) && (totalsMap.get(c.id!) ?? 0) > 0)
-    .sort((a, b) => (totalsMap.get(b.id!) ?? 0) - (totalsMap.get(a.id!) ?? 0));
+    const withoutSpend = categories
+      .filter((c) => !totalsMap.has(c.id!) || (totalsMap.get(c.id!) ?? 0) === 0)
+      .sort((a, b) => a.name.localeCompare(b.name));
 
-  const withoutSpend = categories
-    .filter((c) => !totalsMap.has(c.id!) || (totalsMap.get(c.id!) ?? 0) === 0)
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  const rows = [...withSpend, ...withoutSpend];
+    const rows = [...withSpend, ...withoutSpend];
+    const maxAmount = withSpend.length > 0 ? (totalsMap.get(withSpend[0].id!) ?? 0) : 0;
+    return { rows, totalsMap, maxAmount };
+  }, [transactions, categories]);
 
   if (rows.length === 0) return null;
 

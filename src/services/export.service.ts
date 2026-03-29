@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx';
 import { db } from '../db/database';
 import { notificationService } from './notification.service';
 
@@ -92,6 +91,7 @@ async function exportTransactions(
     }
   }
 
+  const XLSX = await import('xlsx');
   const ws = XLSX.utils.aoa_to_sheet([headerRow, ...dataRows]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Transactions');

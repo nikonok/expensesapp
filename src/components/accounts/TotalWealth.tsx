@@ -1,7 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { db } from '../../db/database';
-import type { Account } from '../../db/models';
 import { exchangeRateService } from '../../services/exchange-rate.service';
 import { useSettingsStore } from '../../stores/settings-store';
 
@@ -23,38 +22,38 @@ export default function TotalWealth() {
   const [grandDebts, setGrandDebts] = useState<number | null>(null);
 
   // Group active accounts by currency
-  const groups: CurrencyGroup[] = [];
-  const grouped: Record<string, CurrencyGroup> = {};
-
-  for (const acc of accounts) {
-    if (!acc.includeInTotal) continue;
-    if (!grouped[acc.currency]) {
-      grouped[acc.currency] = { currency: acc.currency, assets: 0, debts: 0 };
-      groups.push(grouped[acc.currency]);
+  const groups = useMemo(() => {
+    const result: CurrencyGroup[] = [];
+    const grouped: Record<string, CurrencyGroup> = {};
+    for (const acc of accounts) {
+      if (!acc.includeInTotal) continue;
+      if (!grouped[acc.currency]) {
+        grouped[acc.currency] = { currency: acc.currency, assets: 0, debts: 0 };
+        result.push(grouped[acc.currency]);
+      }
+      if (acc.type === 'DEBT') {
+        grouped[acc.currency].debts += Math.abs(acc.balance);
+      } else {
+        grouped[acc.currency].assets += acc.balance;
+      }
     }
-    if (acc.type === 'DEBT') {
-      grouped[acc.currency].debts += Math.abs(acc.balance);
-    } else {
-      grouped[acc.currency].assets += acc.balance;
-    }
-  }
+    return result;
+  }, [accounts]);
 
   // Convert to main currency for grand total
   useEffect(() => {
     let cancelled = false;
     async function calc() {
+      const currencies = [...new Set(groups.map((g) => g.currency))];
+      const rates = await Promise.all(currencies.map((c) => exchangeRateService.getRate(c, mainCurrency)));
+      const rateMap = Object.fromEntries(currencies.map((c, i) => [c, rates[i]]));
+
       let totalAssets = 0;
       let totalDebts = 0;
       for (const g of groups) {
-        if (g.currency === mainCurrency) {
-          totalAssets += g.assets;
-          totalDebts += g.debts;
-        } else {
-          const rate = await exchangeRateService.getRate(g.currency, mainCurrency);
-          const r = rate ?? 1;
-          totalAssets += g.assets * r;
-          totalDebts += g.debts * r;
-        }
+        const r = g.currency === mainCurrency ? 1 : (rateMap[g.currency] ?? 1);
+        totalAssets += g.assets * r;
+        totalDebts += g.debts * r;
       }
       if (!cancelled) {
         setGrandAssets(totalAssets);
@@ -63,8 +62,7 @@ export default function TotalWealth() {
     }
     calc();
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, mainCurrency]);
+  }, [groups, mainCurrency]);
 
   if (groups.length === 0) return null;
 

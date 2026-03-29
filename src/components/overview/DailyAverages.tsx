@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { startOfDay, endOfDay, differenceInCalendarDays, isWithinInterval, isBefore, isAfter } from 'date-fns';
 import { formatAmount } from '../../utils/currency-utils';
 import { getLocalDateString, getWeekRange } from '../../utils/date-utils';
@@ -52,35 +53,38 @@ function StatRow({ label, amount, currency }: StatRowProps) {
 }
 
 export default function DailyAverages({ transactions, start, end, currency }: DailyAveragesProps) {
-  const expenses = transactions.filter((t) => t.type === 'EXPENSE');
+  const { calendarDays, averagePerDay, todaySpend, thisWeekSpend } = useMemo(() => {
+    const expenses = transactions.filter((t) => t.type === 'EXPENSE');
+    const totalExpense = expenses.reduce((sum, t) => sum + t.amountMainCurrency, 0);
 
-  const totalExpense = expenses.reduce((sum, t) => sum + t.amountMainCurrency, 0);
+    // Calendar days in period (inclusive, 1 minimum)
+    const calendarDays = Math.max(1, differenceInCalendarDays(startOfDay(end), startOfDay(start)) + 1);
+    const averagePerDay = totalExpense / calendarDays;
 
-  // Calendar days in period (inclusive, 1 minimum)
-  const calendarDays = Math.max(1, differenceInCalendarDays(startOfDay(end), startOfDay(start)) + 1);
-  const averagePerDay = totalExpense / calendarDays;
+    const todayStr = getLocalDateString();
+    const todayDate = new Date(todayStr + 'T00:00:00');
+    const todayInPeriod = !isBefore(todayDate, startOfDay(start)) && !isAfter(todayDate, endOfDay(end));
 
-  const todayStr = getLocalDateString();
-  const todayDate = new Date(todayStr + 'T00:00:00');
-  const todayInPeriod = !isBefore(todayDate, startOfDay(start)) && !isAfter(todayDate, endOfDay(end));
+    const todaySpend = todayInPeriod
+      ? expenses.filter((t) => t.date === todayStr).reduce((sum, t) => sum + t.amountMainCurrency, 0)
+      : null;
 
-  const todaySpend = todayInPeriod
-    ? expenses.filter((t) => t.date === todayStr).reduce((sum, t) => sum + t.amountMainCurrency, 0)
-    : null;
+    const now = new Date();
+    const { start: weekStart, end: weekEnd } = getWeekRange(now);
+    const periodOverlapsWeek =
+      !isAfter(startOfDay(start), endOfDay(weekEnd)) && !isBefore(endOfDay(end), startOfDay(weekStart));
 
-  const now = new Date();
-  const { start: weekStart, end: weekEnd } = getWeekRange(now);
-  const periodOverlapsWeek =
-    !isAfter(startOfDay(start), endOfDay(weekEnd)) && !isBefore(endOfDay(end), startOfDay(weekStart));
+    const thisWeekSpend = periodOverlapsWeek
+      ? expenses
+          .filter((t) => {
+            const txDate = new Date(t.date + 'T00:00:00');
+            return isWithinInterval(txDate, { start: startOfDay(weekStart), end: endOfDay(weekEnd) });
+          })
+          .reduce((sum, t) => sum + t.amountMainCurrency, 0)
+      : null;
 
-  const thisWeekSpend = periodOverlapsWeek
-    ? expenses
-        .filter((t) => {
-          const txDate = new Date(t.date + 'T00:00:00');
-          return isWithinInterval(txDate, { start: startOfDay(weekStart), end: endOfDay(weekEnd) });
-        })
-        .reduce((sum, t) => sum + t.amountMainCurrency, 0)
-    : null;
+    return { calendarDays, averagePerDay, todaySpend, thisWeekSpend };
+  }, [transactions, start, end]);
 
   return (
     <div style={{ padding: '0 var(--space-4)', paddingBottom: 'var(--space-2)' }}>

@@ -8,7 +8,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   format,
   startOfHour,
@@ -193,7 +193,7 @@ function CustomTooltip({ active, payload, label, currency }: CustomTooltipProps)
 export default function SpendingBarChart({ transactions, start, end, currency }: SpendingBarChartProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const scale = autoScaleChartBuckets(start, end);
-  const buckets = buildBuckets(transactions, start, end, scale);
+  const buckets = useMemo(() => buildBuckets(transactions, start, end, scale), [transactions, start, end, scale]);
 
   const maxAmount = Math.max(...buckets.map((b) => b.amount), 0);
 
