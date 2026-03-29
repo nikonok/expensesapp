@@ -39,7 +39,7 @@
 | [T21](#t21--export-service--) | Export Service | 5 — Polish | `[x]` | T02, T03 |
 | [T22](#t22--notification-service--) | Notification Service | 5 — Polish | `[x]` | T01 |
 | [T23](#t23--pwa-configuration--) | PWA Configuration | 5 — Polish | `[x]` | T01, T22 |
-| [T24](#t24--drag-and-drop-reordering--) | Drag-and-Drop Reordering | 5 — Polish | `[~]` | T13, T14, T15 |
+| [T24](#t24--drag-and-drop-reordering--) | Drag-and-Drop Reordering | 5 — Polish | `[x]` | T13, T14, T15 |
 | [T25](#t25--accessibility--performance-pass--) | Accessibility & Performance Pass | 5 — Polish | `[ ]` | all |
 
 ---
@@ -2102,7 +2102,7 @@ Verification:
 
 ---
 
-### T24 · Drag-and-Drop Reordering `[~]`
+### T24 · Drag-and-Drop Reordering `[x]`
 
 **Skills**: `/feature-dev`
 **Depends on**: T13, T14, T15 complete

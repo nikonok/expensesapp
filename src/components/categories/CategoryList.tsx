@@ -3,6 +3,21 @@ import { useNavigate } from 'react-router';
 import { Plus, Tag, Trash2 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { format } from 'date-fns';
+import {
+  DndContext,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
 
 import { useCategories } from '../../hooks/use-categories';
 import { useTransactions } from '../../hooks/use-transactions';
@@ -126,9 +141,35 @@ export default function CategoryList() {
     setEditCategory(undefined);
   }
 
+  // Drag sensors — distance:8 so taps still work
+  const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 8 } });
+  const keyboardSensor = useSensor(KeyboardSensor, {
+    coordinateGetter: sortableKeyboardCoordinates,
+  });
+  const sensors = useSensors(pointerSensor, keyboardSensor);
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = categories.findIndex((c) => c.id === active.id);
+    const newIndex = categories.findIndex((c) => c.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(categories, oldIndex, newIndex);
+    const updates = reordered.map((cat, index) => ({
+      ...cat,
+      displayOrder: index * 10,
+    }));
+
+    await db.categories.bulkPut(updates);
+  }
+
   const confirmCategory = confirmTrash !== null
     ? categories.find((c) => c.id === confirmTrash)
     : null;
+
+  const categoryIds = categories.map((c) => c.id!);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -262,22 +303,30 @@ export default function CategoryList() {
             padding: '0 var(--space-4) var(--space-4)',
           }}
         >
-          {categories.map((cat) => {
-            const budget = budgets.find((b) => b.categoryId === cat.id) ?? null;
-            const spent = spentByCategoryId.get(cat.id!) ?? 0;
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={categoryIds} strategy={verticalListSortingStrategy}>
+              {categories.map((cat) => {
+                const budget = budgets.find((b) => b.categoryId === cat.id) ?? null;
+                const spent = spentByCategoryId.get(cat.id!) ?? 0;
 
-            return (
-              <CategoryCard
-                key={cat.id}
-                category={cat}
-                spent={spent}
-                budget={budget?.plannedAmount ?? null}
-                editMode={categoriesEditMode}
-                onRemove={handleRemoveCategory}
-                onClick={categoriesEditMode ? handleEditCategory : handleCardClick}
-              />
-            );
-          })}
+                return (
+                  <CategoryCard
+                    key={cat.id}
+                    category={cat}
+                    spent={spent}
+                    budget={budget?.plannedAmount ?? null}
+                    editMode={categoriesEditMode}
+                    onRemove={handleRemoveCategory}
+                    onClick={categoriesEditMode ? handleEditCategory : handleCardClick}
+                  />
+                );
+              })}
+            </SortableContext>
+          </DndContext>
         </div>
       )}
 

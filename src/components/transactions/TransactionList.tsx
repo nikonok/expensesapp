@@ -1,12 +1,28 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { Plus, SlidersHorizontal, ArrowLeftRight } from 'lucide-react';
+import {
+  DndContext,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
 import { useTransactions } from '../../hooks/use-transactions';
 import { useAccounts } from '../../hooks/use-accounts';
 import { useCategories } from '../../hooks/use-categories';
 import { useUIStore } from '../../stores/ui-store';
 import type { Transaction, Account, Category } from '../../db/models';
 import { revertTransaction, revertTransfer } from '../../services/balance.service';
+import { db } from '../../db/database';
 import PeriodFilter from '../shared/PeriodFilter';
 import { EmptyState } from '../shared/EmptyState';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
@@ -228,6 +244,31 @@ export default function TransactionList() {
     return 'USD';
   }
 
+  // Drag sensors — distance:8 so taps still register as selection
+  const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 8 } });
+  const keyboardSensor = useSensor(KeyboardSensor, {
+    coordinateGetter: sortableKeyboardCoordinates,
+  });
+  const sensors = useSensors(pointerSensor, keyboardSensor);
+
+  // Handle drag end for a specific day group
+  async function handleDragEnd(event: DragEndEvent, dayTxs: Transaction[]) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = dayTxs.findIndex((t) => t.id === active.id);
+    const newIndex = dayTxs.findIndex((t) => t.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(dayTxs, oldIndex, newIndex);
+    const updates = reordered.map((tx, index) => ({
+      ...tx,
+      displayOrder: index * 10,
+    }));
+
+    await db.transactions.bulkPut(updates);
+  }
+
   const hasFilters = hasActiveTransactionFilters();
   const isEmpty = groupedByDate.length === 0;
   const selectionCount = selectedTransactionIds.size;
@@ -323,6 +364,7 @@ export default function TransactionList() {
           {groupedByDate.map(({ date, txs }) => {
             const { income, expense } = getDayTotals(txs);
             const dayCurrency = getDayCurrency(txs);
+            const dayTxIds = txs.map((t) => t.id!);
             return (
               <div key={date} style={{ contentVisibility: 'auto' }}>
                 <TransactionDayHeader
@@ -331,24 +373,32 @@ export default function TransactionList() {
                   totalExpense={expense}
                   currency={dayCurrency}
                 />
-                {txs.map((tx) => {
-                  const account = accountMap.get(tx.accountId);
-                  if (!account) return null;
-                  const category =
-                    tx.categoryId !== null ? (categoryMap.get(tx.categoryId) ?? null) : null;
-                  const toAccount = getTransferToAccount(tx);
-                  return (
-                    <TransactionRow
-                      key={tx.id}
-                      transaction={tx}
-                      account={account}
-                      toAccount={toAccount}
-                      category={category}
-                      isSelected={isRowSelected(tx)}
-                      onSelect={() => handleSelect(tx)}
-                    />
-                  );
-                })}
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={(event) => handleDragEnd(event, txs)}
+                >
+                  <SortableContext items={dayTxIds} strategy={verticalListSortingStrategy}>
+                    {txs.map((tx) => {
+                      const account = accountMap.get(tx.accountId);
+                      if (!account) return null;
+                      const category =
+                        tx.categoryId !== null ? (categoryMap.get(tx.categoryId) ?? null) : null;
+                      const toAccount = getTransferToAccount(tx);
+                      return (
+                        <TransactionRow
+                          key={tx.id}
+                          transaction={tx}
+                          account={account}
+                          toAccount={toAccount}
+                          category={category}
+                          isSelected={isRowSelected(tx)}
+                          onSelect={() => handleSelect(tx)}
+                        />
+                      );
+                    })}
+                  </SortableContext>
+                </DndContext>
               </div>
             );
           })}

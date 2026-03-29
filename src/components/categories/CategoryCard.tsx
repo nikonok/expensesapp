@@ -1,4 +1,6 @@
 import { GripVertical, X } from 'lucide-react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import type { Category } from '../../db/models';
 import { getLucideIcon } from '../shared/IconPicker';
 
@@ -22,6 +24,14 @@ export default function CategoryCard({
   const isOverBudget = budget !== null && spent > budget;
   const progress = budget !== null && budget > 0 ? Math.min(spent / budget, 1) : 0;
 
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    isDragging,
+  } = useSortable({ id: category.id! });
+
   const Icon = getLucideIcon(category.icon);
   const isEmoji = !Icon && category.icon !== '';
 
@@ -33,15 +43,20 @@ export default function CategoryCard({
 
   return (
     <div
-      onClick={handleClick}
+      ref={setNodeRef}
       style={{
+        transform: CSS.Transform.toString(transform),
         position: 'relative',
         display: 'flex',
         alignItems: 'center',
         gap: 'var(--space-3)',
         padding: 'var(--space-3) var(--space-4)',
         paddingBottom: '16px', // room for bar
-        background: isOverBudget ? 'var(--color-expense-dim)' : 'var(--color-surface)',
+        background: isDragging
+          ? 'var(--color-surface-raised)'
+          : isOverBudget
+            ? 'var(--color-expense-dim)'
+            : 'var(--color-surface)',
         borderRadius: 'var(--radius-card)',
         borderLeft: `3px solid var(--card-color)`,
         cursor: editMode ? 'default' : 'pointer',
@@ -49,12 +64,23 @@ export default function CategoryCard({
         // Set the --card-color CSS variable
         ['--card-color' as string]: category.color,
         overflow: 'hidden',
+        boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.5)' : 'none',
+        scale: isDragging ? '1.03' : '1',
+        opacity: isDragging ? 0.95 : 1,
+        zIndex: isDragging ? 'var(--z-sheet)' : 'auto',
+        transition: isDragging ? 'none' : 'background 120ms ease-out',
       }}
+      onClick={handleClick}
     >
-      {/* Drag handle (edit mode) */}
+      {/* Drag handle (edit mode) — drag listeners only here */}
       {editMode && (
         <div
+          {...listeners}
+          {...attributes}
+          aria-label={`Reorder ${category.name}`}
           style={{
+            width: '44px',
+            height: '44px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
