@@ -31,7 +31,7 @@
 | [T13](#t13--accounts-tab--) | Accounts Tab | 4 — Features | `[~]` | T08, T09, T05, T06, T07 |
 | [T14](#t14--categories-tab--) | Categories Tab | 4 — Features | `[x]` | T08, T09, T05 |
 | [T15](#t15--transactions-tab--) | Transactions Tab | 4 — Features | `[~]` | T08, T09, T05 |
-| [T16](#t16--transaction-input-add--edit--) | Transaction Input (Add/Edit) | 4 — Features | `[ ]` | T09, T10, T06, T07, T05 |
+| [T16](#t16--transaction-input-add--edit--) | Transaction Input (Add/Edit) | 4 — Features | `[x]` | T09, T10, T06, T07, T05 |
 | [T17](#t17--budget-tab--) | Budget Tab | 4 — Features | `[ ]` | T08, T09, T10, T05, T02, T06, T07 |
 | [T18](#t18--overview-tab--) | Overview Tab | 4 — Features | `[x]` | T08, T09, T05 |
 | [T19](#t19--settings-view--) | Settings View | 4 — Features | `[ ]` | T08, T09, T04, T05, T06 |
@@ -1457,7 +1457,7 @@ Verification:
 
 ---
 
-### T16 · Transaction Input (Add / Edit) `[ ]`
+### T16 · Transaction Input (Add / Edit) `[x]`
 
 **Skills**: `/feature-dev`
 **Depends on**: T09, T10, T06, T07, T05 complete

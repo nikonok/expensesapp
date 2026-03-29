@@ -9,6 +9,8 @@ import BudgetPage from './pages/BudgetPage';
 import OverviewPage from './pages/OverviewPage';
 import SettingsPage from './pages/SettingsPage';
 import OnboardingPage from './pages/OnboardingPage';
+import TrashedAccounts from './components/accounts/TrashedAccounts';
+import TransactionInput from './components/transactions/TransactionInput';
 
 function AppRoutes() {
   const navigate = useNavigate();
@@ -57,8 +59,9 @@ function AppRoutes() {
         <Route path="budget" element={<BudgetPage />} />
         <Route path="overview" element={<OverviewPage />} />
       </Route>
-      <Route path="transactions/new" element={<TransactionsPage />} />
-      <Route path="transactions/:id/edit" element={<TransactionsPage />} />
+      <Route path="accounts/trash" element={<TrashedAccounts />} />
+      <Route path="transactions/new" element={<TransactionInput />} />
+      <Route path="transactions/:id/edit" element={<TransactionInput />} />
       <Route path="settings" element={<SettingsPage />} />
       <Route path="onboarding" element={<OnboardingPage />} />
       <Route path="*" element={<Navigate to="/accounts" replace />} />
