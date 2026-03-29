@@ -1,0 +1,14 @@
+{
+  "recommendations": [
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "bradlc.vscode-tailwindcss",
+    "dsznajder.es7-react-js-snippets",
+    "ms-vscode.vscode-typescript-next",
+    "PKief.material-icon-theme",
+    "GitHub.copilot",
+    "eamodio.gitlens",
+    "streetsidesoftware.code-spell-checker",
+    "usernamehw.errorlens"
+  ]
+}

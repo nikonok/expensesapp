@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment files
+.env
+.env.local
+*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+
+# Vite cache
+.vite/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# PWA placeholder icons (generated)
+public/icons/
