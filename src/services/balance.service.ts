@@ -78,6 +78,8 @@ export async function revertTransaction(tx: Transaction): Promise<void> {
         balance: account.balance - delta,
         updatedAt: now,
       });
+      // Hard-delete is intentional: Transaction has no isTrashed field (spec §3.7).
+      // Soft-delete applies only to accounts and categories.
       await db.transactions.delete(tx.id!);
     })
   );
@@ -178,23 +180,23 @@ export async function applyTransfer(
         });
       }
 
+      // Insert outTx first so that inMaxOrder sees it when dates are the same
       const outMaxOrder = await getMaxDisplayOrder(outTx.date);
-      const inMaxOrder = await getMaxDisplayOrder(inTx.date);
-
       const outRecord: Transaction = {
         ...outTx,
         displayOrder: outMaxOrder + 1,
         createdAt: now,
         updatedAt: now,
       };
+      await db.transactions.add(outRecord);
+
+      const inMaxOrder = await getMaxDisplayOrder(inTx.date);
       const inRecord: Transaction = {
         ...inTx,
         displayOrder: inMaxOrder + 1,
         createdAt: now,
         updatedAt: now,
       };
-
-      await db.transactions.add(outRecord);
       await db.transactions.add(inRecord);
     })
   );
@@ -223,6 +225,7 @@ export async function revertTransfer(transferGroupId: string): Promise<void> {
           balance: account.balance - delta,
           updatedAt: now,
         });
+        // Hard-delete is intentional: Transaction has no isTrashed field (spec §3.7).
         await db.transactions.delete(record.id!);
       }
     })
@@ -258,6 +261,7 @@ export async function replaceTransfer(
           balance: account.balance - delta,
           updatedAt: now,
         });
+        // Hard-delete is intentional: Transaction has no isTrashed field (spec §3.7).
         await db.transactions.delete(record.id!);
       }
 
@@ -289,15 +293,16 @@ export async function replaceTransfer(
         });
       }
 
+      // Insert outTx first so that inMaxOrder sees it when dates are the same
       const outMaxOrder = await getMaxDisplayOrder(outTx.date);
-      const inMaxOrder = await getMaxDisplayOrder(inTx.date);
-
       await db.transactions.add({
         ...outTx,
         displayOrder: outMaxOrder + 1,
         createdAt: now,
         updatedAt: now,
       });
+
+      const inMaxOrder = await getMaxDisplayOrder(inTx.date);
       await db.transactions.add({
         ...inTx,
         displayOrder: inMaxOrder + 1,

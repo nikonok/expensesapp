@@ -63,10 +63,10 @@ describe('evaluateExpression', () => {
   });
 
   /**
-   * Division by zero returns Infinity (not an error).
-   * This is intentional — the UI layer should guard against it if needed.
+   * Division by zero returns null (spec §6.3: invalid input must return null).
+   * Infinity is not a valid number for balance calculations.
    */
-  it('division by zero returns Infinity', () => {
-    expect(evaluateExpression('5÷0')).toBe(Infinity);
+  it('division by zero returns null', () => {
+    expect(evaluateExpression('5÷0')).toBeNull();
   });
 });

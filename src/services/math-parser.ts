@@ -2,7 +2,7 @@
  * Evaluates a simple arithmetic expression with + - × ÷ operators.
  * Follows PEMDAS: × and ÷ are evaluated before + and -.
  * Trailing operator is silently stripped before evaluation.
- * Division by zero returns Infinity (not an error).
+ * Division by zero returns null (Infinity is treated as invalid input).
  * Returns null for empty or invalid input.
  * Result is rounded to 2 decimal places.
  */
@@ -92,5 +92,7 @@ export function evaluateExpression(expr: string): number | null {
     }
   }
 
-  return Math.round(result * 100) / 100;
+  const rounded = Math.round(result * 100) / 100;
+  if (!isFinite(rounded)) return null;
+  return rounded;
 }

@@ -168,18 +168,35 @@ export const exchangeRateService = {
       return;
     }
 
-    // Pre-check: collect all unique currencies and verify rates exist
-    const currencies = [...new Set(transactions.map((t) => t.currency))];
+    // Collect unique (currency, date) pairs needed for the rate lookup
+    const pairs = new Map<string, string[]>(); // currency -> unique dates
+    for (const tx of transactions) {
+      if (tx.currency === newMainCurrency) continue;
+      if (!pairs.has(tx.currency)) pairs.set(tx.currency, []);
+      pairs.get(tx.currency)!.push(tx.date);
+    }
+
+    // Pre-fetch all required rates OUTSIDE of any db transaction
+    // Key: "currency:date", Value: rate (number)
+    const rateMap = new Map<string, number>();
     const missingCurrencies: string[] = [];
 
-    for (const currency of currencies) {
-      if (currency === newMainCurrency) continue;
-      const rate = await exchangeRateService.getHistoricalRate(
-        currency,
-        newMainCurrency,
-        getLocalDateString(),
-      );
-      if (rate == null) {
+    for (const [currency, dates] of pairs) {
+      const uniqueDates = [...new Set(dates)];
+      let hasMissing = false;
+      for (const date of uniqueDates) {
+        const rate = await exchangeRateService.getHistoricalRate(
+          currency,
+          newMainCurrency,
+          date,
+        );
+        if (rate == null) {
+          hasMissing = true;
+        } else {
+          rateMap.set(`${currency}:${date}`, rate);
+        }
+      }
+      if (hasMissing && !missingCurrencies.includes(currency)) {
         missingCurrencies.push(currency);
       }
     }
@@ -190,7 +207,8 @@ export const exchangeRateService = {
       );
     }
 
-    // Process in batches of 50 inside a single db transaction
+    // Now open the db transaction — only db.transactions is accessed here,
+    // and we use only the pre-built rateMap (no db.exchangeRates reads inside).
     const BATCH_SIZE = 50;
     let done = 0;
 
@@ -203,13 +221,8 @@ export const exchangeRateService = {
           if (tx.currency === newMainCurrency) {
             newRate = 1;
           } else {
-            const r = await exchangeRateService.getHistoricalRate(
-              tx.currency,
-              newMainCurrency,
-              tx.date,
-            );
-            // r cannot be null here — we already verified above
-            newRate = r!;
+            // Rate is guaranteed to be in the map (verified above)
+            newRate = rateMap.get(`${tx.currency}:${tx.date}`)!;
           }
 
           await db.transactions.update(tx.id!, {
