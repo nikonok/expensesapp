@@ -17,10 +17,10 @@
 |---|---|---|---|---|
 | [T00](#t00--repo-cleanup--project-init--) | Repo Cleanup & Project Init | 0 — Setup | `[x]` | — |
 | [T01](#t01--project-scaffold--) | Project Scaffold | 1 — Foundation | `[x]` | T00 |
-| [T02](#t02--database-layer--) | Database Layer | 1 — Foundation | `[ ]` | T01 |
-| [T03](#t03--core-utilities--) | Core Utilities | 1 — Foundation | `[ ]` | T01 |
-| [T04](#t04--i18n-setup--) | i18n Setup | 1 — Foundation | `[ ]` | T01 |
-| [T05](#t05--zustand-state-stores--) | Zustand State Stores | 1 — Foundation | `[ ]` | T01, T03 |
+| [T02](#t02--database-layer--) | Database Layer | 1 — Foundation | `[~]` | T01 |
+| [T03](#t03--core-utilities--) | Core Utilities | 1 — Foundation | `[~]` | T01 |
+| [T04](#t04--i18n-setup--) | i18n Setup | 1 — Foundation | `[x]` | T01 |
+| [T05](#t05--zustand-state-stores--) | Zustand State Stores | 1 — Foundation | `[~]` | T01, T03 |
 | [T06](#t06--exchange-rate-service--) | Exchange Rate Service | 2 — Services | `[ ]` | T02 |
 | [T07](#t07--balance-service--) | Balance Service | 2 — Services | `[ ]` | T02 |
 | [T08](#t08--layout-shell--routing--) | Layout Shell & Routing | 3 — Layout | `[ ]` | T01, T03, T04, T05 |
@@ -245,7 +245,7 @@ Verification:
 
 ---
 
-### T02 · Database Layer `[ ]`
+### T02 · Database Layer `[~]`
 
 **Skills**: none (data layer task)
 **Depends on**: T01 complete
@@ -314,7 +314,7 @@ Verification:
 
 ---
 
-### T03 · Core Utilities `[ ]`
+### T03 · Core Utilities `[~]`
 
 **Skills**: none
 **Depends on**: T01 complete
@@ -409,7 +409,7 @@ Verification:
 
 ---
 
-### T04 · i18n Setup `[ ]`
+### T04 · i18n Setup `[x]`
 
 **Skills**: none
 **Depends on**: T01 complete
@@ -598,7 +598,7 @@ Verification:
 
 ---
 
-### T05 · Zustand State Stores `[ ]`
+### T05 · Zustand State Stores `[~]`
 
 **Skills**: none
 **Depends on**: T01, T03 complete

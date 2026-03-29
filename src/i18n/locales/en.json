@@ -1,0 +1,254 @@
+{
+  "nav": {
+    "accounts": "Accounts",
+    "categories": "Categories",
+    "transactions": "Transactions",
+    "budget": "Budget",
+    "overview": "Overview"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "skip": "Skip",
+    "edit": "Edit",
+    "done": "Done",
+    "close": "Close",
+    "comingSoon": "Coming soon",
+    "getStarted": "Get Started",
+    "restore": "Restore",
+    "add": "Add",
+    "remove": "Remove",
+    "create": "Create",
+    "back": "Back",
+    "all": "All",
+    "today": "Today",
+    "week": "Week",
+    "month": "Month",
+    "year": "Year",
+    "custom": "Custom range",
+    "clearFilters": "Clear filters",
+    "noData": "N/A",
+    "income": "Income",
+    "expense": "Expense",
+    "transfer": "Transfer"
+  },
+  "accounts": {
+    "title": "Accounts",
+    "newAccount": "New Account",
+    "editAccount": "Edit Account",
+    "totalBalance": "Total Balance",
+    "assets": "Assets",
+    "debts": "Debts",
+    "trashedAccounts": "Archived Accounts",
+    "types": {
+      "regular": "Regular",
+      "debt": "Debt",
+      "savings": "Savings"
+    },
+    "fields": {
+      "name": "Account name",
+      "color": "Color",
+      "icon": "Icon",
+      "currency": "Currency",
+      "description": "Description",
+      "startingBalance": "Starting balance",
+      "includeInTotal": "Include in total balance",
+      "savingsGoal": "Savings goal",
+      "interestRateMonthly": "Monthly interest rate",
+      "interestRateYearly": "Yearly interest rate",
+      "mortgageLoanAmount": "Loan amount",
+      "mortgageStartDate": "Start date",
+      "mortgageTermYears": "Term (years)",
+      "mortgageInterestRate": "Mortgage interest rate"
+    },
+    "detail": {
+      "adjustBalance": "Adjust balance",
+      "viewTransactions": "View transactions",
+      "addIncome": "Add income",
+      "addWithdrawal": "Add withdrawal",
+      "remainingBalance": "Remaining balance",
+      "monthlyPayment": "Monthly payment",
+      "timeLeft": "Time left",
+      "accruedInterest": "Accrued interest",
+      "goalProgress": "Goal progress",
+      "currencyChangeWarning": "Existing transactions will keep their original amounts. You will need to manually correct the balance."
+    },
+    "removal": {
+      "confirm": "Archive this account? Its transaction history will be preserved."
+    },
+    "restore": {
+      "confirm": "Restore this account?"
+    },
+    "empty": "No accounts yet. Tap + to create one."
+  },
+  "categories": {
+    "title": "Categories",
+    "newCategory": "New Category",
+    "editCategory": "Edit Category",
+    "trashedCategories": "Archived Categories",
+    "fields": {
+      "name": "Category name",
+      "color": "Color",
+      "icon": "Icon"
+    },
+    "empty": "No categories. Tap the donut chart to switch views, then Edit → + to create one.",
+    "removal": {
+      "confirm": "Archive this category? It will remain on historical transactions."
+    }
+  },
+  "transactions": {
+    "title": "Transactions",
+    "newTransaction": "New Transaction",
+    "editTransaction": "Edit Transaction",
+    "tabs": {
+      "income": "Income",
+      "expense": "Expense",
+      "transfer": "Transfer"
+    },
+    "fields": {
+      "amount": "Amount",
+      "note": "Note",
+      "date": "Date",
+      "account": "Account",
+      "category": "Category",
+      "from": "From",
+      "to": "To"
+    },
+    "noteHint": "Use last note",
+    "repeat": "Repeat",
+    "noExchangeRate": "No exchange rate available — using 1:1 conversion.",
+    "staleExchangeRate": "Could not fetch exchange rates. Using cached rates.",
+    "empty": "No transactions for this period.",
+    "deleteConfirm_one": "Delete {{count}} transaction? This cannot be undone.",
+    "deleteConfirm_other": "Delete {{count}} transactions? This cannot be undone.",
+    "filters": {
+      "title": "Filter transactions",
+      "note": "Note contains",
+      "category": "Category",
+      "account": "Account",
+      "archived": "Archived accounts"
+    },
+    "transfer": {
+      "from": "{{from}} → {{to}}"
+    }
+  },
+  "budget": {
+    "title": "Budget",
+    "sections": {
+      "expenses": "Expenses",
+      "income": "Income",
+      "savings": "Savings accounts",
+      "debt": "Debt accounts"
+    },
+    "planned": "Planned",
+    "spent": "Spent",
+    "stats": {
+      "title": "Budget stats",
+      "avgMonthly": "Average monthly",
+      "lastMonth": "Last month",
+      "lastBudget": "Last set budget"
+    },
+    "empty": "No budget data for this month."
+  },
+  "overview": {
+    "title": "Overview",
+    "netBalance": "Net balance",
+    "totalIncome": "Total income",
+    "totalExpenses": "Total expenses",
+    "dailyAverages": "Daily averages",
+    "avgPerDay": "Average per day",
+    "today": "Today",
+    "thisWeek": "This week",
+    "categoryBreakdown": "By category",
+    "empty": "No data for this period."
+  },
+  "settings": {
+    "title": "Settings",
+    "sections": {
+      "general": "General",
+      "notifications": "Notifications",
+      "data": "Data"
+    },
+    "language": {
+      "label": "Language",
+      "english": "English"
+    },
+    "theme": {
+      "label": "Theme",
+      "dark": "Dark",
+      "light": "Light",
+      "lightError": "The developer dislikes light theme and will never implement it."
+    },
+    "startupScreen": {
+      "label": "Startup screen"
+    },
+    "passcode": {
+      "label": "Passcode"
+    },
+    "notification": {
+      "label": "Daily reminder",
+      "time": "Reminder time",
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "mainCurrency": {
+      "label": "Main currency",
+      "changeConfirm": "All historical amounts will be recalculated to {{currency}}. This may take a moment.",
+      "missingRates": "Cannot change currency: no exchange rate available for {{currencies}}.",
+      "recalculating": "Recalculating..."
+    },
+    "backup": {
+      "label": "Backup & Restore",
+      "create": "Create backup",
+      "export": "Export to file",
+      "restore": "Restore from backup",
+      "restoreFile": "Restore from file",
+      "schedule": "Auto-backup interval",
+      "scheduleOff": "Off",
+      "restoreConfirm": "This will delete all current data and replace it with the backup. This cannot be undone.",
+      "created": "Backup created.",
+      "restored": "Data restored."
+    },
+    "export": {
+      "label": "Export data",
+      "button": "Export",
+      "complete": "Export complete. Your file has been downloaded."
+    }
+  },
+  "onboarding": {
+    "welcome": {
+      "title": "Expenses",
+      "subtitle": "Your personal finance tracker.",
+      "cta": "Get Started"
+    },
+    "currency": {
+      "title": "Choose your main currency",
+      "subtitle": "Used for all totals and reports."
+    },
+    "account": {
+      "title": "Create your first account",
+      "subtitle": "You can add more accounts later."
+    },
+    "categories": {
+      "title": "Choose your categories",
+      "subtitle": "Select the ones you want to track.",
+      "acceptAll": "Accept all"
+    },
+    "complete": {
+      "title": "You're all set!",
+      "subtitle": "Start tracking your expenses.",
+      "cta": "Go to App"
+    }
+  },
+  "errors": {
+    "required": "This field is required.",
+    "maxLength": "Maximum {{max}} characters.",
+    "positiveNumber": "Must be a positive number.",
+    "invalidDate": "Invalid date.",
+    "sameAccount": "Source and destination must be different.",
+    "quotaExceeded": "Storage full. Export your data and clear old backups.",
+    "generic": "Something went wrong. Please try again."
+  }
+}
