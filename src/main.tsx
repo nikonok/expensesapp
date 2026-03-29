@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./i18n/index";
 import "./styles/index.css";
 import App from "./App";
+import { registerSW } from "./sw-register";
 
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Root element not found");
@@ -12,3 +13,5 @@ createRoot(rootElement).render(
     <App />
   </StrictMode>,
 );
+
+registerSW();

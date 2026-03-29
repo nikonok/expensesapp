@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import { Settings } from 'lucide-react';
+import { Settings, X } from 'lucide-react';
 import { useNavigate } from 'react-router';
+import { useInstallPrompt } from '../../hooks/use-install-prompt';
 
 interface TopBarProps {
   title: string;
@@ -9,6 +10,7 @@ interface TopBarProps {
 
 export default function TopBar({ title, rightSlot }: TopBarProps) {
   const navigate = useNavigate();
+  const { canInstall, install, dismiss } = useInstallPrompt();
 
   return (
     <header
@@ -66,9 +68,59 @@ export default function TopBar({ title, rightSlot }: TopBarProps) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'flex-end',
+          gap: 'var(--space-1)',
         }}
       >
-        {rightSlot}
+        {canInstall ? (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              background: 'var(--color-primary)',
+              borderRadius: '999px',
+              paddingInline: '10px',
+              paddingBlock: '4px',
+              height: '32px',
+            }}
+          >
+            <button
+              onClick={install}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--color-bg)',
+                fontFamily: 'DM Sans, sans-serif',
+                fontWeight: 500,
+                fontSize: '12px',
+                padding: 0,
+                lineHeight: 1,
+              }}
+            >
+              Install
+            </button>
+            <button
+              aria-label="Dismiss install prompt"
+              onClick={dismiss}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--color-bg)',
+                padding: 0,
+                display: 'flex',
+                alignItems: 'center',
+                minWidth: '20px',
+                minHeight: '20px',
+              }}
+            >
+              <X size={12} strokeWidth={2} />
+            </button>
+          </div>
+        ) : (
+          rightSlot
+        )}
       </div>
     </header>
   );
