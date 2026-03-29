@@ -37,14 +37,12 @@ interface UIStore {
   setOverviewFilter: (f: PeriodFilter) => void;
   setBudgetMonth: (m: string) => void;
   toggleCategoriesViewType: () => void;
-  setCategoriesViewType: (v: CategoryViewType) => void;
   setCategoriesEditMode: (on: boolean) => void;
   setTransactionNoteFilter: (note: string) => void;
   setTransactionCategoryFilter: (id: number | null) => void;
   setTransactionAccountFilter: (id: number | null) => void;
   clearTransactionFilters: () => void;
   toggleTransactionSelection: (id: number) => void;
-  clearTransactionSelection: () => void;
   clearSelection: () => void;
 }
 
@@ -81,7 +79,6 @@ export const useUIStore = create<UIStore>((set, get) => ({
     set((s) => ({
       categoriesViewType: s.categoriesViewType === 'EXPENSE' ? 'INCOME' : 'EXPENSE',
     })),
-  setCategoriesViewType: (v) => set({ categoriesViewType: v }),
   setCategoriesEditMode: (on) => set({ categoriesEditMode: on }),
 
   setTransactionNoteFilter: (note) => set({ transactionNoteFilter: note }),
@@ -106,6 +103,5 @@ export const useUIStore = create<UIStore>((set, get) => ({
       return { selectedTransactionIds: next };
     }),
 
-  clearTransactionSelection: () => set({ selectedTransactionIds: new Set<number>() }),
   clearSelection: () => set({ selectedTransactionIds: new Set<number>() }),
 }));

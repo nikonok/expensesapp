@@ -44,7 +44,7 @@ export default function TransactionList() {
     clearTransactionFilters,
     selectedTransactionIds,
     toggleTransactionSelection,
-    clearTransactionSelection,
+    clearSelection,
   } = useUIStore();
 
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -213,7 +213,7 @@ export default function TransactionList() {
         }
       }
     }
-    clearTransactionSelection();
+    clearSelection();
   }
 
   // Edit handler — single selection only
@@ -231,7 +231,7 @@ export default function TransactionList() {
       );
       if (outTx?.id !== undefined) editId = outTx.id;
     }
-    clearTransactionSelection();
+    clearSelection();
     navigate(`/transactions/${editId}/edit`);
   }
 
@@ -449,7 +449,7 @@ export default function TransactionList() {
           selectedIds={selectedTransactionIds}
           onEdit={handleEdit}
           onRemove={() => setConfirmOpen(true)}
-          onClear={clearTransactionSelection}
+          onClear={clearSelection}
         />
       )}
 
