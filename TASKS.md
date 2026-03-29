@@ -24,7 +24,7 @@
 | [T06](#t06--exchange-rate-service--) | Exchange Rate Service | 2 — Services | `[x]` | T02 |
 | [T07](#t07--balance-service--) | Balance Service | 2 — Services | `[x]` | T02 |
 | [T08](#t08--layout-shell--routing--) | Layout Shell & Routing | 3 — Layout | `[x]` | T01, T03, T04, T05 |
-| [T09](#t09--shared-ui-components--) | Shared UI Components | 3 — Layout | `[~]` | T01, T03, T04 |
+| [T09](#t09--shared-ui-components--) | Shared UI Components | 3 — Layout | `[x]` | T01, T03, T04 |
 | [T10](#t10--numpad-component--) | Numpad Component | 3 — Layout | `[~]` | T01, T03, T05 |
 | [T11](#t11--period-filter-component--) | Period Filter Component | 3 — Layout | `[ ]` | T03, T04, T08 |
 | [T12](#t12--onboarding-flow--) | Onboarding Flow | 4 — Features | `[ ]` | T08, T09, T04, T05 |
@@ -893,7 +893,7 @@ Verification:
 
 ---
 
-### T09 · Shared UI Components `[~]`
+### T09 · Shared UI Components `[x]`
 
 **Skills**: `/frontend-design`
 **Depends on**: T01, T03, T04 complete
