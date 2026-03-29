@@ -31,7 +31,7 @@ export default function SelectionToolbar({
         height: 'calc(56px + env(safe-area-inset-bottom))',
         background: 'var(--color-surface-raised)',
         borderTop: '1px solid var(--color-border-strong)',
-        zIndex: 'var(--z-nav)',
+        zIndex: 200,
         display: 'flex',
         alignItems: 'center',
         paddingInline: 'var(--space-4)',

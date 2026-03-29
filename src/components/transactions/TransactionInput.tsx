@@ -15,6 +15,7 @@ import { evaluateExpression } from '@/services/math-parser';
 import { format, parseISO } from 'date-fns';
 import { getLocalDateString } from '@/utils/date-utils';
 import { getLucideIcon } from '@/components/shared/IconPicker';
+import { CalendarPicker } from '@/components/shared/CalendarPicker';
 import { Numpad } from '@/components/shared/Numpad';
 import { ComingSoonStub } from '@/components/shared/ComingSoonStub';
 import { useToast } from '@/components/shared/Toast';
@@ -1013,7 +1014,7 @@ function Step2({
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-3)',
-              width: '280px',
+              width: '320px',
             }}
           >
             <h3
@@ -1027,26 +1028,11 @@ function Step2({
             >
               {t('transactions.fields.date')}
             </h3>
-            <input
-              type="date"
+            <CalendarPicker
               value={date}
-              onChange={(e) => {
-                if (e.target.value) {
-                  onDateChange(e.target.value);
-                  setShowDatePicker(false);
-                }
-              }}
-              style={{
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-input)',
-                padding: 'var(--space-2) var(--space-3)',
-                color: 'var(--color-text)',
-                fontFamily: '"DM Sans", sans-serif',
-                fontSize: 'var(--text-body)',
-                minHeight: '44px',
-                width: '100%',
-                boxSizing: 'border-box',
+              onChange={(d) => {
+                onDateChange(d);
+                setShowDatePicker(false);
               }}
             />
             <button
@@ -1072,16 +1058,18 @@ function Step2({
       {/* Picker sheets */}
       {pickerMode === 'account' && (
         <PickerSheet title={t('transactions.fields.from')} onClose={() => setPickerMode(null)}>
-          {allAccounts.map((acc) => (
-            <AccountRow
-              key={acc.id}
-              account={acc}
-              onPress={() => {
-                onAccountChange(acc);
-                setPickerMode(null);
-              }}
-            />
-          ))}
+          {allAccounts
+            .filter((acc) => isTransfer || acc.type !== 'DEBT')
+            .map((acc) => (
+              <AccountRow
+                key={acc.id}
+                account={acc}
+                onPress={() => {
+                  onAccountChange(acc);
+                  setPickerMode(null);
+                }}
+              />
+            ))}
         </PickerSheet>
       )}
 
@@ -1182,13 +1170,13 @@ export default function TransactionInput() {
     return '';
   }, [category?.id]) ?? '';
 
-  // Determine default account from most recent transaction
+  // Determine default account from most recent transaction (skips DEBT accounts)
   const defaultAccount = useLiveQuery(async () => {
     const active = await db.accounts.where('isTrashed').equals(0).toArray();
     if (active.length === 0) return null;
     const txs = await db.transactions.orderBy('date').reverse().limit(50).toArray();
     for (const tx of txs) {
-      const found = active.find((a) => a.id === tx.accountId);
+      const found = active.find((a) => a.id === tx.accountId && a.type !== 'DEBT');
       if (found) return found;
     }
     return null;

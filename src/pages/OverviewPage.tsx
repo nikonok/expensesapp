@@ -1,6 +1,4 @@
 import { BarChart2 } from 'lucide-react';
-import TopBar from '../components/layout/TopBar';
-import ContentColumn from '../components/layout/ContentColumn';
 import PeriodFilter from '../components/shared/PeriodFilter';
 import { EmptyState } from '../components/shared/EmptyState';
 import OverviewSummary from '../components/overview/OverviewSummary';
@@ -30,88 +28,77 @@ export default function OverviewPage() {
   const hasData = transactions.length > 0;
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        background: 'var(--color-bg)',
-      }}
-    >
-      <TopBar title="Overview" />
+    <>
+      {/* Period filter */}
+      <div
+        style={{
+          padding: 'var(--space-3) var(--space-4)',
+          paddingTop: 'var(--space-4)',
+        }}
+      >
+        <PeriodFilter value={overviewFilter} onChange={setOverviewFilter} variant="full" />
+      </div>
 
-      <ContentColumn>
-        {/* Period filter */}
-        <div
-          style={{
-            padding: 'var(--space-3) var(--space-4)',
-            paddingTop: 'var(--space-4)',
-          }}
-        >
-          <PeriodFilter value={overviewFilter} onChange={setOverviewFilter} variant="full" />
-        </div>
-
-        {!hasData ? (
-          <EmptyState
-            icon={BarChart2}
-            heading="No data for this period"
-            body="Add some transactions to see your overview."
+      {!hasData ? (
+        <EmptyState
+          icon={BarChart2}
+          heading="No data for this period"
+          body="Add some transactions to see your overview."
+        />
+      ) : (
+        <>
+          <OverviewSummary
+            totalIncome={totalIncome}
+            totalExpense={totalExpense}
+            currency={mainCurrency}
           />
-        ) : (
-          <>
-            <OverviewSummary
-              totalIncome={totalIncome}
-              totalExpense={totalExpense}
-              currency={mainCurrency}
-            />
 
-            <div
-              style={{
-                height: '1px',
-                background: 'var(--color-border)',
-                margin: '0 var(--space-4)',
-              }}
-            />
+          <div
+            style={{
+              height: '1px',
+              background: 'var(--color-border)',
+              margin: '0 var(--space-4)',
+            }}
+          />
 
-            <div style={{ paddingTop: 'var(--space-4)' }}>
-              <SpendingBarChart
-                transactions={transactions}
-                start={start}
-                end={end}
-                currency={mainCurrency}
-              />
-            </div>
-
-            <div
-              style={{
-                height: '1px',
-                background: 'var(--color-border)',
-                margin: 'var(--space-4) var(--space-4)',
-              }}
-            />
-
-            <DailyAverages
+          <div style={{ paddingTop: 'var(--space-4)' }}>
+            <SpendingBarChart
               transactions={transactions}
               start={start}
               end={end}
               currency={mainCurrency}
             />
+          </div>
 
-            <div
-              style={{
-                height: '1px',
-                background: 'var(--color-border)',
-                margin: 'var(--space-4) var(--space-4)',
-              }}
-            />
+          <div
+            style={{
+              height: '1px',
+              background: 'var(--color-border)',
+              margin: 'var(--space-4) var(--space-4)',
+            }}
+          />
 
-            <CategoryBreakdown
-              transactions={transactions}
-              currency={mainCurrency}
-            />
-          </>
-        )}
-      </ContentColumn>
-    </div>
+          <DailyAverages
+            transactions={transactions}
+            start={start}
+            end={end}
+            currency={mainCurrency}
+          />
+
+          <div
+            style={{
+              height: '1px',
+              background: 'var(--color-border)',
+              margin: 'var(--space-4) var(--space-4)',
+            }}
+          />
+
+          <CategoryBreakdown
+            transactions={transactions}
+            currency={mainCurrency}
+          />
+        </>
+      )}
+    </>
   );
 }

@@ -20,13 +20,10 @@ interface AccountFormProps {
 const DEFAULT_COLOR = COLOR_PALETTE[14].value; // cyan
 const DEFAULT_ICON = 'wallet';
 
-type Tab = 'basic' | 'advanced';
-
 export default function AccountForm({ isOpen, onClose, editAccount }: AccountFormProps) {
   const isEdit = !!editAccount;
   const mainCurrency = useSettingsStore((s) => s.mainCurrency);
 
-  const [tab, setTab] = useState<Tab>('basic');
   const [name, setName] = useState('');
   const [type, setType] = useState<AccountType>('REGULAR');
   const [color, setColor] = useState(DEFAULT_COLOR);
@@ -53,8 +50,11 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
 
   // Reset form on open
   useEffect(() => {
-    if (!isOpen) return;
-    setTab('basic');
+    if (!isOpen) {
+      setIsSaving(false);
+      setSaveError(null);
+      return;
+    }
     setErrors({});
     setShowNumpad(false);
     setNumpadValue('');
@@ -123,13 +123,13 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       description: description.trim(),
       startingBalance: parseFloat(startingBalance) || 0,
       includeInTotal,
-      savingsGoal: savingsGoal ? parseFloat(savingsGoal) : null,
-      interestRateMonthly: interestRateMonthly ? parseFloat(interestRateMonthly) / 100 : null,
-      interestRateYearly: interestRateYearly ? parseFloat(interestRateYearly) / 100 : null,
-      mortgageLoanAmount: mortgageLoanAmount ? parseFloat(mortgageLoanAmount) : null,
-      mortgageStartDate: mortgageStartDate || null,
-      mortgageTermYears: mortgageTermYears ? parseInt(mortgageTermYears) : null,
-      mortgageInterestRate: mortgageInterestRate ? parseFloat(mortgageInterestRate) / 100 : null,
+      savingsGoal: type === 'SAVINGS' && savingsGoal ? parseFloat(savingsGoal) : null,
+      interestRateMonthly: type === 'DEBT' && interestRateMonthly ? parseFloat(interestRateMonthly) / 100 : null,
+      interestRateYearly: type === 'DEBT' && interestRateYearly ? parseFloat(interestRateYearly) / 100 : null,
+      mortgageLoanAmount: type === 'DEBT' && mortgageLoanAmount ? parseFloat(mortgageLoanAmount) : null,
+      mortgageStartDate: type === 'DEBT' ? (mortgageStartDate || null) : null,
+      mortgageTermYears: type === 'DEBT' && mortgageTermYears ? parseInt(mortgageTermYears) : null,
+      mortgageInterestRate: type === 'DEBT' && mortgageInterestRate ? parseFloat(mortgageInterestRate) / 100 : null,
     };
     const result = accountSchema.safeParse(raw);
     if (!result.success) {
@@ -257,42 +257,7 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
             padding: '0 var(--space-4) var(--space-8)',
           }}
         >
-          {/* Tabs */}
-          <div
-            style={{
-              display: 'flex',
-              gap: 'var(--space-2)',
-              background: 'var(--color-surface-raised)',
-              borderRadius: 'var(--radius-btn)',
-              padding: '3px',
-            }}
-          >
-            {(['basic', 'advanced'] as Tab[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                style={{
-                  flex: 1,
-                  minHeight: '36px',
-                  borderRadius: 'calc(var(--radius-btn) - 2px)',
-                  background: tab === t ? 'var(--color-surface)' : 'transparent',
-                  color: tab === t ? 'var(--color-text)' : 'var(--color-text-secondary)',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontFamily: '"DM Sans", sans-serif',
-                  fontWeight: 500,
-                  fontSize: 'var(--text-body)',
-                  textTransform: 'capitalize',
-                  transition: 'background 100ms ease-out, color 100ms ease-out',
-                }}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-
-          {tab === 'basic' && (
-            <>
+          <>
               {/* Account type */}
               <div style={sectionStyle}>
                 <span style={labelStyle}>Type</span>
@@ -426,29 +391,6 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
                   />
                 </button>
               </div>
-            </>
-          )}
-
-          {tab === 'advanced' && (
-            <>
-              {/* Description */}
-              <div style={sectionStyle}>
-                <label htmlFor="acc-desc" style={labelStyle}>Description</label>
-                <textarea
-                  id="acc-desc"
-                  value={description}
-                  maxLength={255}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Optional description"
-                  rows={3}
-                  style={{
-                    ...inputStyle,
-                    minHeight: '80px',
-                    padding: 'var(--space-2) var(--space-3)',
-                    resize: 'vertical',
-                  }}
-                />
-              </div>
 
               {/* Savings-specific */}
               {type === 'SAVINGS' && (
@@ -552,8 +494,26 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
                   </div>
                 </>
               )}
-            </>
-          )}
+
+              {/* Description */}
+              <div style={sectionStyle}>
+                <label htmlFor="acc-desc" style={labelStyle}>Description</label>
+                <textarea
+                  id="acc-desc"
+                  value={description}
+                  maxLength={255}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Optional description"
+                  rows={3}
+                  style={{
+                    ...inputStyle,
+                    minHeight: '80px',
+                    padding: 'var(--space-2) var(--space-3)',
+                    resize: 'vertical',
+                  }}
+                />
+              </div>
+          </>
 
           {/* Save button */}
           <button

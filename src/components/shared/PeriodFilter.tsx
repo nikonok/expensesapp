@@ -48,6 +48,7 @@ export default function PeriodFilter({ value, onChange, variant = 'full' }: Peri
   const [sheetOpen, setSheetOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState(value.startDate);
   const [customTo, setCustomTo] = useState(value.endDate);
+  const [pendingCustom, setPendingCustom] = useState(value.type === 'custom');
 
   const label = getPeriodLabel(value);
   const showArrows = variant === 'month-only' || isNavigable(value.type);
@@ -57,20 +58,24 @@ export default function PeriodFilter({ value, onChange, variant = 'full' }: Peri
     if (variant === 'month-only') return;
     setCustomFrom(value.startDate);
     setCustomTo(value.endDate);
+    setPendingCustom(value.type === 'custom');
     setSheetOpen(true);
   }
 
   function handleSelectType(type: PeriodFilterType) {
     if (type === 'custom') {
+      setPendingCustom(true);
       // Don't close sheet yet — let user fill dates
       return;
     }
+    setPendingCustom(false);
     const newFilter = buildFilterForType(type, value.startDate);
     onChange(newFilter);
     setSheetOpen(false);
   }
 
   function handleApplyCustom() {
+    setPendingCustom(false);
     onChange({ type: 'custom', startDate: customFrom, endDate: customTo });
     setSheetOpen(false);
   }
@@ -227,7 +232,7 @@ export default function PeriodFilter({ value, onChange, variant = 'full' }: Peri
               {/* Custom range option */}
               <button
                 role="radio"
-                aria-checked={value.type === 'custom'}
+                aria-checked={isCustomActive || pendingCustom}
                 onClick={() => handleSelectType('custom')}
                 style={{
                   display: 'flex',
@@ -242,12 +247,12 @@ export default function PeriodFilter({ value, onChange, variant = 'full' }: Peri
                   fontFamily: '"DM Sans", sans-serif',
                   fontWeight: 500,
                   fontSize: 'var(--text-body)',
-                  color: value.type === 'custom' ? 'var(--color-primary)' : 'var(--color-text)',
+                  color: isCustomActive || pendingCustom ? 'var(--color-primary)' : 'var(--color-text)',
                   textAlign: 'left',
                 }}
               >
                 Custom range
-                {value.type === 'custom' && (
+                {(isCustomActive || pendingCustom) && (
                   <span
                     style={{
                       width: '8px',
@@ -262,99 +267,101 @@ export default function PeriodFilter({ value, onChange, variant = 'full' }: Peri
               </button>
             </div>
 
-            {/* Custom date inputs */}
-            <div
-              style={{
-                marginTop: 'var(--space-4)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 'var(--space-3)',
-              }}
-            >
-              <label
+            {/* Custom date inputs — shown when custom range is active or pending */}
+            {(isCustomActive || pendingCustom) && (
+              <div
                 style={{
+                  marginTop: 'var(--space-4)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 'var(--space-1)',
-                  fontFamily: '"DM Sans", sans-serif',
-                  fontSize: 'var(--text-caption)',
-                  fontWeight: 500,
-                  color: 'var(--color-text-secondary)',
+                  gap: 'var(--space-3)',
                 }}
               >
-                From
-                <input
-                  type="date"
-                  value={customFrom}
-                  onChange={(e) => setCustomFrom(e.target.value)}
+                <label
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 'var(--space-1)',
+                    fontFamily: '"DM Sans", sans-serif',
+                    fontSize: 'var(--text-caption)',
+                    fontWeight: 500,
+                    color: 'var(--color-text-secondary)',
+                  }}
+                >
+                  From
+                  <input
+                    type="date"
+                    value={customFrom}
+                    onChange={(e) => setCustomFrom(e.target.value)}
+                    style={{
+                      minHeight: '44px',
+                      padding: '0 var(--space-3)',
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 'var(--radius-input)',
+                      color: 'var(--color-text)',
+                      fontFamily: '"DM Sans", sans-serif',
+                      fontSize: 'var(--text-body)',
+                      colorScheme: 'dark',
+                      width: '100%',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </label>
+
+                <label
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 'var(--space-1)',
+                    fontFamily: '"DM Sans", sans-serif',
+                    fontSize: 'var(--text-caption)',
+                    fontWeight: 500,
+                    color: 'var(--color-text-secondary)',
+                  }}
+                >
+                  To
+                  <input
+                    type="date"
+                    value={customTo}
+                    onChange={(e) => setCustomTo(e.target.value)}
+                    style={{
+                      minHeight: '44px',
+                      padding: '0 var(--space-3)',
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 'var(--radius-input)',
+                      color: 'var(--color-text)',
+                      fontFamily: '"DM Sans", sans-serif',
+                      fontSize: 'var(--text-body)',
+                      colorScheme: 'dark',
+                      width: '100%',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </label>
+
+                <button
+                  onClick={handleApplyCustom}
+                  disabled={!customFrom || !customTo}
                   style={{
                     minHeight: '44px',
-                    padding: '0 var(--space-3)',
-                    background: 'var(--color-surface)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-input)',
-                    color: 'var(--color-text)',
+                    background: 'var(--color-primary)',
+                    border: 'none',
+                    borderRadius: 'var(--radius-btn)',
+                    color: 'var(--color-bg)',
                     fontFamily: '"DM Sans", sans-serif',
+                    fontWeight: 500,
                     fontSize: 'var(--text-body)',
-                    colorScheme: 'dark',
-                    width: '100%',
-                    boxSizing: 'border-box',
+                    cursor: 'pointer',
+                    opacity: !customFrom || !customTo ? 0.4 : 1,
+                    transition: 'opacity 100ms ease-out',
                   }}
-                />
-              </label>
-
-              <label
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 'var(--space-1)',
-                  fontFamily: '"DM Sans", sans-serif',
-                  fontSize: 'var(--text-caption)',
-                  fontWeight: 500,
-                  color: 'var(--color-text-secondary)',
-                }}
-              >
-                To
-                <input
-                  type="date"
-                  value={customTo}
-                  onChange={(e) => setCustomTo(e.target.value)}
-                  style={{
-                    minHeight: '44px',
-                    padding: '0 var(--space-3)',
-                    background: 'var(--color-surface)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-input)',
-                    color: 'var(--color-text)',
-                    fontFamily: '"DM Sans", sans-serif',
-                    fontSize: 'var(--text-body)',
-                    colorScheme: 'dark',
-                    width: '100%',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </label>
-
-              <button
-                onClick={handleApplyCustom}
-                disabled={!customFrom || !customTo}
-                style={{
-                  minHeight: '44px',
-                  background: 'var(--color-primary)',
-                  border: 'none',
-                  borderRadius: 'var(--radius-btn)',
-                  color: 'var(--color-bg)',
-                  fontFamily: '"DM Sans", sans-serif',
-                  fontWeight: 500,
-                  fontSize: 'var(--text-body)',
-                  cursor: 'pointer',
-                  opacity: !customFrom || !customTo ? 0.4 : 1,
-                  transition: 'opacity 100ms ease-out',
-                }}
-              >
-                Apply
-              </button>
-            </div>
+                >
+                  Apply
+                </button>
+              </div>
+            )}
           </div>
         </BottomSheet>
       )}
