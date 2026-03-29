@@ -99,7 +99,7 @@ export function BudgetStats({ categoryId, accountId, month }: BudgetStatsProps) 
           : 'N/A',
     },
     {
-      label: `Last month (${format(prevMonth, 'MMM yyyy')})`,
+      label: `Last month (${format(prevMonth, 'MM.yyyy')})`,
       value:
         stats?.lastMonth != null
           ? formatAmount(stats.lastMonth, mainCurrency)

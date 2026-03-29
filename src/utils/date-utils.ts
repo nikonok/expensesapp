@@ -86,7 +86,7 @@ export function parsePeriodFilter(filter: PeriodFilter): { start: Date; end: Dat
 }
 
 export function formatDate(dateStr: string): string {
-  return format(parseISO(dateStr), 'MMM d, yyyy');
+  return format(parseISO(dateStr), 'dd.MM.yyyy');
 }
 
 export function getWeekRange(date: Date): { start: Date; end: Date } {
@@ -117,7 +117,7 @@ export function getPeriodLabel(filter: PeriodFilter): string {
       const d = parseISO(filter.startDate);
       const todayStr = getLocalDateString();
       if (filter.startDate === todayStr) return 'Today';
-      return format(d, 'MMM d, yyyy');
+      return format(d, 'dd.MM.yyyy');
     }
 
     case 'week': {
@@ -128,7 +128,7 @@ export function getPeriodLabel(filter: PeriodFilter): string {
       if (thisWeekStart === filterWeekStart) return 'This week';
       const weekStart = startOfWeek(d, { weekStartsOn: 1 });
       const weekEnd = endOfWeek(d, { weekStartsOn: 1 });
-      return `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`;
+      return `${format(weekStart, 'dd.MM')} – ${format(weekEnd, 'dd.MM.yyyy')}`;
     }
 
     case 'month': {
@@ -147,7 +147,7 @@ export function getPeriodLabel(filter: PeriodFilter): string {
     case 'custom': {
       const start = parseISO(filter.startDate);
       const end = parseISO(filter.endDate);
-      return `${format(start, 'MMM d')} – ${format(end, 'MMM d, yyyy')}`;
+      return `${format(start, 'dd.MM')} – ${format(end, 'dd.MM.yyyy')}`;
     }
   }
 }

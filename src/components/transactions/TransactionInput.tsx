@@ -11,6 +11,7 @@ import type { Account, Category } from '@/db/models';
 import { applyTransaction, applyTransfer, replaceTransaction, replaceTransfer } from '@/services/balance.service';
 import { exchangeRateService } from '@/services/exchange-rate.service';
 import { evaluateExpression } from '@/services/math-parser';
+import { format, parseISO } from 'date-fns';
 import { getLocalDateString } from '@/utils/date-utils';
 import { getLucideIcon } from '@/components/shared/IconPicker';
 import { Numpad } from '@/components/shared/Numpad';
@@ -928,6 +929,7 @@ function Step2({
             {t('transactions.fields.date')}
           </label>
           <div
+            onClick={() => setShowDatePicker(true)}
             style={{
               fontFamily: '"DM Sans", sans-serif',
               fontSize: 'var(--text-body)',
@@ -939,9 +941,10 @@ function Step2({
               minHeight: '44px',
               display: 'flex',
               alignItems: 'center',
+              cursor: 'pointer',
             }}
           >
-            {date}
+            {format(parseISO(date), 'dd.MM.yyyy')}
           </div>
         </div>
 

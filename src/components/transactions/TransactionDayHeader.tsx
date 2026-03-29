@@ -16,7 +16,7 @@ export default function TransactionDayHeader({
 }: TransactionDayHeaderProps) {
   const parsed = parseISO(date);
   const dayNum = format(parsed, 'd');
-  const dayLabel = format(parsed, 'EEE, MMM yyyy');
+  const dayLabel = format(parsed, 'EEE, dd.MM.yyyy');
 
   return (
     <div

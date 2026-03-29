@@ -180,10 +180,10 @@ describe('parsePeriodFilter', () => {
 
 describe('formatDate', () => {
   it('formats YYYY-MM-DD as human readable', () => {
-    expect(formatDate('2026-03-29')).toBe('Mar 29, 2026');
+    expect(formatDate('2026-03-29')).toBe('29.03.2026');
   });
 
   it('formats single digit day correctly', () => {
-    expect(formatDate('2026-01-05')).toBe('Jan 5, 2026');
+    expect(formatDate('2026-01-05')).toBe('05.01.2026');
   });
 });

@@ -65,7 +65,7 @@ function buildBuckets(transactions: Transaction[], start: Date, end: Date, scale
     let cursor = startOfDay(start);
     while (!isAfter(cursor, end)) {
       buckets.push({
-        label: format(cursor, 'MMM d'),
+        label: format(cursor, 'dd.MM'),
         amount: 0,
       });
       cursor = addDays(cursor, 1);
@@ -86,7 +86,7 @@ function buildBuckets(transactions: Transaction[], start: Date, end: Date, scale
       const weekEnd = addDays(addWeeks(cursor, 1), -1);
       const labelEnd = isBefore(weekEnd, end) ? weekEnd : end;
       const labelStart = isBefore(cursor, start) ? start : cursor;
-      const label = format(labelStart, 'MMM d') + (format(labelStart, 'MMM d') !== format(labelEnd, 'MMM d') ? '–' + format(labelEnd, 'd') : '');
+      const label = format(labelStart, 'dd.MM') + (format(labelStart, 'dd.MM') !== format(labelEnd, 'dd.MM') ? '–' + format(labelEnd, 'dd') : '');
       buckets.push({ label, amount: 0 });
       cursor = addWeeks(cursor, 1);
     }
@@ -116,7 +116,7 @@ function buildBuckets(transactions: Transaction[], start: Date, end: Date, scale
     let cursor = startOfMonth(start);
     while (!isAfter(cursor, end)) {
       buckets.push({
-        label: format(cursor, 'MMM yy'),
+        label: format(cursor, 'MM.yy'),
         amount: 0,
       });
       cursor = addMonths(cursor, 1);
