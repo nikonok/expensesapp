@@ -17,7 +17,7 @@
 |---|---|---|---|---|
 | [T00](#t00--repo-cleanup--project-init--) | Repo Cleanup & Project Init | 0 — Setup | `[x]` | — |
 | [T01](#t01--project-scaffold--) | Project Scaffold | 1 — Foundation | `[x]` | T00 |
-| [T02](#t02--database-layer--) | Database Layer | 1 — Foundation | `[~]` | T01 |
+| [T02](#t02--database-layer--) | Database Layer | 1 — Foundation | `[x]` | T01 |
 | [T03](#t03--core-utilities--) | Core Utilities | 1 — Foundation | `[x]` | T01 |
 | [T04](#t04--i18n-setup--) | i18n Setup | 1 — Foundation | `[x]` | T01 |
 | [T05](#t05--zustand-state-stores--) | Zustand State Stores | 1 — Foundation | `[x]` | T01, T03 |
@@ -245,7 +245,7 @@ Verification:
 
 ---
 
-### T02 · Database Layer `[~]`
+### T02 · Database Layer `[x]`
 
 **Skills**: none (data layer task)
 **Depends on**: T01 complete
