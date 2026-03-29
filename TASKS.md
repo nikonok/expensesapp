@@ -32,7 +32,7 @@
 | [T14](#t14--categories-tab--) | Categories Tab | 4 — Features | `[x]` | T08, T09, T05 |
 | [T15](#t15--transactions-tab--) | Transactions Tab | 4 — Features | `[x]` | T08, T09, T05 |
 | [T16](#t16--transaction-input-add--edit--) | Transaction Input (Add/Edit) | 4 — Features | `[x]` | T09, T10, T06, T07, T05 |
-| [T17](#t17--budget-tab--) | Budget Tab | 4 — Features | `[ ]` | T08, T09, T10, T05, T02, T06, T07 |
+| [T17](#t17--budget-tab--) | Budget Tab | 4 — Features | `[x]` | T08, T09, T10, T05, T02, T06, T07 |
 | [T18](#t18--overview-tab--) | Overview Tab | 4 — Features | `[x]` | T08, T09, T05 |
 | [T19](#t19--settings-view--) | Settings View | 4 — Features | `[ ]` | T08, T09, T04, T05, T06 |
 | [T20](#t20--backup-service--) | Backup Service | 5 — Polish | `[ ]` | T02 |
@@ -1568,7 +1568,7 @@ Verification:
 
 ---
 
-### T17 · Budget Tab `[ ]`
+### T17 · Budget Tab `[x]`
 
 **Skills**: `/feature-dev`
 **Depends on**: T08, T09, T10, T05, T02, T06, T07 complete
