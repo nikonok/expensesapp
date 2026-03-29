@@ -21,7 +21,7 @@
 | [T03](#t03--core-utilities--) | Core Utilities | 1 — Foundation | `[x]` | T01 |
 | [T04](#t04--i18n-setup--) | i18n Setup | 1 — Foundation | `[x]` | T01 |
 | [T05](#t05--zustand-state-stores--) | Zustand State Stores | 1 — Foundation | `[x]` | T01, T03 |
-| [T06](#t06--exchange-rate-service--) | Exchange Rate Service | 2 — Services | `[~]` | T02 |
+| [T06](#t06--exchange-rate-service--) | Exchange Rate Service | 2 — Services | `[x]` | T02 |
 | [T07](#t07--balance-service--) | Balance Service | 2 — Services | `[x]` | T02 |
 | [T08](#t08--layout-shell--routing--) | Layout Shell & Routing | 3 — Layout | `[~]` | T01, T03, T04, T05 |
 | [T09](#t09--shared-ui-components--) | Shared UI Components | 3 — Layout | `[~]` | T01, T03, T04 |
@@ -663,7 +663,7 @@ Verification:
 
 ## Phase 2 — Services (run in parallel after T02)
 
-### T06 · Exchange Rate Service `[~]`
+### T06 · Exchange Rate Service `[x]`
 
 **Skills**: none
 **Depends on**: T02 complete
