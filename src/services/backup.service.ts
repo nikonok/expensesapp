@@ -18,6 +18,16 @@ interface BackupJSON {
 class BackupService {
   private _autoBackupIntervalId: ReturnType<typeof setInterval> | null = null;
 
+  private validateBackupStructure(parsed: unknown): parsed is BackupJSON {
+    if (typeof parsed !== 'object' || parsed === null) return false;
+    const p = parsed as Record<string, unknown>;
+    if (!('version' in p) || !('tables' in p)) return false;
+    const tables = p.tables as Record<string, unknown>;
+    if (typeof tables !== 'object' || tables === null) return false;
+    const required = ['accounts', 'categories', 'transactions', 'budgets', 'exchangeRates', 'settings'];
+    return required.every(k => Array.isArray(tables[k]));
+  }
+
   async createBackup(isAutomatic = false): Promise<void> {
     const [accounts, categories, transactions, budgets, exchangeRates, settings] =
       await Promise.all([
@@ -60,7 +70,15 @@ class BackupService {
   async restoreFromBackup(backupId: number): Promise<void> {
     const record = await db.backups.get(backupId);
     if (!record) throw new Error(`Backup ${backupId} not found`);
-    const parsed: BackupJSON = JSON.parse(record.data);
+    let parsed: BackupJSON;
+    try {
+      parsed = JSON.parse(record.data);
+    } catch {
+      throw new Error('Backup data is corrupted and cannot be parsed');
+    }
+    if (!this.validateBackupStructure(parsed)) {
+      throw new Error('Backup data has invalid structure');
+    }
     await this._restoreData(parsed);
   }
 
@@ -105,17 +123,18 @@ class BackupService {
 
   async importFromFile(file: File): Promise<void> {
     const text = await file.text();
-    const parsed: unknown = JSON.parse(text);
-
-    if (
-      typeof parsed !== 'object' ||
-      parsed === null ||
-      !('version' in parsed)
-    ) {
-      throw new Error('Invalid backup file: missing version field');
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new Error('Invalid backup file: not valid JSON');
     }
 
-    await this._restoreData(parsed as BackupJSON);
+    if (!this.validateBackupStructure(parsed)) {
+      throw new Error('Invalid backup file structure');
+    }
+
+    await this._restoreData(parsed);
   }
 
   setAutoBackupSchedule(intervalHours: number | null): void {

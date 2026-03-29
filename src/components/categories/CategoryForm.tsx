@@ -6,6 +6,7 @@ import { db } from '../../db/database';
 import type { Category, CategoryType } from '../../db/models';
 import { getUTCISOString } from '../../utils/date-utils';
 import { CHAR_LIMITS, COLOR_PALETTE, ICON_LIST } from '../../utils/constants';
+import { categorySchema } from '../../utils/validation';
 
 interface CategoryFormProps {
   isOpen: boolean;
@@ -48,6 +49,17 @@ export default function CategoryForm({
     }
     if (trimmedName.length > CHAR_LIMITS.name) {
       setError(`Name must be ${CHAR_LIMITS.name} characters or fewer`);
+      return;
+    }
+
+    const parseResult = categorySchema.safeParse({
+      name: trimmedName,
+      type: editCategory?.type ?? defaultType,
+      color,
+      icon,
+    });
+    if (!parseResult.success) {
+      setError(parseResult.error.issues[0]?.message ?? 'Invalid input');
       return;
     }
 

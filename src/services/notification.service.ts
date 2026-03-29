@@ -33,14 +33,7 @@ class NotificationService {
 }
 
 export const notificationService = new NotificationService();
-export const { scheduleDailyReminder, cancelDailyReminder, sendNotification, requestPermission } =
-  Object.fromEntries(
-    ['scheduleDailyReminder', 'cancelDailyReminder', 'sendNotification', 'requestPermission'].map(
-      (k) => [k, notificationService[k as keyof NotificationService].bind(notificationService)],
-    ),
-  ) as {
-    scheduleDailyReminder: (time: string) => void;
-    cancelDailyReminder: () => void;
-    sendNotification: (title: string, body?: string) => void;
-    requestPermission: () => Promise<boolean>;
-  };
+export const scheduleDailyReminder = notificationService.scheduleDailyReminder.bind(notificationService);
+export const cancelDailyReminder = notificationService.cancelDailyReminder.bind(notificationService);
+export const sendNotification = notificationService.sendNotification.bind(notificationService);
+export const requestPermission = notificationService.requestPermission.bind(notificationService);

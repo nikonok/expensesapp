@@ -54,6 +54,14 @@ export const exchangeRateService = {
       throw new Error('Invalid exchange rate API response: missing rates');
     }
 
+    const rawRates = json.rates;
+    const rates: Record<string, number> = {};
+    for (const [k, v] of Object.entries(rawRates)) {
+      if (typeof v === 'number' && isFinite(v) && v > 0) {
+        rates[k] = v;
+      }
+    }
+
     const today = getLocalDateString();
     const now = getUTCISOString();
 
@@ -65,14 +73,14 @@ export const exchangeRateService = {
 
     if (existing?.id != null) {
       await db.exchangeRates.update(existing.id, {
-        rates: json.rates,
+        rates,
         fetchedAt: now,
       });
     } else {
       await db.exchangeRates.add({
         baseCurrency,
         date: today,
-        rates: json.rates,
+        rates,
         fetchedAt: now,
       });
     }

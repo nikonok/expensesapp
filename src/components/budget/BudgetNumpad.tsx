@@ -4,6 +4,7 @@ import BottomSheet from '../layout/BottomSheet';
 import { BudgetStats } from './BudgetStats';
 import { db } from '../../db/database';
 import { getUTCISOString } from '../../utils/date-utils';
+import { budgetSchema } from '../../utils/validation';
 
 interface BudgetNumpadProps {
   categoryId?: number;
@@ -28,6 +29,16 @@ export function BudgetNumpad({
   const [statsOpen, setStatsOpen] = useState(false);
 
   const handleSave = async (result: number) => {
+    const parseResult = budgetSchema.safeParse({
+      categoryId: categoryId ?? null,
+      accountId: accountId ?? null,
+      month: currentMonth,
+      plannedAmount: result,
+    });
+    if (!parseResult.success) {
+      return;
+    }
+
     const now = getUTCISOString();
 
     // Find existing budget record for this month + category/account
