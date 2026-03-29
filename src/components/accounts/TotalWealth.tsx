@@ -187,6 +187,7 @@ export default function TotalWealth() {
       {/* Grand total row */}
       {grandAssets != null && grandDebts != null && (
         <div
+          role="status"
           style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr 1fr',

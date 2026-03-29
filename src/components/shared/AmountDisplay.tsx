@@ -46,8 +46,12 @@ export function AmountDisplay({ amount, currency, type, size }: AmountDisplayPro
     maximumFractionDigits: 2,
   }).format(Math.abs(amount));
 
+  const typeLabel = type === 'income' ? 'income' : type === 'expense' ? 'expense' : type === 'transfer' ? 'transfer' : undefined;
+  const accessibleLabel = typeLabel ? `${typeLabel} ${formatted}` : formatted;
+
   return (
     <span
+      aria-label={accessibleLabel}
       style={{
         fontFamily: '"JetBrains Mono", monospace',
         fontWeight: 600,
@@ -65,7 +69,7 @@ export function AmountDisplay({ amount, currency, type, size }: AmountDisplayPro
           {prefix}
         </span>
       )}
-      <span>{formatted}</span>
+      <span aria-hidden="true">{formatted}</span>
     </span>
   );
 }

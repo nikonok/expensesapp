@@ -204,3 +204,26 @@ export default function CategoryCard({
     </div>
   );
 }
+
+export function CategoryCardSkeleton() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--space-3)',
+        padding: 'var(--space-3) var(--space-4)',
+        paddingBottom: '16px',
+        background: 'var(--color-surface)',
+        borderRadius: 'var(--radius-card)',
+        borderLeft: '3px solid var(--color-border)',
+      }}
+    >
+      <div className="skeleton" style={{ width: '36px', height: '36px', borderRadius: 'var(--radius-icon)', flexShrink: 0 }} />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <div className="skeleton" style={{ height: '15px', width: '45%', borderRadius: '4px' }} />
+        <div className="skeleton" style={{ height: '12px', width: '65%', borderRadius: '4px' }} />
+      </div>
+    </div>
+  );
+}

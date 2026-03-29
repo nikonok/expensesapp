@@ -366,7 +366,7 @@ export default function TransactionList() {
             const dayCurrency = getDayCurrency(txs);
             const dayTxIds = txs.map((t) => t.id!);
             return (
-              <div key={date} style={{ contentVisibility: 'auto' }}>
+              <div key={date} style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 200px' } as React.CSSProperties}>
                 <TransactionDayHeader
                   date={date}
                   totalIncome={income}

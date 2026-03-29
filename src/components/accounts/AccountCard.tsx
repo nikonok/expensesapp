@@ -141,7 +141,7 @@ export default function AccountCard({ account, onPress }: AccountCardProps) {
       </div>
 
       {/* Balance */}
-      <div style={{ flexShrink: 0, textAlign: 'right' }}>
+      <div role="status" style={{ flexShrink: 0, textAlign: 'right' }}>
         {isDebt ? (
           <span
             style={{

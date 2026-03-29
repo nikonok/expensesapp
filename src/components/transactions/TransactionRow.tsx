@@ -216,3 +216,26 @@ export default function TransactionRow({
     </div>
   );
 }
+
+export function TransactionRowSkeleton() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--space-3)',
+        minHeight: '60px',
+        paddingBlock: 'var(--space-3)',
+        paddingInline: 'var(--space-4)',
+        borderBottom: '1px solid var(--color-border)',
+      }}
+    >
+      <div className="skeleton" style={{ width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0 }} />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <div className="skeleton" style={{ height: '15px', width: '50%', borderRadius: '4px' }} />
+        <div className="skeleton" style={{ height: '12px', width: '30%', borderRadius: '4px' }} />
+      </div>
+      <div className="skeleton" style={{ height: '15px', width: '60px', borderRadius: '4px', flexShrink: 0 }} />
+    </div>
+  );
+}

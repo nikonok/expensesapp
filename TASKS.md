@@ -40,7 +40,7 @@
 | [T22](#t22--notification-service--) | Notification Service | 5 — Polish | `[x]` | T01 |
 | [T23](#t23--pwa-configuration--) | PWA Configuration | 5 — Polish | `[x]` | T01, T22 |
 | [T24](#t24--drag-and-drop-reordering--) | Drag-and-Drop Reordering | 5 — Polish | `[x]` | T13, T14, T15 |
-| [T25](#t25--accessibility--performance-pass--) | Accessibility & Performance Pass | 5 — Polish | `[ ]` | all |
+| [T25](#t25--accessibility--performance-pass--) | Accessibility & Performance Pass | 5 — Polish | `[x]` | all |
 
 ---
 
@@ -2162,7 +2162,7 @@ Verification:
 
 ---
 
-### T25 · Accessibility & Performance Pass `[ ]`
+### T25 · Accessibility & Performance Pass `[x]`
 
 **Skills**: `/frontend-audit`, `/frontend-polish`
 **Depends on**: All other tasks complete

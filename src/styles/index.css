@@ -114,6 +114,12 @@
   --nav-height: calc(64px + env(safe-area-inset-bottom));
 }
 
+/* Global focus ring */
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 /* Base styles */
 html,
 body {

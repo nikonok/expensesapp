@@ -6,7 +6,7 @@ interface ContentColumnProps {
 
 export default function ContentColumn({ children }: ContentColumnProps) {
   return (
-    <div
+    <main
       style={{
         flex: 1,
         overflowY: 'auto',
@@ -24,6 +24,6 @@ export default function ContentColumn({ children }: ContentColumnProps) {
       >
         {children}
       </div>
-    </div>
+    </main>
   );
 }
