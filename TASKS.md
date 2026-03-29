@@ -16,7 +16,7 @@
 | ID | Task | Phase | Status | Depends on |
 |---|---|---|---|---|
 | [T00](#t00--repo-cleanup--project-init--) | Repo Cleanup & Project Init | 0 — Setup | `[x]` | — |
-| [T01](#t01--project-scaffold--) | Project Scaffold | 1 — Foundation | `[ ]` | T00 |
+| [T01](#t01--project-scaffold--) | Project Scaffold | 1 — Foundation | `[x]` | T00 |
 | [T02](#t02--database-layer--) | Database Layer | 1 — Foundation | `[ ]` | T01 |
 | [T03](#t03--core-utilities--) | Core Utilities | 1 — Foundation | `[ ]` | T01 |
 | [T04](#t04--i18n-setup--) | i18n Setup | 1 — Foundation | `[ ]` | T01 |
@@ -150,7 +150,7 @@ Verification:
 
 ## Phase 1 — Foundation (run T01–T05 in parallel after T00)
 
-### T01 · Project Scaffold `[ ]`
+### T01 · Project Scaffold `[x]`
 
 **Skills**: none (infra task)
 **Depends on**: T00 complete
