@@ -24,3 +24,6 @@ coverage/
 
 # PWA placeholder icons (generated)
 public/icons/
+
+# Claude Code local memory
+.claude/

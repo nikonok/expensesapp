@@ -15,7 +15,7 @@
 
 | ID | Task | Phase | Status | Depends on |
 |---|---|---|---|---|
-| [T00](#t00--repo-cleanup--project-init--) | Repo Cleanup & Project Init | 0 — Setup | `[~]` | — |
+| [T00](#t00--repo-cleanup--project-init--) | Repo Cleanup & Project Init | 0 — Setup | `[x]` | — |
 | [T01](#t01--project-scaffold--) | Project Scaffold | 1 — Foundation | `[ ]` | T00 |
 | [T02](#t02--database-layer--) | Database Layer | 1 — Foundation | `[ ]` | T01 |
 | [T03](#t03--core-utilities--) | Core Utilities | 1 — Foundation | `[ ]` | T01 |
@@ -69,7 +69,7 @@ claude
 
 ## Phase 0 — Repository Setup
 
-### T00 · Repo Cleanup & Project Init `[~]`
+### T00 · Repo Cleanup & Project Init `[x]`
 
 **Skills**: none (infra task)
 
