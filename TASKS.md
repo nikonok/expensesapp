@@ -23,7 +23,7 @@
 | [T05](#t05--zustand-state-stores--) | Zustand State Stores | 1 — Foundation | `[x]` | T01, T03 |
 | [T06](#t06--exchange-rate-service--) | Exchange Rate Service | 2 — Services | `[x]` | T02 |
 | [T07](#t07--balance-service--) | Balance Service | 2 — Services | `[x]` | T02 |
-| [T08](#t08--layout-shell--routing--) | Layout Shell & Routing | 3 — Layout | `[~]` | T01, T03, T04, T05 |
+| [T08](#t08--layout-shell--routing--) | Layout Shell & Routing | 3 — Layout | `[x]` | T01, T03, T04, T05 |
 | [T09](#t09--shared-ui-components--) | Shared UI Components | 3 — Layout | `[~]` | T01, T03, T04 |
 | [T10](#t10--numpad-component--) | Numpad Component | 3 — Layout | `[~]` | T01, T03, T05 |
 | [T11](#t11--period-filter-component--) | Period Filter Component | 3 — Layout | `[ ]` | T03, T04, T08 |
@@ -818,7 +818,7 @@ Verification:
 
 ## Phase 3 — Layout & Shared UI (run in parallel after T01, T03, T04, T05)
 
-### T08 · Layout Shell & Routing `[~]`
+### T08 · Layout Shell & Routing `[x]`
 
 **Skills**: `/feature-dev`
 **Depends on**: T01, T03, T04, T05 complete
