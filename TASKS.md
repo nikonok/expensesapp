@@ -35,9 +35,9 @@
 | [T17](#t17--budget-tab--) | Budget Tab | 4 — Features | `[x]` | T08, T09, T10, T05, T02, T06, T07 |
 | [T18](#t18--overview-tab--) | Overview Tab | 4 — Features | `[x]` | T08, T09, T05 |
 | [T19](#t19--settings-view--) | Settings View | 4 — Features | `[x]` | T08, T09, T04, T05, T06 |
-| [T20](#t20--backup-service--) | Backup Service | 5 — Polish | `[ ]` | T02 |
-| [T21](#t21--export-service--) | Export Service | 5 — Polish | `[ ]` | T02, T03 |
-| [T22](#t22--notification-service--) | Notification Service | 5 — Polish | `[ ]` | T01 |
+| [T20](#t20--backup-service--) | Backup Service | 5 — Polish | `[x]` | T02 |
+| [T21](#t21--export-service--) | Export Service | 5 — Polish | `[~]` | T02, T03 |
+| [T22](#t22--notification-service--) | Notification Service | 5 — Polish | `[~]` | T01 |
 | [T23](#t23--pwa-configuration--) | PWA Configuration | 5 — Polish | `[ ]` | T01, T22 |
 | [T24](#t24--drag-and-drop-reordering--) | Drag-and-Drop Reordering | 5 — Polish | `[ ]` | T13, T14, T15 |
 | [T25](#t25--accessibility--performance-pass--) | Accessibility & Performance Pass | 5 — Polish | `[ ]` | all |
@@ -1823,7 +1823,7 @@ Verification:
 
 ## Phase 5 — Services & Polish
 
-### T20 · Backup Service `[ ]`
+### T20 · Backup Service `[x]`
 
 **Skills**: none
 **Depends on**: T02 complete
@@ -1897,7 +1897,7 @@ Verification:
 
 ---
 
-### T21 · Export Service `[ ]`
+### T21 · Export Service `[~]`
 
 **Skills**: none
 **Depends on**: T02, T03 complete
@@ -1960,7 +1960,7 @@ Verification:
 
 ---
 
-### T22 · Notification Service `[ ]`
+### T22 · Notification Service `[~]`
 
 **Skills**: none
 **Depends on**: T01 complete
