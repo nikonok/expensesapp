@@ -27,14 +27,14 @@
 | [T09](#t09--shared-ui-components--) | Shared UI Components | 3 — Layout | `[x]` | T01, T03, T04 |
 | [T10](#t10--numpad-component--) | Numpad Component | 3 — Layout | `[x]` | T01, T03, T05 |
 | [T11](#t11--period-filter-component--) | Period Filter Component | 3 — Layout | `[x]` | T03, T04, T08 |
-| [T12](#t12--onboarding-flow--) | Onboarding Flow | 4 — Features | `[~]` | T08, T09, T04, T05 |
+| [T12](#t12--onboarding-flow--) | Onboarding Flow | 4 — Features | `[x]` | T08, T09, T04, T05 |
 | [T13](#t13--accounts-tab--) | Accounts Tab | 4 — Features | `[~]` | T08, T09, T05, T06, T07 |
-| [T14](#t14--categories-tab--) | Categories Tab | 4 — Features | `[ ]` | T08, T09, T05 |
+| [T14](#t14--categories-tab--) | Categories Tab | 4 — Features | `[~]` | T08, T09, T05 |
 | [T15](#t15--transactions-tab--) | Transactions Tab | 4 — Features | `[~]` | T08, T09, T05 |
-| [T16](#t16--transaction-input-add--edit--) | Transaction Input (Add/Edit) | 4 — Features | `[ ]` | T09, T10, T06, T07, T05 |
-| [T17](#t17--budget-tab--) | Budget Tab | 4 — Features | `[ ]` | T08, T09, T10, T05, T02, T06, T07 |
-| [T18](#t18--overview-tab--) | Overview Tab | 4 — Features | `[ ]` | T08, T09, T05 |
-| [T19](#t19--settings-view--) | Settings View | 4 — Features | `[ ]` | T08, T09, T04, T05, T06 |
+| [T16](#t16--transaction-input-add--edit--) | Transaction Input (Add/Edit) | 4 — Features | `[~]` | T09, T10, T06, T07, T05 |
+| [T17](#t17--budget-tab--) | Budget Tab | 4 — Features | `[~]` | T08, T09, T10, T05, T02, T06, T07 |
+| [T18](#t18--overview-tab--) | Overview Tab | 4 — Features | `[~]` | T08, T09, T05 |
+| [T19](#t19--settings-view--) | Settings View | 4 — Features | `[~]` | T08, T09, T04, T05, T06 |
 | [T20](#t20--backup-service--) | Backup Service | 5 — Polish | `[ ]` | T02 |
 | [T21](#t21--export-service--) | Export Service | 5 — Polish | `[ ]` | T02, T03 |
 | [T22](#t22--notification-service--) | Notification Service | 5 — Polish | `[ ]` | T01 |
@@ -1125,7 +1125,7 @@ Verification:
 
 ## Phase 4 — Features (run in parallel after Phase 3)
 
-### T12 · Onboarding Flow `[~]`
+### T12 · Onboarding Flow `[x]`
 
 **Skills**: `/frontend-design`
 **Depends on**: T08, T09, T04, T05 complete
@@ -1281,7 +1281,7 @@ Verification:
 
 ---
 
-### T14 · Categories Tab `[ ]`
+### T14 · Categories Tab `[~]`
 
 **Skills**: `/feature-dev`
 **Depends on**: T08, T09, T05 complete
@@ -1568,7 +1568,7 @@ Verification:
 
 ---
 
-### T17 · Budget Tab `[ ]`
+### T17 · Budget Tab `[~]`
 
 **Skills**: `/feature-dev`
 **Depends on**: T08, T09, T10, T05, T02, T06, T07 complete
@@ -1646,7 +1646,7 @@ Verification:
 
 ---
 
-### T18 · Overview Tab `[ ]`
+### T18 · Overview Tab `[~]`
 
 **Skills**: `/feature-dev`
 **Depends on**: T08, T09, T05 complete
@@ -1721,7 +1721,7 @@ Verification:
 
 ---
 
-### T19 · Settings View `[ ]`
+### T19 · Settings View `[~]`
 
 **Skills**: `/feature-dev`
 **Depends on**: T08, T09, T04, T05, T06 complete
