@@ -31,8 +31,14 @@ export function BackupSettings() {
     try {
       await createBackup();
       show(t('settings.backup.created'), 'success');
-    } catch {
-      show('Coming soon', 'coming-soon');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '';
+      show(
+        message.includes('quota') || message.includes('storage')
+          ? t('errors.quotaExceeded')
+          : t('errors.generic'),
+        'error',
+      );
     }
   }
 

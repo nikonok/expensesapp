@@ -49,6 +49,7 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
   const [showCurrencyWarn, setShowCurrencyWarn] = useState(false);
   const [pendingCurrency, setPendingCurrency] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Reset form on open
   useEffect(() => {
@@ -148,6 +149,7 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
     const data = validate();
     if (!data) return;
     setIsSaving(true);
+    setSaveError(null);
     try {
       const now = new Date().toISOString();
       if (isEdit && editAccount?.id != null) {
@@ -194,6 +196,9 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
         });
       }
       onClose();
+    } catch (err) {
+      console.error('Failed to save account:', err);
+      setSaveError('Failed to save. Storage may be full.');
     } finally {
       setIsSaving(false);
     }
@@ -572,6 +577,9 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
           >
             {isSaving ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Account'}
           </button>
+          {saveError && (
+            <span style={errorStyle}>{saveError}</span>
+          )}
         </div>
 
         {/* Numpad overlay for starting balance */}

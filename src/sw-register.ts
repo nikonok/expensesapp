@@ -23,7 +23,9 @@ export function getCanInstall() {
 export function registerSW() {
   if ('serviceWorker' in navigator) {
     const wb = new Workbox('/sw.js');
-    wb.register();
+    wb.register().catch((err) => {
+      console.warn('Service worker registration failed:', err);
+    });
   }
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();

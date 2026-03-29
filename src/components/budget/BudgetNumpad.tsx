@@ -39,39 +39,43 @@ export function BudgetNumpad({
       return;
     }
 
-    const now = getUTCISOString();
+    try {
+      const now = getUTCISOString();
 
-    // Find existing budget record for this month + category/account
-    let existing;
-    if (categoryId != null) {
-      existing = await db.budgets
-        .where('[categoryId+month]')
-        .equals([categoryId, currentMonth])
-        .first();
-    } else if (accountId != null) {
-      existing = await db.budgets
-        .where('[accountId+month]')
-        .equals([accountId, currentMonth])
-        .first();
+      // Find existing budget record for this month + category/account
+      let existing;
+      if (categoryId != null) {
+        existing = await db.budgets
+          .where('[categoryId+month]')
+          .equals([categoryId, currentMonth])
+          .first();
+      } else if (accountId != null) {
+        existing = await db.budgets
+          .where('[accountId+month]')
+          .equals([accountId, currentMonth])
+          .first();
+      }
+
+      if (existing) {
+        await db.budgets.update(existing.id!, {
+          plannedAmount: result,
+          updatedAt: now,
+        });
+      } else {
+        await db.budgets.add({
+          categoryId: categoryId ?? null,
+          accountId: accountId ?? null,
+          month: currentMonth,
+          plannedAmount: result,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+
+      onClose();
+    } catch (err) {
+      console.error('Failed to save budget:', err);
     }
-
-    if (existing) {
-      await db.budgets.update(existing.id!, {
-        plannedAmount: result,
-        updatedAt: now,
-      });
-    } else {
-      await db.budgets.add({
-        categoryId: categoryId ?? null,
-        accountId: accountId ?? null,
-        month: currentMonth,
-        plannedAmount: result,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
-
-    onClose();
   };
 
   return (

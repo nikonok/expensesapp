@@ -416,7 +416,15 @@ function StepCategories({
 
 // ── Step 5: Complete ───────────────────────────────────────────────────────────
 
-function StepComplete({ onFinish }: { onFinish: () => void }) {
+function StepComplete({
+  onFinish,
+  isSaving,
+  error,
+}: {
+  onFinish: () => void;
+  isSaving: boolean;
+  error: string | null;
+}) {
   const { t } = useTranslation();
   return (
     <div
@@ -456,9 +464,27 @@ function StepComplete({ onFinish }: { onFinish: () => void }) {
           {t('onboarding.complete.subtitle')}
         </p>
       </div>
-      <button style={{ ...primaryBtnStyle, width: '100%' }} onClick={onFinish}>
-        {t('onboarding.complete.cta')}
-      </button>
+      <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+        <button
+          style={{ ...primaryBtnStyle, opacity: isSaving ? 0.7 : 1, cursor: isSaving ? 'not-allowed' : 'pointer' }}
+          onClick={onFinish}
+          disabled={isSaving}
+        >
+          {isSaving ? '…' : t('onboarding.complete.cta')}
+        </button>
+        {error && (
+          <span
+            style={{
+              fontFamily: '"DM Sans", sans-serif',
+              fontSize: 'var(--text-caption)',
+              color: 'var(--color-expense)',
+              marginTop: 'var(--space-1)',
+            }}
+          >
+            {error}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -497,6 +523,8 @@ export default function OnboardingFlow() {
   const [categorySelected, setCategorySelected] = useState<boolean[]>(
     () => DEFAULT_CATEGORY_PRESETS.map(() => true),
   );
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleNumpadSave = useCallback((result: number) => {
     setStartingBalance(result);
@@ -520,51 +548,60 @@ export default function OnboardingFlow() {
   };
 
   const handleFinish = async () => {
-    const now = new Date().toISOString();
+    setIsSaving(true);
+    setError(null);
+    try {
+      const now = new Date().toISOString();
 
-    // 1. Save main currency
-    await settingsStore.update('mainCurrency', currency);
+      // 1. Save main currency
+      await settingsStore.update('mainCurrency', currency);
 
-    // 2. Create first account if name was provided
-    if (accountName.trim()) {
-      await db.accounts.add({
-        name: accountName.trim(),
-        type: 'REGULAR',
-        color: 'var(--color-primary)',
-        icon: 'wallet',
-        currency: currency,
-        description: '',
-        balance: startingBalance,
-        startingBalance: startingBalance,
-        includeInTotal: true,
-        isTrashed: false,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
-
-    // 3. Create selected category presets
-    const selectedPresets = DEFAULT_CATEGORY_PRESETS.filter((_, i) => categorySelected[i]);
-    if (selectedPresets.length > 0) {
-      await db.categories.bulkAdd(
-        selectedPresets.map((preset, idx) => ({
-          name: preset.name,
-          type: preset.type,
-          color: preset.color,
-          icon: preset.icon,
-          displayOrder: idx,
+      // 2. Create first account if name was provided
+      if (accountName.trim()) {
+        await db.accounts.add({
+          name: accountName.trim(),
+          type: 'REGULAR',
+          color: 'var(--color-primary)',
+          icon: 'wallet',
+          currency: currency,
+          description: '',
+          balance: startingBalance,
+          startingBalance: startingBalance,
+          includeInTotal: true,
           isTrashed: false,
           createdAt: now,
           updatedAt: now,
-        })),
-      );
+        });
+      }
+
+      // 3. Create selected category presets
+      const selectedPresets = DEFAULT_CATEGORY_PRESETS.filter((_, i) => categorySelected[i]);
+      if (selectedPresets.length > 0) {
+        await db.categories.bulkAdd(
+          selectedPresets.map((preset, idx) => ({
+            name: preset.name,
+            type: preset.type,
+            color: preset.color,
+            icon: preset.icon,
+            displayOrder: idx,
+            isTrashed: false,
+            createdAt: now,
+            updatedAt: now,
+          })),
+        );
+      }
+
+      // 4. Mark onboarding complete
+      await settingsStore.update('hasCompletedOnboarding', true);
+
+      // 5. Navigate to startup screen
+      navigate(`/${settingsStore.startupScreen}`, { replace: true });
+    } catch (err) {
+      console.error('Onboarding save failed:', err);
+      setError(t('errors.generic'));
+    } finally {
+      setIsSaving(false);
     }
-
-    // 4. Mark onboarding complete
-    await settingsStore.update('hasCompletedOnboarding', true);
-
-    // 5. Navigate to startup screen
-    navigate(`/${settingsStore.startupScreen}`, { replace: true });
   };
 
   return (
@@ -620,7 +657,7 @@ export default function OnboardingFlow() {
                 onSkip={skipToComplete}
               />
             )}
-            {step === 4 && <StepComplete onFinish={handleFinish} />}
+            {step === 4 && <StepComplete onFinish={handleFinish} isSaving={isSaving} error={error} />}
           </SlideContainer>
         </div>
       </div>
