@@ -5,6 +5,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useAccounts } from '@/hooks/use-accounts';
 import { useCategories } from '@/hooks/use-categories';
 import { useSettingsStore } from '@/stores/settings-store';
+import { useUIStore } from '@/stores/ui-store';
 import { db } from '@/db/database';
 import type { Transaction, TransactionType, CategoryType } from '@/db/models';
 import type { Account, Category } from '@/db/models';
@@ -234,13 +235,8 @@ function Step1({
 
 function CategoryRow({ category, onPress }: { category: Category; onPress: () => void }) {
   return (
-    <div
-      role="button"
-      tabIndex={0}
+    <button
       onClick={onPress}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') onPress();
-      }}
       style={{
         '--card-color': category.color,
         display: 'flex',
@@ -248,8 +244,11 @@ function CategoryRow({ category, onPress }: { category: Category; onPress: () =>
         gap: 'var(--space-3)',
         padding: 'var(--space-3) var(--space-4)',
         background: 'var(--color-surface)',
-        borderRadius: 'var(--radius-card)',
+        border: 'none',
         borderLeft: '3px solid var(--card-color)',
+        borderRadius: 'var(--radius-card)',
+        width: '100%',
+        textAlign: 'left',
         cursor: 'pointer',
         minHeight: '56px',
         userSelect: 'none',
@@ -267,19 +266,14 @@ function CategoryRow({ category, onPress }: { category: Category; onPress: () =>
       >
         {category.name}
       </span>
-    </div>
+    </button>
   );
 }
 
 function AccountRow({ account, onPress }: { account: Account; onPress: () => void }) {
   return (
-    <div
-      role="button"
-      tabIndex={0}
+    <button
       onClick={onPress}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') onPress();
-      }}
       style={{
         '--card-color': account.color,
         display: 'flex',
@@ -287,8 +281,11 @@ function AccountRow({ account, onPress }: { account: Account; onPress: () => voi
         gap: 'var(--space-3)',
         padding: 'var(--space-3) var(--space-4)',
         background: 'var(--color-surface)',
-        borderRadius: 'var(--radius-card)',
+        border: 'none',
         borderLeft: '3px solid var(--card-color)',
+        borderRadius: 'var(--radius-card)',
+        width: '100%',
+        textAlign: 'left',
         cursor: 'pointer',
         minHeight: '56px',
         userSelect: 'none',
@@ -320,7 +317,7 @@ function AccountRow({ account, onPress }: { account: Account; onPress: () => voi
           {account.currency}
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -1134,6 +1131,7 @@ export default function TransactionInput() {
   const { t } = useTranslation();
   const { show: showToast } = useToast();
   const { mainCurrency } = useSettingsStore();
+  const transactionAccountFilter = useUIStore((s) => s.transactionAccountFilter);
 
   const isEdit = Boolean(id);
   const editId = id ? parseInt(id, 10) : undefined;
@@ -1184,7 +1182,7 @@ export default function TransactionInput() {
     return '';
   }, [category?.id]) ?? '';
 
-  // Determine default account (most recent transaction date, else first alphabetically)
+  // Determine default account from most recent transaction
   const defaultAccount = useLiveQuery(async () => {
     const active = await db.accounts.where('isTrashed').equals(0).toArray();
     if (active.length === 0) return null;
@@ -1193,7 +1191,7 @@ export default function TransactionInput() {
       const found = active.find((a) => a.id === tx.accountId);
       if (found) return found;
     }
-    return active.sort((a, b) => a.name.localeCompare(b.name))[0] ?? null;
+    return null;
   }, []) ?? null;
 
   // Whether transfer source/dest have different currencies
@@ -1203,14 +1201,20 @@ export default function TransactionInput() {
   // Initialize account when data loads
   useEffect(() => {
     if (account !== null) return;
-    // Query param override
+    // 1. Explicit query param
     const qAccountId = searchParams.get('accountId');
     if (qAccountId && allAccounts.length > 0) {
       const found = allAccounts.find((a) => a.id === parseInt(qAccountId, 10));
       if (found) { setAccount(found); return; }
     }
+    // 2. Active account filter
+    if (transactionAccountFilter !== null && allAccounts.length > 0) {
+      const found = allAccounts.find((a) => a.id === transactionAccountFilter);
+      if (found) { setAccount(found); return; }
+    }
+    // 3. Latest used account (most recent transaction)
     if (defaultAccount) setAccount(defaultAccount);
-  }, [defaultAccount, allAccounts, searchParams, account]);
+  }, [defaultAccount, allAccounts, searchParams, account, transactionAccountFilter]);
 
   // Initialize category from query param
   useEffect(() => {

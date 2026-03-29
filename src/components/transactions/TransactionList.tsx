@@ -169,20 +169,7 @@ export default function TransactionList() {
   // Selection handlers
   function handleSelect(tx: Transaction) {
     if (tx.id === undefined) return;
-    if (tx.type === 'TRANSFER' && tx.transferGroupId) {
-      // Select/deselect both legs of the transfer
-      const partnerTx = transactions.find(
-        (t) =>
-          t.transferGroupId === tx.transferGroupId &&
-          t.id !== tx.id,
-      );
-      toggleTransactionSelection(tx.id);
-      if (partnerTx?.id !== undefined) {
-        toggleTransactionSelection(partnerTx.id);
-      }
-    } else {
-      toggleTransactionSelection(tx.id);
-    }
+    toggleTransactionSelection(tx.id);
   }
 
   function isRowSelected(tx: Transaction): boolean {

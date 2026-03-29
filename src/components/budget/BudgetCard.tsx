@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import BottomSheet from '../layout/BottomSheet';
 import { BudgetNumpad } from './BudgetNumpad';
+import { getLucideIcon } from '../shared/IconPicker';
 
 export interface BudgetCardData {
   id: number;
@@ -19,6 +20,7 @@ interface BudgetCardProps {
 
 export function BudgetCard({ item, type, month }: BudgetCardProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
+  const Icon = getLucideIcon(item.icon);
 
   const isOverBudget = item.planned != null && item.planned > 0 && item.spent > item.planned;
   const progressPct =
@@ -87,7 +89,11 @@ export function BudgetCard({ item, type, month }: BudgetCardProps) {
               }}
               aria-hidden="true"
             >
-              {item.icon}
+              {Icon ? (
+                <Icon size={18} strokeWidth={1.5} />
+              ) : (
+                <span style={{ fontSize: '18px', lineHeight: 1 }}>{item.icon}</span>
+              )}
             </div>
             <span
               style={{

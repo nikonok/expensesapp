@@ -83,12 +83,12 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
 
   const handleAddIncome = () => {
     onClose();
-    navigate('/transactions/new');
+    navigate(`/transactions/new?type=income&accountId=${account.id}`);
   };
 
   const handleAddWithdrawal = () => {
     onClose();
-    navigate('/transactions/new');
+    navigate(`/transactions/new?type=expense&accountId=${account.id}`);
   };
 
   const shortcutBtnStyle: React.CSSProperties = {
