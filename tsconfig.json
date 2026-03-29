@@ -14,7 +14,8 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "dexie-react-hooks": ["./node_modules/dexie-react-hooks/dist/dexie-react-hooks.d.ts"]
     },
     "skipLibCheck": true,
     "ignoreDeprecations": "6.0"
