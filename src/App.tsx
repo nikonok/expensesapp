@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router';
 import { useSettingsStore } from './stores/settings-store';
+import { scheduleDailyReminder } from './services/notification.service';
 import TabLayout from './components/layout/TabLayout';
 import AccountsPage from './pages/AccountsPage';
 import CategoriesPage from './pages/CategoriesPage';
@@ -14,11 +15,18 @@ import TransactionInput from './components/transactions/TransactionInput';
 
 function AppRoutes() {
   const navigate = useNavigate();
-  const { load, isLoaded, hasCompletedOnboarding, startupScreen } = useSettingsStore();
+  const { load, isLoaded, hasCompletedOnboarding, startupScreen, notificationEnabled, notificationTime } = useSettingsStore();
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (notificationEnabled) {
+      scheduleDailyReminder(notificationTime || '20:00');
+    }
+  }, [isLoaded, notificationEnabled, notificationTime]);
 
   useEffect(() => {
     if (!isLoaded) return;

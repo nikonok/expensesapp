@@ -1960,7 +1960,7 @@ Verification:
 
 ---
 
-### T22 · Notification Service `[~]`
+### T22 · Notification Service `[x]`
 
 **Skills**: none
 **Depends on**: T01 complete
