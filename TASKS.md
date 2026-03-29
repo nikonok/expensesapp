@@ -21,11 +21,11 @@
 | [T03](#t03--core-utilities--) | Core Utilities | 1 — Foundation | `[x]` | T01 |
 | [T04](#t04--i18n-setup--) | i18n Setup | 1 — Foundation | `[x]` | T01 |
 | [T05](#t05--zustand-state-stores--) | Zustand State Stores | 1 — Foundation | `[x]` | T01, T03 |
-| [T06](#t06--exchange-rate-service--) | Exchange Rate Service | 2 — Services | `[ ]` | T02 |
-| [T07](#t07--balance-service--) | Balance Service | 2 — Services | `[ ]` | T02 |
-| [T08](#t08--layout-shell--routing--) | Layout Shell & Routing | 3 — Layout | `[ ]` | T01, T03, T04, T05 |
-| [T09](#t09--shared-ui-components--) | Shared UI Components | 3 — Layout | `[ ]` | T01, T03, T04 |
-| [T10](#t10--numpad-component--) | Numpad Component | 3 — Layout | `[ ]` | T01, T03, T05 |
+| [T06](#t06--exchange-rate-service--) | Exchange Rate Service | 2 — Services | `[~]` | T02 |
+| [T07](#t07--balance-service--) | Balance Service | 2 — Services | `[x]` | T02 |
+| [T08](#t08--layout-shell--routing--) | Layout Shell & Routing | 3 — Layout | `[~]` | T01, T03, T04, T05 |
+| [T09](#t09--shared-ui-components--) | Shared UI Components | 3 — Layout | `[~]` | T01, T03, T04 |
+| [T10](#t10--numpad-component--) | Numpad Component | 3 — Layout | `[~]` | T01, T03, T05 |
 | [T11](#t11--period-filter-component--) | Period Filter Component | 3 — Layout | `[ ]` | T03, T04, T08 |
 | [T12](#t12--onboarding-flow--) | Onboarding Flow | 4 — Features | `[ ]` | T08, T09, T04, T05 |
 | [T13](#t13--accounts-tab--) | Accounts Tab | 4 — Features | `[ ]` | T08, T09, T05, T06, T07 |
@@ -663,7 +663,7 @@ Verification:
 
 ## Phase 2 — Services (run in parallel after T02)
 
-### T06 · Exchange Rate Service `[ ]`
+### T06 · Exchange Rate Service `[~]`
 
 **Skills**: none
 **Depends on**: T02 complete
@@ -733,7 +733,7 @@ Verification:
 
 ---
 
-### T07 · Balance Service `[ ]`
+### T07 · Balance Service `[x]`
 
 **Skills**: none
 **Depends on**: T02 complete
@@ -818,7 +818,7 @@ Verification:
 
 ## Phase 3 — Layout & Shared UI (run in parallel after T01, T03, T04, T05)
 
-### T08 · Layout Shell & Routing `[ ]`
+### T08 · Layout Shell & Routing `[~]`
 
 **Skills**: `/feature-dev`
 **Depends on**: T01, T03, T04, T05 complete
@@ -893,7 +893,7 @@ Verification:
 
 ---
 
-### T09 · Shared UI Components `[ ]`
+### T09 · Shared UI Components `[~]`
 
 **Skills**: `/frontend-design`
 **Depends on**: T01, T03, T04 complete
@@ -982,7 +982,7 @@ Verification:
 
 ---
 
-### T10 · Numpad Component `[ ]`
+### T10 · Numpad Component `[~]`
 
 **Skills**: `/frontend-design`
 **Depends on**: T01, T03, T05 complete
