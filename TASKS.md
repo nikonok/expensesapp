@@ -26,11 +26,11 @@
 | [T08](#t08--layout-shell--routing--) | Layout Shell & Routing | 3 — Layout | `[x]` | T01, T03, T04, T05 |
 | [T09](#t09--shared-ui-components--) | Shared UI Components | 3 — Layout | `[x]` | T01, T03, T04 |
 | [T10](#t10--numpad-component--) | Numpad Component | 3 — Layout | `[x]` | T01, T03, T05 |
-| [T11](#t11--period-filter-component--) | Period Filter Component | 3 — Layout | `[ ]` | T03, T04, T08 |
-| [T12](#t12--onboarding-flow--) | Onboarding Flow | 4 — Features | `[ ]` | T08, T09, T04, T05 |
-| [T13](#t13--accounts-tab--) | Accounts Tab | 4 — Features | `[ ]` | T08, T09, T05, T06, T07 |
+| [T11](#t11--period-filter-component--) | Period Filter Component | 3 — Layout | `[x]` | T03, T04, T08 |
+| [T12](#t12--onboarding-flow--) | Onboarding Flow | 4 — Features | `[~]` | T08, T09, T04, T05 |
+| [T13](#t13--accounts-tab--) | Accounts Tab | 4 — Features | `[~]` | T08, T09, T05, T06, T07 |
 | [T14](#t14--categories-tab--) | Categories Tab | 4 — Features | `[ ]` | T08, T09, T05 |
-| [T15](#t15--transactions-tab--) | Transactions Tab | 4 — Features | `[ ]` | T08, T09, T05 |
+| [T15](#t15--transactions-tab--) | Transactions Tab | 4 — Features | `[~]` | T08, T09, T05 |
 | [T16](#t16--transaction-input-add--edit--) | Transaction Input (Add/Edit) | 4 — Features | `[ ]` | T09, T10, T06, T07, T05 |
 | [T17](#t17--budget-tab--) | Budget Tab | 4 — Features | `[ ]` | T08, T09, T10, T05, T02, T06, T07 |
 | [T18](#t18--overview-tab--) | Overview Tab | 4 — Features | `[ ]` | T08, T09, T05 |
@@ -1058,7 +1058,7 @@ Verification:
 
 ---
 
-### T11 · Period Filter Component `[ ]`
+### T11 · Period Filter Component `[x]`
 
 **Skills**: `/frontend-design`
 **Depends on**: T03, T04, T08 complete
@@ -1125,7 +1125,7 @@ Verification:
 
 ## Phase 4 — Features (run in parallel after Phase 3)
 
-### T12 · Onboarding Flow `[ ]`
+### T12 · Onboarding Flow `[~]`
 
 **Skills**: `/frontend-design`
 **Depends on**: T08, T09, T04, T05 complete
@@ -1182,7 +1182,7 @@ Verification:
 
 ---
 
-### T13 · Accounts Tab `[ ]`
+### T13 · Accounts Tab `[~]`
 
 **Skills**: `/feature-dev`
 **Depends on**: T08, T09, T05, T06, T07 complete
