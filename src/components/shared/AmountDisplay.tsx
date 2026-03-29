@@ -28,6 +28,7 @@ const STYLE_MAP: Record<
   transfer: {
     color: 'var(--color-transfer)',
     opacity: 0.5,
+    prefix: '⇄',
   },
   neutral: {
     color: 'var(--color-text)',

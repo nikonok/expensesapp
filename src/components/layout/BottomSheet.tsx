@@ -7,6 +7,9 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 
+const FOCUSABLE_SELECTOR =
+  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
 interface BottomSheetProps {
   isOpen: boolean;
   onClose: () => void;
@@ -24,6 +27,58 @@ export default function BottomSheet({ isOpen, onClose, title, children }: Bottom
   const dragStartY = useRef(0);
   const currentDragY = useRef(0);
   const isDragging = useRef(false);
+
+  // Focus trap: save previous focus, move focus into sheet, restore on close
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousFocus = document.activeElement as HTMLElement;
+    requestAnimationFrame(() => {
+      const focusable = sheetRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+      focusable?.focus();
+    });
+    return () => {
+      previousFocus?.focus();
+    };
+  }, [isOpen]);
+
+  // Focus trap: constrain Tab inside sheet
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleTab = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      const sheet = sheetRef.current;
+      if (!sheet) return;
+      const focusables = Array.from(sheet.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+        (el) => !el.hasAttribute('disabled') && el.tabIndex !== -1,
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener('keydown', handleTab);
+    return () => document.removeEventListener('keydown', handleTab);
+  }, [isOpen]);
+
+  // Escape key closes the sheet
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
 
   // Open/close animation
   useEffect(() => {
@@ -121,7 +176,7 @@ export default function BottomSheet({ isOpen, onClose, title, children }: Bottom
         ref={sheetRef}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-label={title ?? 'Dialog'}
         style={{
           position: 'fixed',
           left: 0,

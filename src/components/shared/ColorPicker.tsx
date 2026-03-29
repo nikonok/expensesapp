@@ -26,21 +26,35 @@ export function ColorPicker({ value, onChange }: ColorPickerProps) {
             aria-label={`Color ${swatch.id}`}
             onClick={() => onChange(swatch.value)}
             style={{
-              width: '36px',
-              height: '36px',
-              minHeight: '36px',
+              width: '44px',
+              height: '44px',
+              minHeight: '44px',
               borderRadius: '50%',
-              background: swatch.value,
+              background: 'none',
               border: 'none',
               cursor: 'pointer',
               padding: 0,
-              outline: isSelected
-                ? '2px solid var(--color-primary)'
-                : '2px solid transparent',
-              outlineOffset: '2px',
-              transition: 'outline-color 100ms ease-out',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              outline: 'none',
             }}
-          />
+          >
+            <span
+              style={{
+                display: 'block',
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                background: swatch.value,
+                outline: isSelected
+                  ? '2px solid var(--color-primary)'
+                  : '2px solid transparent',
+                outlineOffset: '2px',
+                transition: 'outline-color 100ms ease-out',
+              }}
+            />
+          </button>
         );
       })}
     </div>

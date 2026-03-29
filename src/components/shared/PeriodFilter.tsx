@@ -134,8 +134,8 @@ export default function PeriodFilter({ value, onChange, variant = 'full' }: Peri
           onClick={handlePrev}
           aria-label="Previous period"
           style={{
-            width: '32px',
-            height: '32px',
+            width: '44px',
+            height: '44px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -158,8 +158,8 @@ export default function PeriodFilter({ value, onChange, variant = 'full' }: Peri
           onClick={handleNext}
           aria-label="Next period"
           style={{
-            width: '32px',
-            height: '32px',
+            width: '44px',
+            height: '44px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
