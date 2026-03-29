@@ -28,7 +28,7 @@
 | [T10](#t10--numpad-component--) | Numpad Component | 3 — Layout | `[x]` | T01, T03, T05 |
 | [T11](#t11--period-filter-component--) | Period Filter Component | 3 — Layout | `[x]` | T03, T04, T08 |
 | [T12](#t12--onboarding-flow--) | Onboarding Flow | 4 — Features | `[~]` | T08, T09, T04, T05 |
-| [T13](#t13--accounts-tab--) | Accounts Tab | 4 — Features | `[~]` | T08, T09, T05, T06, T07 |
+| [T13](#t13--accounts-tab--) | Accounts Tab | 4 — Features | `[x]` | T08, T09, T05, T06, T07 |
 | [T14](#t14--categories-tab--) | Categories Tab | 4 — Features | `[x]` | T08, T09, T05 |
 | [T15](#t15--transactions-tab--) | Transactions Tab | 4 — Features | `[~]` | T08, T09, T05 |
 | [T16](#t16--transaction-input-add--edit--) | Transaction Input (Add/Edit) | 4 — Features | `[x]` | T09, T10, T06, T07, T05 |
@@ -1182,7 +1182,7 @@ Verification:
 
 ---
 
-### T13 · Accounts Tab `[~]`
+### T13 · Accounts Tab `[x]`
 
 **Skills**: `/feature-dev`
 **Depends on**: T08, T09, T05, T06, T07 complete

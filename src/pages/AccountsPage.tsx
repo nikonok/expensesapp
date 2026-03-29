@@ -1,12 +1,5 @@
-import { Outlet } from 'react-router';
+import AccountList from '../components/accounts/AccountList';
 
 export default function AccountsPage() {
-  return (
-    <div style={{ padding: 'var(--space-4)', color: 'var(--color-text)' }}>
-      <span style={{ fontFamily: 'Syne, sans-serif', fontSize: 'var(--text-heading)' }}>
-        Accounts
-      </span>
-      <Outlet />
-    </div>
-  );
+  return <AccountList />;
 }
