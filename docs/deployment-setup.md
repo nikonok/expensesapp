@@ -257,22 +257,16 @@ The Cloudflare tunnel is what makes SSH possible for GitHub Actions — but the 
 On the server (via physical access, local network SSH, or any other method you have right now):
 
 ```bash
-# Write the tunnel token to .env
-printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' 'eyJhIjoiY...' | \
-  sudo -u deploy tee /home/deploy/expensesapp/.env > /dev/null
-sudo chmod 600 /home/deploy/expensesapp/.env
-
-# Build and start the containers
-sudo docker compose -f /home/deploy/expensesapp/docker-compose.yml build --no-cache
-sudo docker compose -f /home/deploy/expensesapp/docker-compose.yml up -d
-
-# Confirm both containers are healthy and the tunnel is connected
-sudo docker compose -f /home/deploy/expensesapp/docker-compose.yml ps
-sudo docker compose -f /home/deploy/expensesapp/docker-compose.yml logs cloudflared
-# Look for: "Registered tunnel connection"
+bash /home/deploy/expensesapp/scripts/bootstrap.sh
 ```
 
-Once you see the tunnel registered, the SSH hostname (`ssh-expenses.yourdomain.com`) is live and GitHub Actions can reach it.
+The script will prompt for your Cloudflare tunnel token, write `.env`, build and start the containers, then print the cloudflared logs. Once you see `Registered tunnel connection`, the SSH hostname (`ssh-expenses.yourdomain.com`) is live and GitHub Actions can reach it.
+
+You can also pass the token via environment to skip the prompt:
+
+```bash
+CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoiY... bash /home/deploy/expensesapp/scripts/bootstrap.sh
+```
 
 ### 9b. All subsequent deployments: GitHub Actions
 
