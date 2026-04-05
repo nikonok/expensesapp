@@ -29,8 +29,4 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 
 EXPOSE 80
 
-# Run as the nginx user — master process gets CAP_NET_BIND_SERVICE from
-# docker-compose, so it can bind port 80 without running as root.
-USER nginx
-
 CMD ["nginx", "-g", "daemon off;"]
