@@ -73,6 +73,8 @@ services:
       options:
         max-size: "5m"
         max-file: "3"
+    extra_hosts:
+      - "host-gateway:host-gateway"  # resolves to the Docker host IP so the tunnel can reach sshd on the host
     networks:
       - tunnel             # reaches app via http://app:80; outbound to CF edge via bridge default route
     depends_on:

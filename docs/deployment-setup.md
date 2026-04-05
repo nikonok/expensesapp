@@ -169,9 +169,11 @@ In the tunnel's **Public Hostname** tab → **Add a public hostname**:
 | Subdomain | `ssh-expenses` (or any name you prefer) |
 | Domain | your Cloudflare-managed domain |
 | Service type | `SSH` |
-| URL | `localhost:22` |
+| URL | `host-gateway:22` |
 
-Save. The cloudflared container on the server will now route connections to this hostname into the server's local SSH daemon.
+Save. The cloudflared container on the server will now route connections to this hostname into the host's SSH daemon.
+
+> **Why `host-gateway` and not `localhost`**: cloudflared runs inside a Docker container, so `localhost` refers to the container's own loopback — not the host machine. `host-gateway` is a Docker special value that resolves to the host's IP on the bridge network. The `extra_hosts` entry in `docker-compose.yml` makes this name available inside the container.
 
 ### 7d. Record the server's SSH host key
 
