@@ -42,7 +42,7 @@ echo "✓ .env written"
 
 echo
 echo "--- Pulling latest code ---"
-git -C "$APP_DIR" pull origin main
+sudo -u deploy git -C "$APP_DIR" pull origin main
 
 # ── Build and start ───────────────────────────────────────────────────────────
 
