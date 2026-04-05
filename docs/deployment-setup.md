@@ -102,9 +102,9 @@ sudo chown deploy:deploy /home/deploy/.ssh/authorized_keys
 Add to `/etc/ssh/sshd_config` (or create `/etc/ssh/sshd_config.d/hardening.conf`):
 
 ```
-# Bind only to loopback — the Cloudflare tunnel provides all external SSH access.
-# No inbound SSH port is exposed to the network.
-ListenAddress 127.0.0.1
+# Optional hardening: bind sshd to loopback only so it is unreachable even on the
+# local network. Skip this if other users need to SSH in from the LAN.
+# ListenAddress 127.0.0.1
 
 PasswordAuthentication no
 PermitRootLogin no
