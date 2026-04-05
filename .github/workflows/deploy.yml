@@ -7,6 +7,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+      CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
 
     steps:
       - name: Load SSH key
@@ -14,15 +17,35 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_KEY }}
 
-      - name: Trust server host key
-        run: ssh-keyscan -p ${{ secrets.SSH_PORT }} -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+      - name: Install cloudflared
+        uses: AnimMouse/setup-cloudflared@v2
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          # Route SSH connections through the Cloudflare tunnel.
+          # cloudflared reads CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET from the
+          # job-level env block above — no flags needed in the ProxyCommand.
+          cat >> ~/.ssh/config << 'EOF'
+          Host ${{ secrets.SSH_HOST }}
+            HostName ${{ secrets.SSH_HOST }}
+            User ${{ secrets.SSH_USER }}
+            ProxyCommand cloudflared access ssh --hostname %h
+            StrictHostKeyChecking yes
+          EOF
+          chmod 600 ~/.ssh/config
+          # Write the pre-recorded server host key.
+          # ssh-keyscan cannot reach the server (no public IP), so the key is stored
+          # in a GitHub Secret and written here instead.
+          echo "${{ secrets.SSH_KNOWN_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Write .env to server
         # Pipe the token via stdin so it never appears in the remote command string.
         # printf runs locally; 'cat > file' runs remotely — no shell injection risk.
         run: |
           printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' '${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}' | \
-            ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
               "cat > ${{ secrets.APP_DIR }}/.env && chmod 600 ${{ secrets.APP_DIR }}/.env"
 
       - name: Pull, build, and restart
@@ -30,7 +53,7 @@ jobs:
         # sudoers rules on the server (which restrict the deploy user to this
         # specific compose file only).
         run: |
-          ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'ENDSSH'
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'ENDSSH'
             set -euo pipefail
             COMPOSE="sudo docker compose -f ${{ secrets.APP_DIR }}/docker-compose.yml"
             git -C ${{ secrets.APP_DIR }} pull origin main
