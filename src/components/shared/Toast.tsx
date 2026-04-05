@@ -54,6 +54,13 @@ export function useToast(): ToastContextValue {
   return ctx;
 }
 
+const VARIANT_BORDER: Record<ToastVariant, string> = {
+  error: 'var(--color-expense)',
+  success: 'var(--color-income)',
+  info: 'var(--color-border-strong)',
+  'coming-soon': 'var(--color-border-strong)',
+};
+
 function ToastContainer({ toast }: { toast: ToastState | null }) {
   if (!toast) return null;
 
@@ -77,6 +84,7 @@ function ToastContainer({ toast }: { toast: ToastState | null }) {
         style={{
           background: 'var(--color-surface-raised)',
           border: '1px solid var(--color-border)',
+          borderLeft: `3px solid ${VARIANT_BORDER[toast.variant]}`,
           borderRadius: '12px',
           padding: 'var(--space-3) var(--space-4)',
           fontFamily: '"DM Sans", sans-serif',
@@ -89,16 +97,6 @@ function ToastContainer({ toast }: { toast: ToastState | null }) {
       >
         {toast.message}
       </div>
-      <style>{`
-        @keyframes toast-in {
-          from { opacity: 0; transform: translateY(8px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes toast-out {
-          from { opacity: 1; transform: translateY(0); }
-          to   { opacity: 0; transform: translateY(8px); }
-        }
-      `}</style>
     </div>
   );
 }

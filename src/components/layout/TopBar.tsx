@@ -108,11 +108,11 @@ export default function TopBar({ title, rightSlot }: TopBarProps) {
                 border: 'none',
                 cursor: 'pointer',
                 color: 'var(--color-bg)',
-                padding: 0,
+                padding: '12px',
                 display: 'flex',
                 alignItems: 'center',
-                minWidth: '20px',
-                minHeight: '20px',
+                minWidth: '44px',
+                minHeight: '44px',
               }}
             >
               <X size={12} strokeWidth={2} />

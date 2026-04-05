@@ -61,7 +61,7 @@ export default function TransactionRow({
     const fromAcc = isOut ? account : toAccount;
     const toAcc = isOut ? toAccount : account;
     centerLabel = fromAcc && toAcc ? `${fromAcc.name} → ${toAcc.name}` : 'Transfer';
-    centerSub = '';
+    centerSub = transaction.note ?? '';
   } else {
     centerLabel = category?.name ?? 'Uncategorized';
     centerSub = transaction.note;
@@ -86,7 +86,7 @@ export default function TransactionRow({
         cursor: 'pointer',
         userSelect: 'none',
         WebkitTapHighlightColor: 'transparent',
-        opacity: isDragging ? 0.95 : isTransfer ? 0.7 : 1,
+        opacity: isDragging ? 0.95 : isTransfer ? 0.5 : 1,
         transition: isDragging ? 'none' : 'background 120ms ease-out',
         borderBottom: '1px solid var(--color-border)',
         boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.5)' : 'none',
@@ -96,9 +96,7 @@ export default function TransactionRow({
       }}
     >
       {/* Tap zone — selection, no drag listeners */}
-      <div
-        role="button"
-        tabIndex={0}
+      <button
         onClick={onSelect}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') onSelect();
@@ -109,6 +107,10 @@ export default function TransactionRow({
           gap: 'var(--space-3)',
           flex: 1,
           minWidth: 0,
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          cursor: 'pointer',
         }}
       >
         {/* Selection checkbox or icon */}
@@ -189,10 +191,10 @@ export default function TransactionRow({
             amount={transaction.amount}
             currency={account.currency}
             type={amountType}
-            size="sm"
+            size="md"
           />
         </div>
-      </div>
+      </button>
 
       {/* Grip handle — drag listeners only, not tap */}
       <div

@@ -194,7 +194,7 @@ export default function DonutChart({ slices, totalExpense, totalIncome, categori
                 fill={primaryColor}
                 fontFamily='"JetBrains Mono", monospace'
                 fontWeight={600}
-                fontSize="20"
+                fontSize="18"
               >
                 {primaryPrefix}{formatAmount(primaryAmount)}
               </text>
@@ -206,7 +206,7 @@ export default function DonutChart({ slices, totalExpense, totalIncome, categori
                 fill={secondaryColor}
                 fontFamily='"JetBrains Mono", monospace'
                 fontWeight={400}
-                fontSize="13"
+                fontSize="12"
                 opacity={0.6}
               >
                 {secondaryPrefix}{formatAmount(secondaryAmount)}

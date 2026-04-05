@@ -61,7 +61,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   },
 
   update: async (key: string, value: unknown) => {
-    await db.settings.put({ key, value });
+    if ((get() as unknown as Record<string, unknown>)[key] === value) return;
     set({ [key]: value } as Partial<SettingsStore>);
+    await db.settings.put({ key, value });
   },
 }));

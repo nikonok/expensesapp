@@ -45,6 +45,9 @@ function deriveRate(
 
 export const exchangeRateService = {
   async fetchAndCacheRates(baseCurrency: string): Promise<void> {
+    if (!/^[A-Z]{3}$/.test(baseCurrency)) {
+      throw new Error(`Invalid currency code: ${baseCurrency}`);
+    }
     const response = await fetch(`${API_BASE}/${baseCurrency}`);
     if (!response.ok) {
       throw new Error(`Failed to fetch exchange rates: ${response.status}`);
@@ -139,7 +142,9 @@ export const exchangeRateService = {
     }
 
     if (!entry) return null;
-    return deriveRate(entry.rates, from, to, base);
+    const rate = deriveRate(entry.rates, from, to, base);
+    if (rate != null && (!isFinite(rate) || rate <= 0)) return null;
+    return rate;
   },
 
   async getHistoricalRate(
@@ -158,7 +163,9 @@ export const exchangeRateService = {
       .last();
 
     if (!entry) return null;
-    return deriveRate(entry.rates, from, to, base);
+    const historicalRate = deriveRate(entry.rates, from, to, base);
+    if (historicalRate != null && (!isFinite(historicalRate) || historicalRate <= 0)) return null;
+    return historicalRate;
   },
 
   async recalculateAllMainCurrencyAmounts(

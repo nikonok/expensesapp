@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const accountSchema = z.object({
   name: z.string().min(1, 'Name is required').max(64),
   type: z.enum(['REGULAR', 'DEBT', 'SAVINGS']),
-  color: z.string(),
+  color: z.string().regex(/^oklch\([\d.]+%\s+[\d.]+\s+[\d.]+\)$/, 'Invalid color format'),
   icon: z.string(),
   currency: z.string().length(3),
   description: z.string().max(255).default(''),
@@ -23,7 +23,7 @@ export const accountSchema = z.object({
 export const categorySchema = z.object({
   name: z.string().min(1, 'Name is required').max(64),
   type: z.enum(['EXPENSE', 'INCOME']),
-  color: z.string(),
+  color: z.string().regex(/^oklch\([\d.]+%\s+[\d.]+\s+[\d.]+\)$/, 'Invalid color format'),
   icon: z.string(),
 });
 

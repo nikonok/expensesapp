@@ -122,6 +122,10 @@ class BackupService {
   }
 
   async importFromFile(file: File): Promise<void> {
+    const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
+    if (file.size > MAX_SIZE) {
+      throw new Error('Backup file is too large (max 10 MB)');
+    }
     const text = await file.text();
     let parsed: unknown;
     try {
@@ -148,6 +152,11 @@ class BackupService {
         () => void this.createBackup(true),
         intervalHours * 3_600_000,
       );
+      window.addEventListener('beforeunload', () => {
+        if (this._autoBackupIntervalId !== null) {
+          clearInterval(this._autoBackupIntervalId);
+        }
+      }, { once: true });
     }
   }
 
@@ -214,7 +223,7 @@ class BackupService {
       },
     );
 
-    window.location.reload();
+    window.dispatchEvent(new CustomEvent('backup-restored'));
   }
 }
 

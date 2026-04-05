@@ -5,6 +5,7 @@ import { BudgetStats } from './BudgetStats';
 import { db } from '../../db/database';
 import { getUTCISOString } from '../../utils/date-utils';
 import { budgetSchema } from '../../utils/validation';
+import { useToast } from '../shared/Toast';
 
 interface BudgetNumpadProps {
   categoryId?: number;
@@ -27,6 +28,7 @@ export function BudgetNumpad({
     currentPlanned != null && currentPlanned > 0 ? String(currentPlanned) : '',
   );
   const [statsOpen, setStatsOpen] = useState(false);
+  const { show } = useToast();
 
   const handleSave = async (result: number) => {
     const parseResult = budgetSchema.safeParse({
@@ -74,7 +76,8 @@ export function BudgetNumpad({
 
       onClose();
     } catch (err) {
-      console.error('Failed to save budget:', err);
+      if (import.meta.env.DEV) console.error('Failed to save budget:', err);
+      show('Failed to save budget', 'error');
     }
   };
 

@@ -1,11 +1,19 @@
 import { db } from '../db/database';
 import { notificationService } from './notification.service';
 
+function sanitizeCell(val: unknown): unknown {
+  if (typeof val === 'string' && /^[=+@-]/.test(val)) {
+    return `'${val}`;
+  }
+  return val;
+}
+
 async function exportTransactions(
   startDate: string,
   endDate: string,
   mainCurrency: string,
 ): Promise<void> {
+  try {
   const transactions = await db.transactions
     .where('date')
     .between(startDate, endDate, true, true)
@@ -53,25 +61,25 @@ async function exportTransactions(
       if (outTx) {
         const account = accounts.find((a) => a.id === outTx.accountId);
         dataRows.push([
-          formatDate(outTx.date),
-          outTx.note ?? '',
+          sanitizeCell(formatDate(outTx.date)),
+          sanitizeCell(outTx.note ?? ''),
           '',
           outTx.amountMainCurrency,
           'Transfer',
-          account?.name ?? '',
-        ]);
+          sanitizeCell(account?.name ?? ''),
+        ] as (string | number)[]);
       }
 
       if (inTx) {
         const account = accounts.find((a) => a.id === inTx.accountId);
         dataRows.push([
-          formatDate(inTx.date),
-          inTx.note ?? '',
+          sanitizeCell(formatDate(inTx.date)),
+          sanitizeCell(inTx.note ?? ''),
           inTx.amountMainCurrency,
           '',
           'Transfer',
-          account?.name ?? '',
-        ]);
+          sanitizeCell(account?.name ?? ''),
+        ] as (string | number)[]);
       }
     } else {
       const account = accounts.find((a) => a.id === tx.accountId);
@@ -81,13 +89,13 @@ async function exportTransactions(
       const expenseAmount = tx.type === 'EXPENSE' ? tx.amountMainCurrency : '';
 
       dataRows.push([
-        formatDate(tx.date),
-        tx.note ?? '',
+        sanitizeCell(formatDate(tx.date)),
+        sanitizeCell(tx.note ?? ''),
         incomeAmount,
         expenseAmount,
-        category?.name ?? 'Transfer',
-        account?.name ?? '',
-      ]);
+        sanitizeCell(category?.name ?? 'Transfer'),
+        sanitizeCell(account?.name ?? ''),
+      ] as (string | number)[]);
     }
   }
 
@@ -107,7 +115,12 @@ async function exportTransactions(
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 
+  // TODO: pass translated strings as parameters from the calling component
   notificationService.sendNotification('Export complete', 'Your file has been downloaded.');
+  } catch (err) {
+    if (import.meta.env.DEV) console.error('Export failed:', err);
+    throw err;
+  }
 }
 
 export const exportService = { exportTransactions };

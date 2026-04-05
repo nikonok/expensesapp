@@ -13,7 +13,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div style={{ padding: '2rem', color: 'var(--color-text)', fontFamily: 'DM Sans, sans-serif', background: 'var(--color-bg)', minHeight: '100vh' }}>
           <h2 style={{ fontFamily: 'Syne, sans-serif', color: 'var(--color-expense)' }}>Something went wrong</h2>
-          <p style={{ color: 'var(--color-text-secondary)' }}>{this.state.error?.message}</p>
+          <p style={{ color: 'var(--color-text-secondary)' }}>{import.meta.env.DEV ? this.state.error?.message : 'An unexpected error occurred. Please reload the app.'}</p>
           <button onClick={() => window.location.reload()} style={{ marginTop: '1rem', padding: '0.75rem 1.5rem', background: 'var(--color-primary)', color: 'var(--color-bg)', border: 'none', borderRadius: 'var(--radius-btn)', cursor: 'pointer', fontFamily: 'Syne, sans-serif' }}>
             Reload App
           </button>

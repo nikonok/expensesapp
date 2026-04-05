@@ -18,19 +18,16 @@ export default function AccountCard({ account, onPress }: AccountCardProps) {
     : account.type === 'DEBT' ? 'Debt'
     : 'Savings';
 
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    (e.currentTarget as HTMLDivElement).style.transform = 'scale(0.98)';
+  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.transform = 'scale(0.98)';
   };
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    (e.currentTarget as HTMLDivElement).style.transform = '';
+  const handlePointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.transform = '';
   };
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
+    <button
       onClick={onPress}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onPress(); }}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
@@ -42,12 +39,17 @@ export default function AccountCard({ account, onPress }: AccountCardProps) {
         padding: 'var(--space-3) var(--space-4)',
         background: 'var(--color-surface)',
         borderRadius: 'var(--radius-card)',
+        borderTop: 'none',
+        borderRight: 'none',
+        borderBottom: 'none',
         borderLeft: '3px solid var(--card-color)',
         cursor: 'pointer',
         transition: 'transform 80ms ease-out',
         userSelect: 'none',
         WebkitTapHighlightColor: 'transparent',
         minHeight: '64px',
+        width: '100%',
+        textAlign: 'left',
       } as React.CSSProperties}
     >
       {/* Icon circle */}
@@ -168,7 +170,7 @@ export default function AccountCard({ account, onPress }: AccountCardProps) {
           />
         )}
       </div>
-    </div>
+    </button>
   );
 }
 

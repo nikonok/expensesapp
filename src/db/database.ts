@@ -22,7 +22,7 @@ const db = new Dexie('expenses-app-db') as Dexie & {
 db.version(1).stores({
   accounts:     '++id, type, name, isTrashed, currency',
   categories:   '++id, type, name, isTrashed, displayOrder',
-  transactions: '++id, date, accountId, categoryId, type, [date+displayOrder], [accountId+date], transferGroupId',
+  transactions: '++id, date, accountId, categoryId, type, isTrashed, [date+displayOrder], [accountId+date], transferGroupId',
   budgets:      '++id, categoryId, accountId, month, [categoryId+month], [accountId+month]',
   exchangeRates:'++id, baseCurrency, &[baseCurrency+date]',
   settings:     'key',

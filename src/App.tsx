@@ -20,10 +20,16 @@ function AppRoutes() {
 
   useEffect(() => {
     load().catch((err) => {
-      console.error('Failed to load settings:', err);
+      if (import.meta.env.DEV) console.error('Failed to load settings:', err);
       useSettingsStore.setState({ isLoaded: true });
     });
   }, [load]);
+
+  useEffect(() => {
+    const handleBackupRestored = () => navigate('/accounts', { replace: true });
+    window.addEventListener('backup-restored', handleBackupRestored);
+    return () => window.removeEventListener('backup-restored', handleBackupRestored);
+  }, [navigate]);
 
   useEffect(() => {
     if (!isLoaded) return;

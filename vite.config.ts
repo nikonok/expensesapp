@@ -36,6 +36,7 @@ export default defineConfig({
         ],
       },
       workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.gstatic\.com\//i,
@@ -78,6 +79,8 @@ export default defineConfig({
           if (id.includes('node_modules/recharts')) return 'recharts';
           if (id.includes('node_modules/xlsx')) return 'xlsx';
           if (id.includes('node_modules/@dnd-kit')) return 'dnd-kit';
+          if (id.includes('node_modules/dexie')) return 'dexie';
+          if (id.includes('node_modules/date-fns')) return 'date-fns';
         },
       },
     },

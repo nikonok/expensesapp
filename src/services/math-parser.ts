@@ -93,6 +93,7 @@ export function evaluateExpression(expr: string): number | null {
   }
 
   const rounded = Math.round(result * 100) / 100;
-  if (!isFinite(rounded)) return null;
+  const MAX_AMOUNT = 999_999_999.99;
+  if (!isFinite(rounded) || rounded > MAX_AMOUNT || rounded < 0) return null;
   return rounded;
 }
