@@ -250,6 +250,32 @@ In the GitHub repository: **Settings** → **Secrets and variables** → **Actio
 
 ## 9. First deployment
 
+The Cloudflare tunnel is what makes SSH possible for GitHub Actions — but the tunnel only exists once the containers are running. This means the very first start must be done **manually on the server**. After that, all future deployments go through GitHub Actions.
+
+### 9a. Bootstrap: start the containers manually (once)
+
+On the server (via physical access, local network SSH, or any other method you have right now):
+
+```bash
+# Write the tunnel token to .env
+printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' 'eyJhIjoiY...' | \
+  sudo -u deploy tee /home/deploy/expensesapp/.env > /dev/null
+sudo chmod 600 /home/deploy/expensesapp/.env
+
+# Build and start the containers
+sudo docker compose -f /home/deploy/expensesapp/docker-compose.yml build --no-cache
+sudo docker compose -f /home/deploy/expensesapp/docker-compose.yml up -d
+
+# Confirm both containers are healthy and the tunnel is connected
+sudo docker compose -f /home/deploy/expensesapp/docker-compose.yml ps
+sudo docker compose -f /home/deploy/expensesapp/docker-compose.yml logs cloudflared
+# Look for: "Registered tunnel connection"
+```
+
+Once you see the tunnel registered, the SSH hostname (`ssh-expenses.yourdomain.com`) is live and GitHub Actions can reach it.
+
+### 9b. All subsequent deployments: GitHub Actions
+
 1. Push your code to the `main` branch (or confirm it is already up to date)
 2. In GitHub: **Actions** → **Deploy to Server** → **Run workflow** → **Run workflow**
 3. Watch the logs — the final step (`Pull, build, and restart`) shows `docker compose ps`
