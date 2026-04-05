@@ -22,6 +22,18 @@ A personal finance tracking **Progressive Web App** (PWA). React 19 + TypeScript
 - `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 - Mark `[~]` before starting, `[x]` when done.
 
+## Manual testing
+
+`docs/test-plan.md` — 77 manual smoke test cases (TC-001–TC-076) covering all feature areas.
+
+Run tests with the `/smoke-test` slash command (uses Playwright MCP, viewport 390×844):
+- `/smoke-test` — runs all P0 smoke tests
+- `/smoke-test onboarding` — runs only onboarding cases
+- `/smoke-test TC-007` — runs a specific test case
+- `/smoke-test P1` — runs all P1 priority cases
+
+The command always closes the browser when done.
+
 ## Tech stack (pinned — do not change versions)
 
 ```

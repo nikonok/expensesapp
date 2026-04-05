@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Plus, Trash2, Wallet } from 'lucide-react';
 import { useAccounts } from '../../hooks/use-accounts';
+import { useTotalBalance } from '../../hooks/use-total-balance';
 import type { Account, AccountType } from '../../db/models';
 import TotalWealth from './TotalWealth';
 import AccountCard from './AccountCard';
 import AccountForm from './AccountForm';
 import AccountDetail from './AccountDetail';
 import { EmptyState } from '../shared/EmptyState';
+import BottomSheet from '../layout/BottomSheet';
 
 const TYPE_ORDER: AccountType[] = ['REGULAR', 'DEBT', 'SAVINGS'];
 const TYPE_LABEL: Record<AccountType, string> = {
@@ -16,13 +18,24 @@ const TYPE_LABEL: Record<AccountType, string> = {
   SAVINGS: 'Savings',
 };
 
+function formatNetWorth(amount: number, currency: string): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
 export default function AccountList() {
   const navigate = useNavigate();
   const accounts = useAccounts(false);
+  const { netWorth, mainCurrency } = useTotalBalance();
 
   const [showNewForm, setShowNewForm] = useState(false);
   const [editAccount, setEditAccount] = useState<Account | undefined>(undefined);
   const [detailAccount, setDetailAccount] = useState<Account | undefined>(undefined);
+  const [showWealth, setShowWealth] = useState(false);
 
   // Group by type in order
   const grouped: Record<AccountType, Account[]> = {
@@ -68,7 +81,52 @@ export default function AccountList() {
         </button>
       </div>
 
-      {hasAny && <TotalWealth />}
+      {hasAny && (
+        <button
+          onClick={() => setShowWealth(true)}
+          aria-label="View total wealth breakdown"
+          style={{
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-card)',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 'var(--space-1)',
+            padding: 'var(--space-4)',
+            width: '100%',
+            marginBottom: 'var(--space-2)',
+          }}
+        >
+          <span
+            style={{
+              fontFamily: '"DM Sans", sans-serif',
+              fontSize: 'var(--text-caption)',
+              fontWeight: 500,
+              color: 'var(--color-text-secondary)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+            }}
+          >
+            Total Balance
+          </span>
+          <span
+            role="status"
+            style={{
+              fontFamily: '"JetBrains Mono", monospace',
+              fontWeight: 600,
+              fontSize: 'var(--text-amount-lg)',
+              color: netWorth !== null && netWorth < 0 ? 'var(--color-expense)' : 'var(--color-income)',
+              textShadow: netWorth !== null && netWorth < 0
+                ? '0 0 12px oklch(62% 0.28 18 / 45%)'
+                : '0 0 12px oklch(73% 0.23 160 / 45%)',
+            }}
+          >
+            {netWorth !== null ? formatNetWorth(netWorth, mainCurrency) : '…'}
+          </span>
+        </button>
+      )}
 
       {!hasAny && (
         <EmptyState
@@ -137,6 +195,11 @@ export default function AccountList() {
       >
         <Plus size={28} strokeWidth={2} />
       </button>
+
+      {/* Total Wealth breakdown */}
+      <BottomSheet isOpen={showWealth} onClose={() => setShowWealth(false)} title="Total Wealth">
+        <TotalWealth />
+      </BottomSheet>
 
       {/* New Account Form */}
       <AccountForm

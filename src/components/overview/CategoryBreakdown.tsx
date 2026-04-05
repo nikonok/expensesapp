@@ -12,7 +12,7 @@ interface CategoryBreakdownProps {
 export default function CategoryBreakdown({ transactions, currency }: CategoryBreakdownProps) {
   const categories = useCategories('EXPENSE');
 
-  const { rows, totalsMap, maxAmount } = useMemo(() => {
+  const { rows, totalsMap, totalSpend } = useMemo(() => {
     const expenses = transactions.filter((t) => t.type === 'EXPENSE');
 
     // Aggregate by categoryId
@@ -32,8 +32,8 @@ export default function CategoryBreakdown({ transactions, currency }: CategoryBr
       .sort((a, b) => a.name.localeCompare(b.name));
 
     const rows = [...withSpend, ...withoutSpend];
-    const maxAmount = withSpend.length > 0 ? (totalsMap.get(withSpend[0].id!) ?? 0) : 0;
-    return { rows, totalsMap, maxAmount };
+    const totalSpend = Array.from(totalsMap.values()).reduce((s, v) => s + v, 0);
+    return { rows, totalsMap, totalSpend };
   }, [transactions, categories]);
 
   if (rows.length === 0) return null;
@@ -57,7 +57,7 @@ export default function CategoryBreakdown({ transactions, currency }: CategoryBr
         {rows.map((cat) => {
           const amount = totalsMap.get(cat.id!) ?? 0;
           const isZero = amount === 0;
-          const progress = maxAmount > 0 ? amount / maxAmount : 0;
+          const progress = totalSpend > 0 ? amount / totalSpend : 0;
           const Icon = getLucideIcon(cat.icon);
           const isEmoji = !Icon && cat.icon !== '';
 
@@ -149,6 +149,20 @@ export default function CategoryBreakdown({ transactions, currency }: CategoryBr
                     }}
                   />
                 </div>
+
+                {/* Percentage label */}
+                {!isZero && (
+                  <span
+                    style={{
+                      fontFamily: '"DM Sans", sans-serif',
+                      fontWeight: 400,
+                      fontSize: 'var(--text-caption)',
+                      color: 'var(--color-text-secondary)',
+                    }}
+                  >
+                    {Math.round(progress * 100)}%
+                  </span>
+                )}
               </div>
             </div>
           );

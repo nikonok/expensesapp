@@ -331,6 +331,18 @@ interface PickerSheetProps {
 }
 
 function PickerSheet({ title, onClose, children }: PickerSheetProps) {
+  // Close on Escape using capture phase so it fires before the form-level bubble handler
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', h, true);
+    return () => document.removeEventListener('keydown', h, true);
+  }, [onClose]);
+
   return (
     <div
       style={{
@@ -433,6 +445,8 @@ interface Step2Props {
   toSecondaryAmount: string;
   onToSecondaryAmountChange: (v: string) => void;
   toAccount2ndCurrencyDiffers: boolean;
+  focusedField: 'primary' | 'secondary';
+  onFocusedFieldChange: (f: 'primary' | 'secondary') => void;
 }
 
 function Step2({
@@ -462,12 +476,27 @@ function Step2({
   toSecondaryAmount,
   onToSecondaryAmountChange,
   toAccount2ndCurrencyDiffers,
+  focusedField,
+  onFocusedFieldChange,
 }: Step2Props) {
   const { t } = useTranslation();
   const [pickerMode, setPickerMode] = useState<'account' | 'toAccount' | 'category' | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [noteActive, setNoteActive] = useState(false);
   const noteRef = useRef<HTMLTextAreaElement>(null);
+
+  // Close date picker on Escape (capture phase so it fires before form-level bubble handler)
+  useEffect(() => {
+    if (!showDatePicker) return;
+    const h = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setShowDatePicker(false);
+      }
+    };
+    document.addEventListener('keydown', h, true);
+    return () => document.removeEventListener('keydown', h, true);
+  }, [showDatePicker]);
 
   const fromCurrency = account?.currency ?? mainCurrency;
   const isTransfer = txType === 'transfer';
@@ -653,10 +682,13 @@ function Step2({
 
         {/* Amount display */}
         <div
+          onClick={showForeignCurrency ? () => onFocusedFieldChange('primary') : undefined}
           style={{
             paddingInline: 'var(--space-4)',
             paddingBottom: 'var(--space-2)',
             textAlign: 'right',
+            cursor: showForeignCurrency ? 'pointer' : undefined,
+            borderBottom: showForeignCurrency && focusedField === 'primary' ? '2px solid var(--color-primary)' : '2px solid transparent',
           }}
         >
           <span
@@ -724,7 +756,17 @@ function Step2({
                 {t('transactions.noExchangeRate')}
               </div>
             )}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+            <div
+              onClick={() => onFocusedFieldChange('secondary')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--space-2)',
+                cursor: 'pointer',
+                borderBottom: focusedField === 'secondary' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                paddingBottom: 'var(--space-1)',
+              }}
+            >
               <span
                 style={{
                   fontFamily: '"JetBrains Mono", monospace',
@@ -735,25 +777,23 @@ function Step2({
               >
                 ≈
               </span>
-              <input
-                type="number"
-                inputMode="decimal"
-                value={secondaryAmount}
-                onChange={(e) => onSecondaryAmountChange(e.target.value)}
-                placeholder="0.00"
+              <div
                 style={{
                   flex: 1,
                   background: 'var(--color-surface-raised)',
-                  border: '1px solid var(--color-border)',
+                  border: `1px solid ${focusedField === 'secondary' ? 'var(--color-primary)' : 'var(--color-border)'}`,
                   borderRadius: 'var(--radius-input)',
                   padding: 'var(--space-2) var(--space-3)',
                   fontFamily: '"JetBrains Mono", monospace',
                   fontSize: 'var(--text-caption)',
-                  color: 'var(--color-text)',
+                  color: secondaryAmount ? 'var(--color-text)' : 'var(--color-text-disabled)',
                   minHeight: '44px',
-                  outline: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
                 }}
-              />
+              >
+                {secondaryAmount || '0.00'}
+              </div>
               <span
                 style={{
                   fontFamily: '"JetBrains Mono", monospace',
@@ -948,9 +988,18 @@ function Step2({
 
         {/* Numpad */}
         <Numpad
-          value={numpadValue}
-          onChange={onNumpadChange}
-          onSave={(result) => onSave(result)}
+          value={focusedField === 'secondary' ? secondaryAmount : numpadValue}
+          onChange={focusedField === 'secondary' ? onSecondaryAmountChange : onNumpadChange}
+          onSave={(result) => {
+            if (focusedField === 'secondary') {
+              // Always save using the primary (account-currency) amount
+              const primaryResult = evaluateExpression(numpadValue);
+              if (primaryResult === null || primaryResult <= 0) return;
+              onSave(primaryResult);
+            } else {
+              onSave(result);
+            }
+          }}
           onCalendarPress={() => setShowDatePicker(true)}
           variant="transaction"
           isTransfer={isTransfer}
@@ -1014,7 +1063,7 @@ function Step2({
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-3)',
-              width: '320px',
+              width: 'min(360px, calc(100vw - 32px))',
             }}
           >
             <h3
@@ -1152,9 +1201,12 @@ export default function TransactionInput() {
   const [date, setDate] = useState(getLocalDateString);
   const [secondaryAmount, setSecondaryAmount] = useState('');
   const [secondaryManual, setSecondaryManual] = useState(false);
+  const [focusedField, setFocusedField] = useState<'primary' | 'secondary'>('primary');
   const [toSecondaryAmount, setToSecondaryAmount] = useState('');
   const [noRateWarning, setNoRateWarning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const pushedHistoryRef = useRef(false);
+  const isSavingRef = useRef(false);
 
   // Last note for category suggestion
   const lastNote = useLiveQuery(async () => {
@@ -1302,12 +1354,32 @@ export default function TransactionInput() {
       });
   }, [numpadValue, account, mainCurrency, secondaryManual]);
 
-  // Reset secondaryManual when account changes
+  // Reset secondaryManual and focusedField when account changes
   useEffect(() => {
     setSecondaryManual(false);
     setSecondaryAmount('');
     setNoRateWarning(false);
+    setFocusedField('primary');
   }, [account]);
+
+  // Reset secondaryManual when switching back to primary field
+  useEffect(() => {
+    if (focusedField === 'primary') {
+      setSecondaryManual(false);
+    }
+  }, [focusedField]);
+
+  // Handle browser back button: go to step 1 if we pushed a history entry
+  useEffect(() => {
+    const h = () => {
+      if (pushedHistoryRef.current && !isSavingRef.current) {
+        pushedHistoryRef.current = false;
+        setStep(1);
+      }
+    };
+    window.addEventListener('popstate', h);
+    return () => window.removeEventListener('popstate', h);
+  }, []);
 
   // Auto-calc transfer dest amount when source changes
   useEffect(() => {
@@ -1339,6 +1411,10 @@ export default function TransactionInput() {
       setCategory(cat);
       const typeFromCat: TxTab = cat.type === 'INCOME' ? 'income' : 'expense';
       setTxType(typeFromCat);
+      if (!pushedHistoryRef.current) {
+        history.pushState(null, '', window.location.href);
+        pushedHistoryRef.current = true;
+      }
       setStep(2);
     },
     [],
@@ -1351,6 +1427,10 @@ export default function TransactionInput() {
         setTransferStep('dest');
       } else {
         setToAccount(acc);
+        if (!pushedHistoryRef.current) {
+          history.pushState(null, '', window.location.href);
+          pushedHistoryRef.current = true;
+        }
         setStep(2);
       }
     },
@@ -1364,11 +1444,24 @@ export default function TransactionInput() {
 
   const handleBack = useCallback(() => {
     if (step === 2 && !isEdit) {
-      setStep(1);
+      if (pushedHistoryRef.current) {
+        history.back();
+      } else {
+        setStep(1);
+      }
     } else {
       navigate(-1);
     }
   }, [step, isEdit, navigate]);
+
+  // Escape key: close form (inner overlays handle Escape via capture-phase listeners)
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleBack();
+    };
+    document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
+  }, [handleBack]);
 
   const handleSave = useCallback(
     async (amount: number) => {
@@ -1377,16 +1470,16 @@ export default function TransactionInput() {
         return;
       }
       if (!account) {
-        showToast(t('errors.required'), 'error');
+        showToast(t('errors.accountRequired'), 'error');
         return;
       }
       if (txType !== 'transfer' && !category) {
-        showToast(t('errors.required'), 'error');
+        showToast(t('errors.categoryRequired'), 'error');
         return;
       }
       if (txType === 'transfer') {
         if (!toAccount) {
-          showToast(t('errors.required'), 'error');
+          showToast(t('errors.toAccountRequired'), 'error');
           return;
         }
         if (account.id === toAccount.id) {
@@ -1396,6 +1489,7 @@ export default function TransactionInput() {
       }
 
       setIsSaving(true);
+      isSavingRef.current = true;
       try {
         const now = new Date().toISOString();
 
@@ -1513,10 +1607,12 @@ export default function TransactionInput() {
           }
         }
 
-        navigate(-1);
+        navigate(pushedHistoryRef.current ? -2 : -1);
+        // isSavingRef stays true — component unmounts after navigate, no cleanup needed
       } catch (err) {
         console.error(err);
         showToast(t('errors.generic'), 'error');
+        isSavingRef.current = false;
       } finally {
         setIsSaving(false);
       }
@@ -1607,6 +1703,8 @@ export default function TransactionInput() {
         toSecondaryAmount={toSecondaryAmount}
         onToSecondaryAmountChange={setToSecondaryAmount}
         toAccount2ndCurrencyDiffers={toAccount2ndCurrencyDiffers}
+        focusedField={focusedField}
+        onFocusedFieldChange={setFocusedField}
       />
     </div>
   );

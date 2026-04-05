@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { CurrencyPicker } from '../components/shared/CurrencyPicker';
 import { Numpad } from '../components/shared/Numpad';
+import { getLucideIcon } from '../components/shared/IconPicker';
 import { useSettingsStore } from '../stores/settings-store';
 import { db } from '../db/database';
 import { DEFAULT_CATEGORY_PRESETS } from '../db/seed';
 import type { CategoryPreset } from '../db/seed';
+import { evaluateExpression } from '../services/math-parser';
 
 const TOTAL_STEPS = 5;
 
@@ -130,6 +132,17 @@ function StepWelcome({ onNext, onSkip }: { onNext: () => void; onSkip: () => voi
         >
           {t('onboarding.welcome.subtitle')}
         </p>
+        <p
+          style={{
+            fontFamily: '"DM Sans", sans-serif',
+            fontSize: 'var(--text-caption)',
+            color: 'var(--color-text-disabled)',
+            margin: 0,
+            marginTop: 'var(--space-2)',
+          }}
+        >
+          {t('onboarding.welcome.storageNotice')}
+        </p>
       </div>
       <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
         <button style={primaryBtnStyle} onClick={onNext}>
@@ -187,7 +200,7 @@ function StepCurrency({
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', paddingTop: 'var(--space-4)' }}>
         <button style={primaryBtnStyle} onClick={onNext}>
-          {t('common.done')}
+          {t('common.next')}
         </button>
         <button style={skipLinkStyle} onClick={onSkip}>
           {t('common.skip')}
@@ -285,7 +298,7 @@ function StepAccount({
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', paddingTop: 'var(--space-2)' }}>
         <button style={primaryBtnStyle} onClick={onNext}>
-          {t('common.done')}
+          {t('common.next')}
         </button>
         <button style={skipLinkStyle} onClick={onSkip}>
           {t('common.skip')}
@@ -345,7 +358,9 @@ function StepCategories({
           overflowY: 'auto',
         }}
       >
-        {DEFAULT_CATEGORY_PRESETS.map((preset: CategoryPreset, i: number) => (
+        {DEFAULT_CATEGORY_PRESETS.map((preset: CategoryPreset, i: number) => {
+          const IconComp = getLucideIcon(preset.icon);
+          return (
           <button
             key={preset.name}
             onClick={() => onToggle(i)}
@@ -376,7 +391,9 @@ function StepCategories({
                 opacity: selected[i] ? 1 : 0.5,
                 transition: 'opacity 150ms ease-out',
               }}
-            />
+            >
+              {IconComp && <IconComp size={18} color="white" strokeWidth={1.5} />}
+            </div>
             <span
               style={{
                 fontFamily: '"DM Sans", sans-serif',
@@ -389,7 +406,8 @@ function StepCategories({
               {preset.name}
             </span>
           </button>
-        ))}
+          );
+        })}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', paddingTop: 'var(--space-4)' }}>
         <button style={primaryBtnStyle} onClick={onAcceptAll}>
@@ -404,7 +422,7 @@ function StepCategories({
           }}
           onClick={onNext}
         >
-          {t('common.done')}
+          {t('common.next')}
         </button>
         <button style={skipLinkStyle} onClick={onSkip}>
           {t('common.skip')}
@@ -529,10 +547,11 @@ export default function OnboardingFlow() {
   const handleNumpadSave = useCallback((result: number) => {
     setStartingBalance(result);
     setNumpadValue(String(result));
+    setStep(3);
   }, []);
 
   const goToStep = (n: number) => setStep(n);
-  const skipToComplete = () => setStep(4);
+  const skipToComplete = () => { void handleFinish(true); };
 
   const handleToggleCategory = (i: number) => {
     setCategorySelected((prev) => {
@@ -547,7 +566,7 @@ export default function OnboardingFlow() {
     goToStep(4);
   };
 
-  const handleFinish = async () => {
+  const handleFinish = async (skipAccount = false) => {
     setIsSaving(true);
     setError(null);
     try {
@@ -556,8 +575,8 @@ export default function OnboardingFlow() {
       // 1. Save main currency
       await settingsStore.update('mainCurrency', currency);
 
-      // 2. Create first account if name was provided
-      if (accountName.trim()) {
+      // 2. Create first account if name was provided (skipped when user skips onboarding)
+      if (!skipAccount && accountName.trim()) {
         await db.accounts.add({
           name: accountName.trim(),
           type: 'REGULAR',
@@ -644,7 +663,14 @@ export default function OnboardingFlow() {
                 numpadValue={numpadValue}
                 onNumpadChange={setNumpadValue}
                 onNumpadSave={handleNumpadSave}
-                onNext={() => goToStep(3)}
+                onNext={() => {
+                  const result = evaluateExpression(numpadValue);
+                  if (result !== null) {
+                    setStartingBalance(result);
+                    setNumpadValue(String(result));
+                  }
+                  goToStep(3);
+                }}
                 onSkip={skipToComplete}
               />
             )}

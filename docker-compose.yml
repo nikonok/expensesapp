@@ -1,0 +1,119 @@
+name: expensesapp
+
+services:
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: expensesapp:local
+    container_name: expensesapp-app
+    restart: unless-stopped
+    # No host port binding — cloudflared reaches the app via Docker DNS (http://app:80).
+    # Uncomment the line below for local debugging only:
+    # ports: ["127.0.0.1:${APP_PORT:-8080}:80"]
+    expose:
+      - "80"
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE   # allows nginx to bind port 80 as non-root
+    security_opt:
+      - "no-new-privileges:true"
+    tmpfs:
+      # nginx:alpine user uid/gid = 101. tmpfs mounts default to root:root (mode 755),
+      # so nginx (non-root) can't write its PID file or logs without explicit ownership.
+      - /run:uid=101,gid=101,mode=755              # nginx PID file (/var/run → /run in Alpine)
+      - /var/cache/nginx:uid=101,gid=101,mode=755  # nginx proxy/fastcgi cache
+      - /var/log/nginx:uid=101,gid=101,mode=755    # logs — volatile, no disk-fill risk
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - tunnel
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/index.html"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── Cloudflare Tunnel ───────────────────────────────────────────────────────
+  # Exposes the app to the internet via an outbound-only tunnel.
+  # Cloudflare terminates HTTPS at the edge — this container only speaks HTTP
+  # to the app over the internal Docker 'tunnel' network.
+  # CLOUDFLARE_TUNNEL_TOKEN is injected from .env (never committed to git).
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: expensesapp-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    tmpfs:
+      - /tmp
+    deploy:
+      resources:
+        limits:
+          cpus: "0.2"
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    networks:
+      - tunnel             # reaches app via http://app:80; outbound to CF edge via bridge default route
+    depends_on:
+      app:
+        condition: service_healthy
+
+  # ── Future: PostgreSQL ──────────────────────────────────────────────────────
+  # Uncomment this service when a backend is added to the project.
+  # The pgdata volume below is pre-declared and will persist across restarts.
+  # Add 'internal' to the app service networks when enabling the backend.
+  #
+  # db:
+  #   image: postgres:16-alpine
+  #   container_name: expensesapp-db
+  #   restart: unless-stopped
+  #   read_only: true
+  #   cap_drop: [ALL]
+  #   tmpfs: [/var/run/postgresql, /tmp]
+  #   security_opt: ["no-new-privileges:true"]
+  #   environment:
+  #     POSTGRES_DB:       ${POSTGRES_DB:-expensesapp}
+  #     POSTGRES_USER:     ${POSTGRES_USER:-appuser}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+  #   networks:
+  #     - internal          # app + db only; cloudflared has no access to this network
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+networks:
+  tunnel:
+    driver: bridge    # app ↔ cloudflared; outbound internet allowed for CF edge connection
+  internal:
+    driver: bridge    # future: app ↔ db only; cloudflared is never added to this network
+
+volumes:
+  # Pre-declared for future PostgreSQL use. Persists independently of the
+  # container lifecycle — docker compose down does NOT remove this volume.
+  pgdata:
+    driver: local

@@ -234,6 +234,7 @@ export default function CategoryList() {
         slices={donutSlices}
         totalExpense={totalExpense}
         totalIncome={totalIncome}
+        categoriesViewType={categoriesViewType}
       />
 
       {/* View type label */}

@@ -14,6 +14,7 @@
     "skip": "Skip",
     "edit": "Edit",
     "done": "Done",
+    "next": "Next",
     "close": "Close",
     "comingSoon": "Coming soon",
     "getStarted": "Get Started",
@@ -221,7 +222,8 @@
     "welcome": {
       "title": "Expenses",
       "subtitle": "Your personal finance tracker.",
-      "cta": "Get Started"
+      "cta": "Get Started",
+      "storageNotice": "By using this app, cookies and local storage are used to store your data."
     },
     "currency": {
       "title": "Choose your main currency",
@@ -244,6 +246,9 @@
   },
   "errors": {
     "required": "This field is required.",
+    "accountRequired": "Account is required.",
+    "categoryRequired": "Category is required.",
+    "toAccountRequired": "Destination account is required.",
     "maxLength": "Maximum {{max}} characters.",
     "positiveNumber": "Must be a positive number.",
     "invalidDate": "Invalid date.",

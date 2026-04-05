@@ -1,0 +1,40 @@
+name: Deploy to Server
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_KEY }}
+
+      - name: Trust server host key
+        run: ssh-keyscan -p ${{ secrets.SSH_PORT }} -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Write .env to server
+        # Pipe the token via stdin so it never appears in the remote command string.
+        # printf runs locally; 'cat > file' runs remotely — no shell injection risk.
+        run: |
+          printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' '${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}' | \
+            ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+              "cat > ${{ secrets.APP_DIR }}/.env && chmod 600 ${{ secrets.APP_DIR }}/.env"
+
+      - name: Pull, build, and restart
+        # docker compose commands use -f with the absolute path to match the
+        # sudoers rules on the server (which restrict the deploy user to this
+        # specific compose file only).
+        run: |
+          ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'ENDSSH'
+            set -euo pipefail
+            COMPOSE="sudo docker compose -f ${{ secrets.APP_DIR }}/docker-compose.yml"
+            git -C ${{ secrets.APP_DIR }} pull origin main
+            $COMPOSE build --no-cache
+            $COMPOSE up -d
+            $COMPOSE ps
+          ENDSSH

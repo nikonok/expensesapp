@@ -11,6 +11,7 @@ interface DonutChartProps {
   slices: DonutSlice[];
   totalExpense: number;
   totalIncome: number;
+  categoriesViewType: 'EXPENSE' | 'INCOME';
 }
 
 const CX = 100;
@@ -27,7 +28,7 @@ function formatAmount(amount: number): string {
   return amount.toFixed(0);
 }
 
-export default function DonutChart({ slices, totalExpense, totalIncome }: DonutChartProps) {
+export default function DonutChart({ slices, totalExpense, totalIncome, categoriesViewType }: DonutChartProps) {
   const toggleCategoriesViewType = useUIStore((s) => s.toggleCategoriesViewType);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [animated, setAnimated] = useState(false);
@@ -174,31 +175,45 @@ export default function DonutChart({ slices, totalExpense, totalIncome }: DonutC
           })}
         </g>
 
-        {/* Center text: expense total and income total */}
-        <text
-          x={CX}
-          y={CY - 10}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fill="var(--color-expense)"
-          fontFamily='"JetBrains Mono", monospace'
-          fontWeight={600}
-          fontSize="13"
-        >
-          -{formatAmount(totalExpense)}
-        </text>
-        <text
-          x={CX}
-          y={CY + 10}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fill="var(--color-income)"
-          fontFamily='"JetBrains Mono", monospace'
-          fontWeight={500}
-          fontSize="11"
-        >
-          +{formatAmount(totalIncome)}
-        </text>
+        {/* Center text: primary (active type) on top, secondary below */}
+        {(() => {
+          const isExpense = categoriesViewType === 'EXPENSE';
+          const primaryAmount = isExpense ? totalExpense : totalIncome;
+          const secondaryAmount = isExpense ? totalIncome : totalExpense;
+          const primaryColor = isExpense ? 'var(--color-expense)' : 'var(--color-income)';
+          const secondaryColor = isExpense ? 'var(--color-income)' : 'var(--color-expense)';
+          const primaryPrefix = isExpense ? '-' : '+';
+          const secondaryPrefix = isExpense ? '+' : '-';
+          return (
+            <>
+              <text
+                x={CX}
+                y={CY - 14}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fill={primaryColor}
+                fontFamily='"JetBrains Mono", monospace'
+                fontWeight={600}
+                fontSize="20"
+              >
+                {primaryPrefix}{formatAmount(primaryAmount)}
+              </text>
+              <text
+                x={CX}
+                y={CY + 14}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fill={secondaryColor}
+                fontFamily='"JetBrains Mono", monospace'
+                fontWeight={400}
+                fontSize="13"
+                opacity={0.6}
+              >
+                {secondaryPrefix}{formatAmount(secondaryAmount)}
+              </text>
+            </>
+          );
+        })()}
       </svg>
     </div>
   );

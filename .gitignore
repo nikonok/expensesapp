@@ -25,5 +25,14 @@ coverage/
 # PWA placeholder icons (generated)
 public/icons/
 
-# Claude Code local memory
-.claude/
+# Claude Code local memory (private — not committed)
+.claude/*
+# But commit shared project commands (slash commands / skills)
+!.claude/commands
+
+# Playwright MCP local cache
+.playwright-mcp/
+
+# Test artifacts
+test-results/
+tc-*.png

@@ -1,0 +1,64 @@
+version: '3'
+
+tasks:
+  setup:
+    desc: Install dependencies and Playwright browser binaries
+    cmds:
+      - npm install
+      - npx playwright install chromium
+
+  dev:
+    desc: Start Vite dev server (http://localhost:5173)
+    cmd: npm run dev
+
+  build:
+    desc: TypeScript check + production build → dist/
+    cmd: npm run build
+
+  preview:
+    desc: Serve production build locally (http://localhost:4173) — run build first
+    cmd: npm run preview
+
+  test:
+    desc: Run Vitest unit tests
+    cmd: npm test
+
+  test:e2e:
+    desc: Run Playwright e2e tests (starts dev server automatically)
+    cmd: npm run test:e2e
+
+  lint:
+    desc: Run ESLint
+    cmd: npm run lint
+
+  format:
+    desc: Run Prettier
+    cmd: npm run format
+
+  clean:
+    desc: Remove build artifacts and test results
+    cmd: rm -rf dist test-results e2e/screenshots
+
+  # ── Docker ──────────────────────────────────────────────────────────────────
+
+  docker:build:
+    desc: Build the Docker image (multi-stage — Node builder → nginx runtime)
+    cmd: docker compose build
+
+  docker:up:
+    desc: Start the app container in detached mode (http://localhost:80)
+    cmd: docker compose up -d
+
+  docker:down:
+    desc: Stop and remove the app container (volumes are preserved)
+    cmd: docker compose down
+
+  docker:logs:
+    desc: Tail logs from the app container (Ctrl+C to stop)
+    cmd: docker compose logs -f app
+
+  docker:rebuild:
+    desc: Rebuild image from scratch (no cache) and restart the container
+    cmds:
+      - docker compose build --no-cache
+      - docker compose up -d
