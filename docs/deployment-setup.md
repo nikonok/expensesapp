@@ -308,6 +308,37 @@ Visit `https://<your-subdomain>.<your-domain>` — the app should load over HTTP
 
 > **Note**: Direct SSH from outside the server no longer works — sshd only listens on `127.0.0.1`. This is intentional. All SSH goes through `cloudflared access ssh`.
 
+### Debug the Cloudflare SSH tunnel
+
+If GitHub Actions SSH fails, test the full tunnel path from your local machine (install cloudflared first if needed):
+
+```bash
+cloudflared access ssh \
+  --hostname ssh-expenses.yourdomain.com \
+  --id <CF_ACCESS_CLIENT_ID> \
+  --secret <CF_ACCESS_CLIENT_SECRET>
+```
+
+Expected outputs and what they mean:
+
+| Output | Meaning |
+|---|---|
+| `SSH-2.0-OpenSSH_...` then `Invalid SSH identification string` | **Success** — tunnel and auth work; the error is just cloudflared receiving no SSH client on stdin |
+| `websocket: bad handshake` | Cloudflare Access rejected the connection — check service token, policy action (must be **Service Auth**), and that the SSH hostname route points to `host-gateway:22` not `localhost:22` |
+| `dial tcp ... connection refused` | Tunnel auth works but sshd is unreachable — check the hostname route URL in Cloudflare dashboard |
+| Password prompt | Key auth failed — check `authorized_keys` ownership (`deploy:deploy`) and that `SSH_KEY` secret matches the public key on the server |
+
+To also test the SSH key authentication end-to-end:
+
+```bash
+ssh -i ~/.ssh/expensesapp_deploy \
+    -o "ProxyCommand=cloudflared access ssh --hostname %h --id <CF_ACCESS_CLIENT_ID> --secret <CF_ACCESS_CLIENT_SECRET>" \
+    deploy@ssh-expenses.yourdomain.com \
+    "echo works"
+```
+
+Should print `works`. If it does, GitHub Actions will work.
+
 ---
 
 ## Ongoing maintenance
