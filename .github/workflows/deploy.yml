@@ -8,8 +8,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
-      CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+      # cloudflared access ssh reads TUNNEL_SERVICE_TOKEN_ID / TUNNEL_SERVICE_TOKEN_SECRET
+      # (not CF_ACCESS_CLIENT_ID / CF_ACCESS_CLIENT_SECRET — those are for backend apps only)
+      TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+      TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
 
     steps:
       - name: Load SSH key
@@ -25,13 +27,13 @@ jobs:
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           # Route SSH connections through the Cloudflare tunnel.
-          # cloudflared reads CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET from the
-          # job-level env block above — no flags needed in the ProxyCommand.
+          # Pass service token credentials explicitly via --id/--secret flags so the
+          # ProxyCommand works regardless of how cloudflared resolves env vars.
           cat >> ~/.ssh/config << 'EOF'
           Host ${{ secrets.SSH_HOST }}
             HostName ${{ secrets.SSH_HOST }}
             User ${{ secrets.SSH_USER }}
-            ProxyCommand cloudflared access ssh --hostname %h
+            ProxyCommand cloudflared access ssh --hostname %h --id $TUNNEL_SERVICE_TOKEN_ID --secret $TUNNEL_SERVICE_TOKEN_SECRET
             StrictHostKeyChecking yes
           EOF
           chmod 600 ~/.ssh/config
