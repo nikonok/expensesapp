@@ -275,6 +275,8 @@ bash /home/deploy/expensesapp/scripts/bootstrap.sh
 
 The script will prompt for your Cloudflare tunnel token, write `.env`, build and start the containers, then print the cloudflared logs. Once you see `Registered tunnel connection`, the SSH hostname (`ssh-expenses.yourdomain.com`) is live and GitHub Actions can reach it.
 
+> **Note:** The script runs with `sudo` and ensures `.env` is owned by `deploy:deploy`. If you ever manually re-create `.env` using `sudo`, run `sudo chown deploy:deploy /home/deploy/expensesapp/.env` afterwards — otherwise the deploy user cannot overwrite it and the GitHub Actions step will fail with `Permission denied`.
+
 You can also pass the token via environment to skip the prompt:
 
 ```bash

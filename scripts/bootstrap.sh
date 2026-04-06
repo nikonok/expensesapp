@@ -36,6 +36,7 @@ fi
 ENV_FILE="$APP_DIR/.env"
 printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' "$CLOUDFLARE_TUNNEL_TOKEN" > "$ENV_FILE"
 chmod 600 "$ENV_FILE"
+chown deploy:deploy "$ENV_FILE"
 echo "✓ .env written"
 
 # ── Pull latest code ──────────────────────────────────────────────────────────
