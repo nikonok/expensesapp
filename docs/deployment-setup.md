@@ -100,6 +100,14 @@ sudo chmod 600 /home/deploy/.ssh/authorized_keys
 sudo chown deploy:deploy /home/deploy/.ssh/authorized_keys
 ```
 
+> **Critical:** The `authorized_keys` file must be owned by `deploy`, not `root`. If you run `sudo tee` to write this file, it will be owned by `root` and sshd will silently refuse to read it — key authentication will fail with no useful error on the client side. The sshd log will show: `Could not open user 'deploy' authorized keys: Permission denied`. Always run `chown` after writing the file.
+>
+> Verify ownership is correct:
+> ```bash
+> sudo ls -la /home/deploy/.ssh/
+> # authorized_keys must show: -rw------- deploy deploy
+> ```
+
 ---
 
 ## 5. Harden SSH daemon
