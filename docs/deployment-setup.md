@@ -58,12 +58,17 @@ deploy ALL=(ALL) NOPASSWD: /usr/bin/docker compose -f /home/deploy/expensesapp/d
 deploy ALL=(ALL) NOPASSWD: /usr/bin/docker compose -f /home/deploy/expensesapp/docker-compose.yml up *
 deploy ALL=(ALL) NOPASSWD: /usr/bin/docker compose -f /home/deploy/expensesapp/docker-compose.yml down *
 deploy ALL=(ALL) NOPASSWD: /usr/bin/docker compose -f /home/deploy/expensesapp/docker-compose.yml ps
+deploy ALL=(ALL) NOPASSWD: /usr/bin/docker compose -f /home/deploy/expensesapp/docker-compose.yml logs *
 EOF
 sudo chmod 440 /etc/sudoers.d/deploy-docker
 
 # Validate before it takes effect
 sudo visudo -cf /etc/sudoers.d/deploy-docker
 ```
+
+> **Security note — docker compose and privilege escalation:** The sudoers rules above restrict `docker compose` to a hardcoded file path, but they do **not** restrict the *contents* of that file. Because `deploy` owns the git repo (and therefore `docker-compose.yml`), a compromised deploy user can rewrite the file to mount the host filesystem and gain root. This is an inherent limitation of any docker-compose-over-sudo setup — `docker` access is effectively root-equivalent when the user controls the compose file.
+>
+> For a personal home server this is an acceptable trade-off: the deploy user has no shell password, SSH is key-only, and no public ports are exposed. If you want to harden further, move `docker-compose.yml` to a root-owned path outside the git repo (e.g. `/etc/expensesapp/docker-compose.yml`) and update the sudoers rules and deploy workflow to point there. The `git pull` in the deploy workflow would then only update source code, and compose changes would require manual root intervention.
 
 ---
 
@@ -337,4 +342,12 @@ Rotate when suspected compromised, or on your regular key rotation schedule.
 
 ### Updating Docker base images
 
-Run a deployment with `--no-cache` (already the default in the workflow) to pick up the latest `nginx:1.27-alpine` and `cloudflare/cloudflared:latest` patches.
+Run a deployment with `--no-cache` (already the default in the workflow) to pick up the latest `nginx:1.27-alpine` patches.
+
+For `cloudflared`, the `docker-compose.yml` currently uses `:latest`. It is recommended to pin this to a specific version tag for reproducible, auditable deploys:
+
+```yaml
+image: cloudflare/cloudflared:2025.x.x  # replace with the current release
+```
+
+Check the current release at https://github.com/cloudflare/cloudflared/releases, update the tag in `docker-compose.yml`, and run a deployment. Update this tag whenever you rotate the tunnel token or on your regular maintenance schedule.

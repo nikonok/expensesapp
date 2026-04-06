@@ -8,6 +8,7 @@ services:
       dockerfile: Dockerfile
     image: expensesapp:local
     container_name: expensesapp-app
+    user: "101:101"   # nginx uid/gid — explicit here so it cannot be overridden at runtime
     restart: unless-stopped
     # No host port binding — cloudflared reaches the app via Docker DNS (http://app:80).
     # Uncomment the line below for local debugging only:
@@ -52,6 +53,9 @@ services:
   # to the app over the internal Docker 'tunnel' network.
   # CLOUDFLARE_TUNNEL_TOKEN is injected from .env (never committed to git).
   cloudflared:
+    # Pin to a specific version for reproducible deploys. Check releases at:
+    # https://github.com/cloudflare/cloudflared/releases
+    # Update this tag periodically (or set up Dependabot for Docker images).
     image: cloudflare/cloudflared:latest
     container_name: expensesapp-cloudflared
     restart: unless-stopped

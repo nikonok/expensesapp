@@ -56,7 +56,7 @@ jobs:
           ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'ENDSSH'
             set -euo pipefail
             COMPOSE="sudo docker compose -f ${{ secrets.APP_DIR }}/docker-compose.yml"
-            git -C ${{ secrets.APP_DIR }} pull origin main
+            git -C "${{ secrets.APP_DIR }}" pull origin main
             $COMPOSE build --no-cache
             $COMPOSE up -d
             $COMPOSE ps
