@@ -40,7 +40,7 @@ export function ConfirmDialog({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 'var(--z-overlay)',
+        zIndex: 'var(--z-dialog)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

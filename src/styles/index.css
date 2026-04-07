@@ -97,6 +97,7 @@
   --z-nav: 100;
   --z-overlay: 200;
   --z-sheet: 300;
+  --z-dialog: 350;
   --z-toast: 400;
 
   /* Border Radius */

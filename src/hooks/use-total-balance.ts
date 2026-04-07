@@ -8,7 +8,7 @@ export function useTotalBalance(): { netWorth: number | null; mainCurrency: stri
   const mainCurrency = useSettingsStore((s) => s.mainCurrency);
 
   const accounts = useLiveQuery(
-    () => db.accounts.where('isTrashed').equals(0).toArray(),
+    () => db.accounts.filter((a) => !a.isTrashed).toArray(),
     [],
   ) ?? [];
 

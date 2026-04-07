@@ -1224,7 +1224,7 @@ export default function TransactionInput() {
 
   // Determine default account from most recent transaction (skips DEBT accounts)
   const defaultAccount = useLiveQuery(async () => {
-    const active = await db.accounts.where('isTrashed').equals(0).toArray();
+    const active = await db.accounts.filter((a) => !a.isTrashed).toArray();
     if (active.length === 0) return null;
     const txs = await db.transactions.orderBy('date').reverse().limit(50).toArray();
     for (const tx of txs) {

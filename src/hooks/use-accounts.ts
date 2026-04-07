@@ -8,7 +8,7 @@ export function useAccounts(includeTrashed = false): Account[] {
       if (includeTrashed) {
         return db.accounts.toArray();
       }
-      return db.accounts.where('isTrashed').equals(0).toArray();
+      return db.accounts.filter((a) => !a.isTrashed).toArray();
     }, [includeTrashed]) ?? []
   );
 }

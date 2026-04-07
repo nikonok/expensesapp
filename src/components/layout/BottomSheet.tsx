@@ -107,18 +107,66 @@ export default function BottomSheet({ isOpen, onClose, title, children }: Bottom
     const vv = window.visualViewport;
     if (!vv) return;
 
+    // Capture ref now so cleanup doesn't dereference a null ref on unmount
+    const sheetEl = sheetRef.current;
+
     const handleResize = () => {
       const keyboardHeight = window.innerHeight - vv.height - vv.offsetTop;
-      if (sheetRef.current) {
-        sheetRef.current.style.bottom = `${Math.max(0, keyboardHeight)}px`;
+      if (sheetEl) {
+        sheetEl.style.bottom = `${Math.max(0, keyboardHeight)}px`;
+        // Scroll the focused input into view in case the keyboard height
+        // calculation leaves it partially obscured
+        const focused = sheetEl.querySelector(':focus') as HTMLElement | null;
+        focused?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
     };
 
-    vv.addEventListener('resize', handleResize);
-    vv.addEventListener('scroll', handleResize);
+    // Delay attaching listeners until after the open animation (300ms) so
+    // the initial keyboard resize doesn't race with the slide-up animation.
+    // Run handleResize() immediately after the delay to catch keyboards that
+    // opened during the animation window (e.g. via autoFocus).
+    const delayTimer = setTimeout(() => {
+      vv.addEventListener('resize', handleResize);
+      vv.addEventListener('scroll', handleResize);
+      handleResize();
+    }, 300);
+
     return () => {
+      clearTimeout(delayTimer);
       vv.removeEventListener('resize', handleResize);
       vv.removeEventListener('scroll', handleResize);
+      if (sheetEl) {
+        sheetEl.style.bottom = '';
+      }
+    };
+  }, [isOpen]);
+
+  // focusin fallback: scroll the focused input into view during the 300ms
+  // animation window before the visualViewport resize listener attaches.
+  // Auto-removes after 650ms (300ms open animation + 350ms scroll delay).
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let active = true;
+    const handleFocusIn = (e: FocusEvent) => {
+      if (!active) return;
+      const target = e.target as HTMLElement;
+      if (sheetRef.current?.contains(target) && target.tagName !== 'BUTTON') {
+        setTimeout(() => {
+          target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }, 350);
+      }
+    };
+
+    document.addEventListener('focusin', handleFocusIn);
+    const cancelTimer = setTimeout(() => {
+      active = false;
+      document.removeEventListener('focusin', handleFocusIn);
+    }, 650);
+
+    return () => {
+      clearTimeout(cancelTimer);
+      document.removeEventListener('focusin', handleFocusIn);
     };
   }, [isOpen]);
 
