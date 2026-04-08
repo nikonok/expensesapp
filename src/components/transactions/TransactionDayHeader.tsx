@@ -22,7 +22,7 @@ export default function TransactionDayHeader({
     <div
       style={{
         position: 'sticky',
-        top: '117px', /* TopBar (56px) + PeriodFilter row (61px) */
+        top: '61px', /* PeriodFilter row height */
         zIndex: 'var(--z-sticky)',
         background: 'var(--color-bg)',
         display: 'flex',

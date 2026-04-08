@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft } from 'lucide-react';
@@ -571,11 +571,11 @@ export default function OnboardingFlow() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleNumpadSave = useCallback((result: number) => {
+  const handleNumpadSave = (result: number) => {
     setStartingBalance(result);
     setNumpadValue(String(result));
-    setStep(3);
-  }, []);
+    goToStep(3);
+  };
 
   const goToStep = (n: number) => {
     setDirection(n > step ? 'forward' : 'back');
@@ -702,6 +702,9 @@ export default function OnboardingFlow() {
                   if (result !== null) {
                     setStartingBalance(result);
                     setNumpadValue(String(result));
+                  } else {
+                    setStartingBalance(0);
+                    setNumpadValue('');
                   }
                   goToStep(3);
                 }}

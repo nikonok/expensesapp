@@ -53,34 +53,29 @@ function EntityIcon({ icon, color, size = 18 }: { icon: string; color: string; s
   );
 }
 
-// ── Step 1: Type/category/account selector ─────────────────────────────────────
+// ── Step 1: FROM picker ─────────────────────────────────────────────────────────
 
 interface Step1Props {
-  activeTab: TxTab;
-  onTabChange: (t: TxTab) => void;
+  txType: TxTab;
   categories: Category[];
   accounts: Account[];
-  currentAccountId: number | null;
-  onCategorySelect: (cat: Category) => void;
-  onAccountSelect: (acc: Account) => void;
-  onDebtAccountSelect: (acc: Account) => void;
+  onFromAccountSelect: (acc: Account) => void;
+  onFromIncomeCategorySelect: (cat: Category) => void;
   onBack: () => void;
 }
 
 function Step1({
-  activeTab,
-  onTabChange,
+  txType,
   categories,
   accounts,
-  currentAccountId,
-  onCategorySelect,
-  onAccountSelect,
-  onDebtAccountSelect,
+  onFromAccountSelect,
+  onFromIncomeCategorySelect,
   onBack,
 }: Step1Props) {
   const { t } = useTranslation();
 
-  const tabs: TxTab[] = ['income', 'expense'];
+  const nonDebtAccounts = accounts.filter((a) => a.type !== 'DEBT');
+  const incomeCategories = categories.filter((c) => c.type === 'INCOME');
 
   return (
     <div
@@ -138,41 +133,124 @@ function Step1({
         <div style={{ minWidth: '44px' }} />
       </div>
 
-      {/* Tab bar */}
+      {/* Scrollable list */}
+      <div
+        className="scroll-container"
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          paddingInline: 'var(--space-4)',
+          paddingTop: 'var(--space-3)',
+          paddingBottom: 'var(--space-6)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--space-2)',
+        }}
+      >
+        {txType === 'income' ? (
+          // Income TO pre-set (from AccountDetail): user picks income category (FROM)
+          incomeCategories.map((cat) => (
+            <CategoryRow key={cat.id} category={cat} onPress={() => onFromIncomeCategorySelect(cat)} />
+          ))
+        ) : (
+          <>
+            {nonDebtAccounts.map((acc) => (
+              <AccountRow key={acc.id} account={acc} onPress={() => onFromAccountSelect(acc)} />
+            ))}
+            {nonDebtAccounts.length > 0 && incomeCategories.length > 0 && (
+              <div style={{ height: '1px', background: 'var(--color-border)', marginBlock: 'var(--space-1)' }} />
+            )}
+            {incomeCategories.map((cat) => (
+              <CategoryRow key={cat.id} category={cat} onPress={() => onFromIncomeCategorySelect(cat)} />
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Step 2: TO picker ──────────────────────────────────────────────────────────
+
+interface Step2TOProps {
+  txType: TxTab;
+  fromAccountId: number | null;
+  categories: Category[];
+  accounts: Account[];
+  onToExpenseCategorySelect: (cat: Category) => void;
+  onToTransferAccountSelect: (acc: Account) => void;
+  onToDebtAccountSelect: (acc: Account) => void;
+  onToIncomeAccountSelect: (acc: Account) => void;
+  onBack: () => void;
+}
+
+function Step2TO({
+  txType,
+  fromAccountId,
+  categories,
+  accounts,
+  onToExpenseCategorySelect,
+  onToTransferAccountSelect,
+  onToDebtAccountSelect,
+  onToIncomeAccountSelect,
+  onBack,
+}: Step2TOProps) {
+  const { t } = useTranslation();
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100dvh',
+        background: 'var(--color-bg)',
+        maxWidth: '480px',
+        marginInline: 'auto',
+      }}
+    >
+      {/* Header */}
       <div
         style={{
           display: 'flex',
+          alignItems: 'center',
+          height: '56px',
           paddingInline: 'var(--space-4)',
-          paddingTop: 'var(--space-3)',
-          gap: 'var(--space-2)',
           flexShrink: 0,
+          borderBottom: '1px solid var(--color-border)',
         }}
       >
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab;
-          const color = tab === 'income' ? 'var(--color-income)' : 'var(--color-expense)';
-          return (
-            <button
-              key={tab}
-              onClick={() => onTabChange(tab)}
-              style={{
-                flex: 1,
-                minHeight: '44px',
-                background: isActive ? `color-mix(in oklch, ${color} 15%, transparent)` : 'var(--color-surface)',
-                border: isActive ? `1px solid ${color}` : '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-btn)',
-                color: isActive ? color : 'var(--color-text-secondary)',
-                fontFamily: '"DM Sans", sans-serif',
-                fontWeight: 500,
-                fontSize: 'var(--text-body)',
-                cursor: 'pointer',
-                transition: 'background 120ms, border-color 120ms, color 120ms',
-              }}
-            >
-              {tab === 'income' ? t('transactions.tabs.income') : t('transactions.tabs.expense')}
-            </button>
-          );
-        })}
+        <button
+          onClick={onBack}
+          aria-label={t('common.back')}
+          style={{
+            minWidth: '44px',
+            minHeight: '44px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            color: 'var(--color-text-secondary)',
+            padding: 0,
+          }}
+        >
+          <ArrowLeft size={20} />
+        </button>
+        <h1
+          style={{
+            flex: 1,
+            textAlign: 'center',
+            fontFamily: 'Syne, sans-serif',
+            fontWeight: 700,
+            fontSize: 'var(--text-heading)',
+            color: 'var(--color-text)',
+            margin: 0,
+          }}
+        >
+          {t('transactions.newTransaction')}
+        </h1>
+        <div style={{ minWidth: '44px' }} />
       </div>
 
       {/* Scrollable list */}
@@ -189,69 +267,60 @@ function Step1({
           gap: 'var(--space-2)',
         }}
       >
-        {activeTab === 'income'
-          ? categories
-              .filter((c) => c.type === 'INCOME')
-              .map((cat) => (
-                <CategoryRow key={cat.id} category={cat} onPress={() => onCategorySelect(cat)} />
-              ))
-          : (() => {
-              const debtAccounts = accounts.filter((a) => a.type === 'DEBT');
-              const transferAccounts = accounts.filter(
-                (a) => a.type !== 'DEBT' && a.id !== currentAccountId,
-              );
-              const expenseCategories = categories.filter((c) => c.type === 'EXPENSE');
-              return (
-                <>
-                  {debtAccounts.length > 0 && (
-                    <>
-                      {debtAccounts.map((acc) => (
-                        <AccountRow
-                          key={acc.id}
-                          account={acc}
-                          chip="DEBT"
-                          onPress={() => onDebtAccountSelect(acc)}
-                        />
-                      ))}
-                      {(transferAccounts.length > 0 || expenseCategories.length > 0) && (
-                        <div
-                          style={{
-                            height: '1px',
-                            background: 'var(--color-border)',
-                            marginBlock: 'var(--space-1)',
-                          }}
-                        />
-                      )}
-                    </>
-                  )}
-                  {transferAccounts.length > 0 && (
-                    <>
-                      {transferAccounts.map((acc) => (
-                        <AccountRow
-                          key={acc.id}
-                          account={acc}
-                          chip="TRANSFER"
-                          chipColor="var(--color-transfer)"
-                          onPress={() => onAccountSelect(acc)}
-                        />
-                      ))}
-                      {expenseCategories.length > 0 && (
-                        <div
-                          style={{
-                            height: '1px',
-                            background: 'var(--color-border)',
-                            marginBlock: 'var(--space-1)',
-                          }}
-                        />
-                      )}
-                    </>
-                  )}
-                  {expenseCategories.map((cat) => (
-                    <CategoryRow key={cat.id} category={cat} onPress={() => onCategorySelect(cat)} />
-                  ))}
-                </>
-              );
-            })()}
+        {txType === 'income' ? (
+          // Income FROM was category: show accounts as TO destination
+          accounts
+            .filter((a) => a.type !== 'DEBT')
+            .map((acc) => (
+              <AccountRow key={acc.id} account={acc} onPress={() => onToIncomeAccountSelect(acc)} />
+            ))
+        ) : (
+          (() => {
+            const debtAccounts = accounts.filter((a) => a.type === 'DEBT');
+            const transferAccounts = accounts.filter(
+              (a) => a.type !== 'DEBT' && a.id !== fromAccountId,
+            );
+            const expenseCategories = categories.filter((c) => c.type === 'EXPENSE');
+            return (
+              <>
+                {debtAccounts.length > 0 && (
+                  <>
+                    {debtAccounts.map((acc) => (
+                      <AccountRow
+                        key={acc.id}
+                        account={acc}
+                        chip="DEBT"
+                        onPress={() => onToDebtAccountSelect(acc)}
+                      />
+                    ))}
+                    {(transferAccounts.length > 0 || expenseCategories.length > 0) && (
+                      <div style={{ height: '1px', background: 'var(--color-border)', marginBlock: 'var(--space-1)' }} />
+                    )}
+                  </>
+                )}
+                {transferAccounts.length > 0 && (
+                  <>
+                    {transferAccounts.map((acc) => (
+                      <AccountRow
+                        key={acc.id}
+                        account={acc}
+                        chip="TRANSFER"
+                        chipColor="var(--color-transfer)"
+                        onPress={() => onToTransferAccountSelect(acc)}
+                      />
+                    ))}
+                    {expenseCategories.length > 0 && (
+                      <div style={{ height: '1px', background: 'var(--color-border)', marginBlock: 'var(--space-1)' }} />
+                    )}
+                  </>
+                )}
+                {expenseCategories.map((cat) => (
+                  <CategoryRow key={cat.id} category={cat} onPress={() => onToExpenseCategorySelect(cat)} />
+                ))}
+              </>
+            );
+          })()
+        )}
       </div>
     </div>
   );
@@ -456,9 +525,9 @@ function PickerSheet({ title, onClose, children }: PickerSheetProps) {
   );
 }
 
-// ── Step 2: Detail form ────────────────────────────────────────────────────────
+// ── Step 3: Detail form ────────────────────────────────────────────────────────
 
-interface Step2Props {
+interface Step3Props {
   txType: TxTab;
   account: Account | null;
   toAccount: Account | null; // transfer only
@@ -492,7 +561,7 @@ interface Step2Props {
   onPaymentTypeChange: (t: 'regular' | 'overpayment') => void;
 }
 
-function Step2({
+function Step3({
   txType,
   account,
   toAccount,
@@ -524,7 +593,7 @@ function Step2({
   isDebtPaymentMode,
   paymentType,
   onPaymentTypeChange,
-}: Step2Props) {
+}: Step3Props) {
   const { t } = useTranslation();
   const [pickerMode, setPickerMode] = useState<'account' | 'toAccount' | 'category' | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -647,9 +716,9 @@ function Step2({
             paddingBottom: 'var(--space-2)',
           }}
         >
-          {/* From account */}
+          {/* From */}
           <button
-            onClick={() => setPickerMode('account')}
+            onClick={() => setPickerMode(txType === 'income' ? 'category' : 'account')}
             style={{
               flex: 1,
               display: 'flex',
@@ -663,23 +732,25 @@ function Step2({
               minHeight: '44px',
             }}
           >
-            {account && (
-              <EntityIcon icon={account.icon} color={account.color} size={14} />
-            )}
+            {txType === 'income'
+              ? category && <EntityIcon icon={category.icon} color={category.color} size={14} />
+              : account && <EntityIcon icon={account.icon} color={account.color} size={14} />}
             <span
               style={{
                 flex: 1,
                 fontFamily: '"DM Sans", sans-serif',
                 fontWeight: 500,
                 fontSize: 'var(--text-caption)',
-                color: account ? 'var(--color-text)' : 'var(--color-text-disabled)',
+                color: (txType === 'income' ? category : account) ? 'var(--color-text)' : 'var(--color-text-disabled)',
                 textAlign: 'left',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
               }}
             >
-              {account ? account.name : t('transactions.fields.from')}
+              {txType === 'income'
+                ? category ? category.name : t('transactions.fields.from')
+                : account ? account.name : t('transactions.fields.from')}
             </span>
             <ChevronDown size={12} style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }} />
           </button>
@@ -689,9 +760,9 @@ function Step2({
             →
           </span>
 
-          {/* To: category or account */}
+          {/* To */}
           <button
-            onClick={() => setPickerMode(showToTarget ? 'toAccount' : 'category')}
+            onClick={() => setPickerMode(txType === 'income' ? 'account' : (showToTarget ? 'toAccount' : 'category'))}
             style={{
               flex: 1,
               display: 'flex',
@@ -705,9 +776,11 @@ function Step2({
               minHeight: '44px',
             }}
           >
-            {showToTarget
-              ? toAccount && <EntityIcon icon={toAccount.icon} color={toAccount.color} size={14} />
-              : category && <EntityIcon icon={category.icon} color={category.color} size={14} />}
+            {txType === 'income'
+              ? account && <EntityIcon icon={account.icon} color={account.color} size={14} />
+              : showToTarget
+                ? toAccount && <EntityIcon icon={toAccount.icon} color={toAccount.color} size={14} />
+                : category && <EntityIcon icon={category.icon} color={category.color} size={14} />}
             <span
               style={{
                 flex: 1,
@@ -715,7 +788,7 @@ function Step2({
                 fontWeight: 500,
                 fontSize: 'var(--text-caption)',
                 color:
-                  (showToTarget ? toAccount : category)
+                  (txType === 'income' ? account : (showToTarget ? toAccount : category))
                     ? 'var(--color-text)'
                     : 'var(--color-text-disabled)',
                 textAlign: 'left',
@@ -724,13 +797,11 @@ function Step2({
                 whiteSpace: 'nowrap',
               }}
             >
-              {showToTarget
-                ? toAccount
-                  ? toAccount.name
-                  : t('transactions.fields.to')
-                : category
-                  ? category.name
-                  : t('transactions.fields.category')}
+              {txType === 'income'
+                ? account ? account.name : t('transactions.fields.to')
+                : showToTarget
+                  ? toAccount ? toAccount.name : t('transactions.fields.to')
+                  : category ? category.name : t('transactions.fields.category')}
             </span>
             <ChevronDown size={12} style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }} />
           </button>
@@ -1244,7 +1315,7 @@ function Step2({
       {pickerMode === 'account' && (
         <PickerSheet title={t('transactions.fields.from')} onClose={() => setPickerMode(null)}>
           {allAccounts
-            .filter((acc) => isTransfer || acc.type !== 'DEBT')
+            .filter((acc) => (isTransfer || acc.type !== 'DEBT') && (!isTransfer || acc.id !== toAccount?.id))
             .map((acc) => (
               <AccountRow
                 key={acc.id}
@@ -1261,8 +1332,8 @@ function Step2({
       {pickerMode === 'toAccount' && (
         <PickerSheet title={t('transactions.fields.to')} onClose={() => setPickerMode(null)}>
           {(isDebtPaymentMode
-            ? allAccounts.filter((a) => a.type === 'DEBT')
-            : allAccounts
+            ? allAccounts.filter((a) => a.type === 'DEBT' && a.id !== account?.id)
+            : allAccounts.filter((a) => a.id !== account?.id)
           ).map((acc) => (
             <AccountRow
               key={acc.id}
@@ -1324,7 +1395,7 @@ export default function TransactionInput() {
   const allCategories = useCategories(undefined, false);
 
   // Step management
-  const [step, setStep] = useState<1 | 2>(isEdit ? 2 : 1);
+  const [step, setStep] = useState<1 | 2 | 3>(isEdit ? 3 : 1);
   const [txType, setTxType] = useState<TxTab>(() => {
     const qType = searchParams.get('type');
     if (qType === 'income' || qType === 'expense') return qType;
@@ -1347,7 +1418,7 @@ export default function TransactionInput() {
   const [isSaving, setIsSaving] = useState(false);
   const isDebtPaymentMode =
     txType === 'expense' && toAccount !== null && toAccount.type === 'DEBT' && category === null;
-  const pushedHistoryRef = useRef(false);
+  const historyDepthRef = useRef(0);
   const isSavingRef = useRef(false);
 
   // Last note for category suggestion
@@ -1408,23 +1479,30 @@ export default function TransactionInput() {
         setCategory(found);
         const typeFromCat: TxTab = found.type === 'INCOME' ? 'income' : 'expense';
         setTxType(typeFromCat);
-        setStep(2);
       }
     }
   }, [allCategories, searchParams, category]);
 
-  // Skip to step 2 if query params provide type + category or type + account
+  // Step-skip logic based on query params and active filter
   useEffect(() => {
+    if (isEdit) return;
     const qType = searchParams.get('type');
     const qCategoryId = searchParams.get('categoryId');
     const qAccountId = searchParams.get('accountId');
-    if (
-      (qType === 'income' || qType === 'expense') &&
-      (qCategoryId || qAccountId)
-    ) {
+
+    if (qCategoryId) {
+      // CategoryList: category pre-set, go straight to amount form
+      setStep(3);
+    } else if (qType === 'expense' && qAccountId) {
+      // AccountDetail Expense: FROM account pre-set, user picks TO
+      setStep(2);
+    } else if (transactionAccountFilter !== null) {
+      // Account filter active: FROM account pre-set, user picks TO
       setStep(2);
     }
-  }, [searchParams]);
+    // AccountDetail Income (qType=income&accountId): stay at step 1, show income categories
+    // No pre-determination: start at step 1
+  }, [searchParams, transactionAccountFilter, isEdit]);
 
   const initialised = useRef(false);
 
@@ -1475,7 +1553,7 @@ export default function TransactionInput() {
     setNumpadValue(String(existingTx.amount));
     setNote(existingTx.note ?? '');
     setDate(existingTx.date);
-    setStep(2);
+    setStep(3);
   }, [isEdit, existingTx, allAccounts, allCategories]);
 
   // Auto-calc secondary amount when numpad changes (income/expense foreign currency)
@@ -1519,12 +1597,12 @@ export default function TransactionInput() {
     }
   }, [focusedField]);
 
-  // Handle browser back button: go to step 1 if we pushed a history entry
+  // Handle browser back button: go back one step per history push
   useEffect(() => {
     const h = () => {
-      if (pushedHistoryRef.current && !isSavingRef.current) {
-        pushedHistoryRef.current = false;
-        setStep(1);
+      if (historyDepthRef.current > 0 && !isSavingRef.current) {
+        historyDepthRef.current--;
+        setStep((s) => Math.max(1, s - 1) as 1 | 2 | 3);
       }
     };
     window.addEventListener('popstate', h);
@@ -1556,65 +1634,84 @@ export default function TransactionInput() {
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
-  const handleCategorySelect = useCallback(
-    (cat: Category) => {
-      setCategory(cat);
-      setToAccount(null);
-      const typeFromCat: TxTab = cat.type === 'INCOME' ? 'income' : 'expense';
-      setTxType(typeFromCat);
-      if (!pushedHistoryRef.current) {
-        history.pushState(null, '', window.location.href);
-        pushedHistoryRef.current = true;
-      }
-      setStep(2);
-    },
-    [],
-  );
+  // Step 1 → 2: FROM account selected
+  const handleFromAccountSelect = useCallback((acc: Account) => {
+    setAccount(acc);
+    setTxType('expense');
+    setCategory(null);
+    history.pushState(null, '', window.location.href);
+    historyDepthRef.current++;
+    setStep(2);
+  }, []);
 
-  const handleDebtAccountSelect = useCallback(
-    (acc: Account) => {
-      setToAccount(acc);
-      setCategory(null);
-      setTxType('expense');
-      setPaymentType('regular');
-      if (!pushedHistoryRef.current) {
-        history.pushState(null, '', window.location.href);
-        pushedHistoryRef.current = true;
-      }
+  // Step 1 → 2 (or 3 if TO pre-set): FROM income category selected
+  const handleFromIncomeCategorySelect = useCallback((cat: Category) => {
+    setCategory(cat);
+    setTxType('income');
+    history.pushState(null, '', window.location.href);
+    historyDepthRef.current++;
+    // If income destination account is already pre-set (from AccountDetail or filter), skip step 2
+    const qAccountId = searchParams.get('accountId');
+    const hasPresetAccount = account !== null ||
+      (qAccountId !== null && allAccounts.some((a) => a.id === parseInt(qAccountId, 10)));
+    if (hasPresetAccount) {
+      setStep(3);
+    } else {
       setStep(2);
-    },
-    [],
-  );
+    }
+  }, [account, allAccounts, searchParams]);
 
-  const handleTransferAccountSelect = useCallback(
-    (acc: Account) => {
-      if (!account) return;
-      if (account.id === acc.id) {
-        showToast(t('errors.sameAccount'), 'error');
-        return;
-      }
-      setToAccount(acc);
-      setCategory(null);
-      setTxType('transfer');
-      if (!pushedHistoryRef.current) {
-        history.pushState(null, '', window.location.href);
-        pushedHistoryRef.current = true;
-      }
-      setStep(2);
-    },
-    [account, showToast, t],
-  );
+  // Step 2 → 3: TO expense category selected
+  const handleCategorySelect = useCallback((cat: Category) => {
+    setCategory(cat);
+    setToAccount(null);
+    const typeFromCat: TxTab = cat.type === 'INCOME' ? 'income' : 'expense';
+    setTxType(typeFromCat);
+    history.pushState(null, '', window.location.href);
+    historyDepthRef.current++;
+    setStep(3);
+  }, []);
 
-  const handleTabChange = useCallback((tab: TxTab) => {
-    setTxType(tab);
+  // Step 2 → 3: TO debt account selected
+  const handleDebtAccountSelect = useCallback((acc: Account) => {
+    setToAccount(acc);
+    setCategory(null);
+    setTxType('expense');
+    setPaymentType('regular');
+    history.pushState(null, '', window.location.href);
+    historyDepthRef.current++;
+    setStep(3);
+  }, []);
+
+  // Step 2 → 3: TO transfer account selected
+  const handleTransferAccountSelect = useCallback((acc: Account) => {
+    if (!account) return;
+    if (account.id === acc.id) {
+      showToast(t('errors.sameAccount'), 'error');
+      return;
+    }
+    setToAccount(acc);
+    setCategory(null);
+    setTxType('transfer');
+    history.pushState(null, '', window.location.href);
+    historyDepthRef.current++;
+    setStep(3);
+  }, [account, showToast, t]);
+
+  // Step 2 → 3: TO income account selected
+  const handleToIncomeAccountSelect = useCallback((acc: Account) => {
+    setAccount(acc);
+    history.pushState(null, '', window.location.href);
+    historyDepthRef.current++;
+    setStep(3);
   }, []);
 
   const handleBack = useCallback(() => {
-    if (step === 2 && !isEdit) {
-      if (pushedHistoryRef.current) {
+    if (step > 1 && !isEdit) {
+      if (historyDepthRef.current > 0) {
         history.back();
       } else {
-        setStep(1);
+        setStep((s) => Math.max(1, s - 1) as 1 | 2 | 3);
       }
     } else {
       navigate(-1);
@@ -1859,7 +1956,7 @@ export default function TransactionInput() {
           }
         }
 
-        navigate(pushedHistoryRef.current ? -2 : -1);
+        navigate(-(historyDepthRef.current + 1));
         // isSavingRef stays true — component unmounts after navigate, no cleanup needed
       } catch (err) {
         console.error(err);
@@ -1911,14 +2008,27 @@ export default function TransactionInput() {
   if (step === 1) {
     return (
       <Step1
-        activeTab={txType}
-        onTabChange={handleTabChange}
+        txType={txType}
         categories={allCategories}
         accounts={allAccounts}
-        currentAccountId={account?.id ?? null}
-        onCategorySelect={handleCategorySelect}
-        onAccountSelect={handleTransferAccountSelect}
-        onDebtAccountSelect={handleDebtAccountSelect}
+        onFromAccountSelect={handleFromAccountSelect}
+        onFromIncomeCategorySelect={handleFromIncomeCategorySelect}
+        onBack={handleBack}
+      />
+    );
+  }
+
+  if (step === 2) {
+    return (
+      <Step2TO
+        txType={txType}
+        fromAccountId={account?.id ?? null}
+        categories={allCategories}
+        accounts={allAccounts}
+        onToExpenseCategorySelect={handleCategorySelect}
+        onToTransferAccountSelect={handleTransferAccountSelect}
+        onToDebtAccountSelect={handleDebtAccountSelect}
+        onToIncomeAccountSelect={handleToIncomeAccountSelect}
         onBack={handleBack}
       />
     );
@@ -1930,7 +2040,7 @@ export default function TransactionInput() {
 
   return (
     <div style={{ opacity: isSaving ? 0.6 : 1, pointerEvents: isSaving ? 'none' : undefined }}>
-      <Step2
+      <Step3
         txType={txType}
         account={account}
         toAccount={toAccount}

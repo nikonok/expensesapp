@@ -175,7 +175,7 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       savingsGoal: type === 'SAVINGS' && savingsGoal ? parseFloat(savingsGoal) : null,
       interestRateMonthly: type === 'DEBT' && debtSubtype === 'regular' && interestRateMonthly ? parseFloat(interestRateMonthly) / 100 : null,
       interestRateYearly: type === 'DEBT' && debtSubtype === 'regular' && interestRateYearly ? parseFloat(interestRateYearly) / 100 : null,
-      mortgageLoanAmount: type === 'DEBT' && debtSubtype === 'mortgage' && mortgageLoanAmount ? parseFloat(mortgageLoanAmount) : null,
+      mortgageLoanAmount: type === 'DEBT' && debtSubtype === 'mortgage' && debtOriginalAmount ? parseFloat(debtOriginalAmount) : null,
       mortgageStartDate: type === 'DEBT' && debtSubtype === 'mortgage' ? (mortgageStartDate || null) : null,
       mortgageTermYears: type === 'DEBT' && debtSubtype === 'mortgage' && mortgageTermYears ? parseInt(mortgageTermYears) : null,
       mortgageInterestRate: type === 'DEBT' && debtSubtype === 'mortgage' && mortgageInterestRate ? parseFloat(mortgageInterestRate) / 100 : null,
@@ -415,7 +415,7 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
               {/* Starting balance (new only) */}
               {!isEdit && (
                 <div style={sectionStyle}>
-                  <span style={labelStyle}>Starting Balance</span>
+                  <span style={labelStyle}>{type === 'DEBT' ? 'Current Balance (what you owe today)' : 'Starting Balance'}</span>
                   <button
                     onClick={() => setShowNumpad(true)}
                     style={{
@@ -513,7 +513,7 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
                       style={inputStyle}
                     />
                     <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--text-caption)', color: 'var(--color-text-disabled)' }}>
-                      Set to show a payoff progress bar
+                      {debtSubtype === 'mortgage' ? 'Original loan principal — used for payoff progress bar' : 'Set to show a payoff progress bar'}
                     </span>
                   </div>
 
@@ -636,18 +636,6 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
                   {/* Mortgage fields */}
                   {debtSubtype === 'mortgage' && (
                     <>
-                      <div style={sectionStyle}>
-                        <label htmlFor="mortgage-amount" style={labelStyle}>Loan Amount</label>
-                        <input
-                          id="mortgage-amount"
-                          type="number"
-                          value={mortgageLoanAmount}
-                          min="0"
-                          onChange={(e) => setMortgageLoanAmount(e.target.value)}
-                          placeholder="e.g. 250000"
-                          style={inputStyle}
-                        />
-                      </div>
                       <div style={sectionStyle}>
                         <label htmlFor="mortgage-start" style={labelStyle}>Start Date</label>
                         <input

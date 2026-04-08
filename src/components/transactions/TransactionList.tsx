@@ -159,6 +159,10 @@ export default function TransactionList() {
 
   // Find the partner side of a transfer
   function getTransferToAccount(tx: Transaction): Account | undefined {
+    // For debt payment OUT legs, toAccountId directly references the debt account
+    if (tx.toAccountId != null) {
+      return accountMap.get(tx.toAccountId);
+    }
     if (!tx.transferGroupId) return undefined;
     const partner = transactions.find(
       (t) =>
@@ -274,7 +278,7 @@ export default function TransactionList() {
       <div
         style={{
           position: 'sticky',
-          top: '56px',
+          top: 0,
           zIndex: 'var(--z-sticky)',
           background: 'var(--color-bg)',
           display: 'flex',

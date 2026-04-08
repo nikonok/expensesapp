@@ -101,7 +101,7 @@ export default function TransactionRow({
         cursor: 'pointer',
         userSelect: 'none',
         WebkitTapHighlightColor: 'transparent',
-        opacity: isDragging ? 0.95 : (isTransfer && !isDebtPmt) ? 0.5 : 1,
+        opacity: isDragging ? 0.95 : (isTransfer && !isDebtPmt && account.type !== 'DEBT') ? 0.5 : 1,
         transition: isDragging ? 'none' : 'background 120ms ease-out',
         borderBottom: '1px solid var(--color-border)',
         boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.5)' : 'none',
