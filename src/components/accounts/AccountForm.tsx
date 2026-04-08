@@ -40,6 +40,8 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
   const [mortgageStartDate, setMortgageStartDate] = useState('');
   const [mortgageTermYears, setMortgageTermYears] = useState('');
   const [mortgageInterestRate, setMortgageInterestRate] = useState('');
+  const [debtOriginalAmount, setDebtOriginalAmount] = useState('');
+  const [alreadyPaid, setAlreadyPaid] = useState('');
 
   const [debtSubtype, setDebtSubtype] = useState<'regular' | 'mortgage'>('regular');
 
@@ -77,6 +79,8 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       setMortgageStartDate(editAccount.mortgageStartDate ?? '');
       setMortgageTermYears(editAccount.mortgageTermYears != null ? String(editAccount.mortgageTermYears) : '');
       setMortgageInterestRate(editAccount.mortgageInterestRate != null ? String(editAccount.mortgageInterestRate * 100) : '');
+      setDebtOriginalAmount(editAccount.debtOriginalAmount != null ? String(editAccount.debtOriginalAmount) : '');
+      setAlreadyPaid('');
       const isMortgage =
         editAccount.mortgageLoanAmount != null ||
         editAccount.mortgageStartDate != null ||
@@ -99,6 +103,8 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       setMortgageStartDate('');
       setMortgageTermYears('');
       setMortgageInterestRate('');
+      setDebtOriginalAmount('');
+      setAlreadyPaid('');
       setDebtSubtype('regular');
     }
   }, [isOpen, editAccount, mainCurrency]);
@@ -138,6 +144,24 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
     }
   };
 
+  const recalcStartingBalance = (original: string, paid: string) => {
+    const o = parseFloat(original);
+    const p = parseFloat(paid);
+    if (!isNaN(o) && o > 0 && !isNaN(p) && p >= 0) {
+      setStartingBalance(String(Math.max(0, o - p)));
+    }
+  };
+
+  const handleOriginalAmountChange = (value: string) => {
+    setDebtOriginalAmount(value);
+    recalcStartingBalance(value, alreadyPaid);
+  };
+
+  const handleAlreadyPaidChange = (value: string) => {
+    setAlreadyPaid(value);
+    recalcStartingBalance(debtOriginalAmount, value);
+  };
+
   const validate = () => {
     const raw = {
       name: name.trim(),
@@ -155,6 +179,7 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       mortgageStartDate: type === 'DEBT' && debtSubtype === 'mortgage' ? (mortgageStartDate || null) : null,
       mortgageTermYears: type === 'DEBT' && debtSubtype === 'mortgage' && mortgageTermYears ? parseInt(mortgageTermYears) : null,
       mortgageInterestRate: type === 'DEBT' && debtSubtype === 'mortgage' && mortgageInterestRate ? parseFloat(mortgageInterestRate) / 100 : null,
+      debtOriginalAmount: type === 'DEBT' && debtOriginalAmount ? parseFloat(debtOriginalAmount) : null,
     };
     const result = accountSchema.safeParse(raw);
     if (!result.success) {
@@ -207,6 +232,7 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
           mortgageStartDate: data.mortgageStartDate ?? null,
           mortgageTermYears: data.mortgageTermYears ?? null,
           mortgageInterestRate: data.mortgageInterestRate ?? null,
+          debtOriginalAmount: data.debtOriginalAmount ?? null,
           updatedAt: now,
         });
       } else {
@@ -230,6 +256,7 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
           mortgageStartDate: data.mortgageStartDate ?? null,
           mortgageTermYears: data.mortgageTermYears ?? null,
           mortgageInterestRate: data.mortgageInterestRate ?? null,
+          debtOriginalAmount: data.debtOriginalAmount ?? null,
           createdAt: now,
           updatedAt: now,
         });
@@ -473,6 +500,42 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
               {/* Debt-specific */}
               {type === 'DEBT' && (
                 <>
+                  {/* Original amount for progress bar */}
+                  <div style={sectionStyle}>
+                    <label htmlFor="debt-original" style={labelStyle}>Original Amount (optional)</label>
+                    <input
+                      id="debt-original"
+                      type="number"
+                      value={debtOriginalAmount}
+                      min="0"
+                      onChange={(e) => handleOriginalAmountChange(e.target.value)}
+                      placeholder="e.g. 50000"
+                      style={inputStyle}
+                    />
+                    <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--text-caption)', color: 'var(--color-text-disabled)' }}>
+                      Set to show a payoff progress bar
+                    </span>
+                  </div>
+
+                  {/* Already Paid helper — create only, shown when original amount is set */}
+                  {!isEdit && debtOriginalAmount && (
+                    <div style={sectionStyle}>
+                      <label htmlFor="debt-already-paid" style={labelStyle}>Already Paid</label>
+                      <input
+                        id="debt-already-paid"
+                        type="number"
+                        value={alreadyPaid}
+                        min="0"
+                        onChange={(e) => handleAlreadyPaidChange(e.target.value)}
+                        placeholder="0"
+                        style={inputStyle}
+                      />
+                      <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--text-caption)', color: 'var(--color-text-disabled)' }}>
+                        Auto-fills starting balance as: original − already paid
+                      </span>
+                    </div>
+                  )}
+
                   {/* Debt subtype toggle */}
                   <div style={sectionStyle}>
                     <span style={labelStyle}>Debt Type</span>

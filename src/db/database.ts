@@ -33,4 +33,6 @@ db.version(2).stores({
   transactions: '++id, date, accountId, categoryId, type, isTrashed, [date+displayOrder], [accountId+date], transferGroupId, toAccountId',
 });
 
+db.version(3).stores({}); // added debtOriginalAmount to Account (non-indexed field, no schema change needed)
+
 export { db };

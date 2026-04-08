@@ -13,6 +13,10 @@ export default function AccountCard({ account, onPress }: AccountCardProps) {
   const isSavings = account.type === 'SAVINGS';
   const hasGoal = isSavings && account.savingsGoal != null && account.savingsGoal > 0;
   const progress = hasGoal ? Math.min(1, account.balance / account.savingsGoal!) : 0;
+  const hasDebtProgress = isDebt && account.debtOriginalAmount != null && account.debtOriginalAmount > 0;
+  const debtProgress = hasDebtProgress
+    ? Math.min(1, Math.max(0, (account.debtOriginalAmount! - account.balance) / account.debtOriginalAmount!))
+    : 0;
 
   const typeLabel = account.type === 'REGULAR' ? 'Regular'
     : account.type === 'DEBT' ? 'Debt'
@@ -134,6 +138,29 @@ export default function AccountCard({ account, onPress }: AccountCardProps) {
                 height: '100%',
                 width: `${progress * 100}%`,
                 background: 'var(--card-color)',
+                borderRadius: '9999px',
+                transition: 'width 300ms ease-out',
+              }}
+            />
+          </div>
+        )}
+
+        {/* Debt payoff progress bar */}
+        {hasDebtProgress && (
+          <div
+            style={{
+              marginTop: '4px',
+              height: '3px',
+              borderRadius: '9999px',
+              background: 'var(--color-border)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                width: `${debtProgress * 100}%`,
+                background: 'var(--color-expense)',
                 borderRadius: '9999px',
                 transition: 'width 300ms ease-out',
               }}

@@ -90,7 +90,8 @@ export default function TransactionRow({
         alignItems: 'center',
         gap: 'var(--space-3)',
         minHeight: '60px',
-        paddingBlock: 'var(--space-3)',
+        paddingTop: 'var(--space-3)',
+        paddingBottom: 'calc(var(--space-3) + 1px)',
         paddingInline: 'var(--space-4)',
         background: isDragging
           ? 'var(--color-surface-raised)'
@@ -180,6 +181,7 @@ export default function TransactionRow({
               fontFamily: '"DM Sans", sans-serif',
               fontWeight: 500,
               fontSize: 'var(--text-body)',
+              lineHeight: 1.2,
               color: 'var(--color-text)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -194,6 +196,7 @@ export default function TransactionRow({
                 fontFamily: '"DM Sans", sans-serif',
                 fontWeight: 400,
                 fontSize: 'var(--text-caption)',
+                lineHeight: 1.2,
                 color: 'var(--color-text-secondary)',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -247,7 +250,8 @@ export function TransactionRowSkeleton() {
         alignItems: 'center',
         gap: 'var(--space-3)',
         minHeight: '60px',
-        paddingBlock: 'var(--space-3)',
+        paddingTop: 'var(--space-3)',
+        paddingBottom: 'calc(var(--space-3) + 1px)',
         paddingInline: 'var(--space-4)',
         borderBottom: '1px solid var(--color-border)',
       }}

@@ -14,6 +14,7 @@ export const accountSchema = z.object({
   savingsInterestRate: z.number().min(0).max(1).nullable().optional(),
   interestRateMonthly: z.number().min(0).max(1).nullable().optional(),
   interestRateYearly: z.number().min(0).max(1).nullable().optional(),
+  debtOriginalAmount: z.number().positive().nullable().optional(),
   mortgageLoanAmount: z.number().positive().nullable().optional(),
   mortgageStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   mortgageTermYears: z.number().positive().int().nullable().optional(),

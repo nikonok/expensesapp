@@ -33,6 +33,10 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
   const isSavings = account.type === 'SAVINGS';
   const hasGoal = isSavings && account.savingsGoal != null && account.savingsGoal > 0;
   const progress = hasGoal ? Math.min(1, account.balance / account.savingsGoal!) : 0;
+  const hasDebtProgress = isDebt && account.debtOriginalAmount != null && account.debtOriginalAmount > 0;
+  const debtProgress = hasDebtProgress
+    ? Math.min(1, Math.max(0, (account.debtOriginalAmount! - account.balance) / account.debtOriginalAmount!))
+    : 0;
 
   const formatAmount = (v: number) =>
     new Intl.NumberFormat('en-US', {
@@ -216,6 +220,34 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
               </div>
               <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--text-caption)', color: 'var(--color-text-secondary)' }}>
                 {Math.round(progress * 100)}% of goal
+              </span>
+            </div>
+          )}
+
+          {/* Debt payoff progress */}
+          {hasDebtProgress && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--text-caption)', color: 'var(--color-text-secondary)' }}>
+                  Paid off
+                </span>
+                <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 'var(--text-caption)', color: 'var(--color-text-secondary)' }}>
+                  {formatAmount(account.debtOriginalAmount! - account.balance)} / {formatAmount(account.debtOriginalAmount!)}
+                </span>
+              </div>
+              <div style={{ height: '6px', borderRadius: '9999px', background: 'var(--color-border)', overflow: 'hidden' }}>
+                <div
+                  style={{
+                    height: '100%',
+                    width: `${debtProgress * 100}%`,
+                    background: 'var(--color-expense)',
+                    borderRadius: '9999px',
+                    transition: 'width 300ms ease-out',
+                  }}
+                />
+              </div>
+              <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--text-caption)', color: 'var(--color-text-secondary)' }}>
+                {Math.round(debtProgress * 100)}% paid off
               </span>
             </div>
           )}

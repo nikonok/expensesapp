@@ -25,7 +25,6 @@ import { useTranslation } from '@/hooks/use-translation';
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type TxTab = 'income' | 'expense' | 'transfer';
-type TransferStep = 'source' | 'dest';
 
 // ── Helper: icon renderer ──────────────────────────────────────────────────────
 
@@ -61,7 +60,7 @@ interface Step1Props {
   onTabChange: (t: TxTab) => void;
   categories: Category[];
   accounts: Account[];
-  transferStep: TransferStep;
+  currentAccountId: number | null;
   onCategorySelect: (cat: Category) => void;
   onAccountSelect: (acc: Account) => void;
   onDebtAccountSelect: (acc: Account) => void;
@@ -73,7 +72,7 @@ function Step1({
   onTabChange,
   categories,
   accounts,
-  transferStep,
+  currentAccountId,
   onCategorySelect,
   onAccountSelect,
   onDebtAccountSelect,
@@ -81,7 +80,7 @@ function Step1({
 }: Step1Props) {
   const { t } = useTranslation();
 
-  const tabs: TxTab[] = ['income', 'expense', 'transfer'];
+  const tabs: TxTab[] = ['income', 'expense'];
 
   return (
     <div
@@ -151,12 +150,7 @@ function Step1({
       >
         {tabs.map((tab) => {
           const isActive = activeTab === tab;
-          const color =
-            tab === 'income'
-              ? 'var(--color-income)'
-              : tab === 'expense'
-                ? 'var(--color-expense)'
-                : 'var(--color-transfer)';
+          const color = tab === 'income' ? 'var(--color-income)' : 'var(--color-expense)';
           return (
             <button
               key={tab}
@@ -175,37 +169,11 @@ function Step1({
                 transition: 'background 120ms, border-color 120ms, color 120ms',
               }}
             >
-              {tab === 'income'
-                ? t('transactions.tabs.income')
-                : tab === 'expense'
-                  ? t('transactions.tabs.expense')
-                  : t('transactions.tabs.transfer')}
+              {tab === 'income' ? t('transactions.tabs.income') : t('transactions.tabs.expense')}
             </button>
           );
         })}
       </div>
-
-      {/* Transfer step hint */}
-      {activeTab === 'transfer' && (
-        <div
-          style={{
-            paddingInline: 'var(--space-4)',
-            paddingTop: 'var(--space-3)',
-            flexShrink: 0,
-          }}
-        >
-          <span
-            style={{
-              fontSize: 'var(--text-caption)',
-              color: 'var(--color-text-secondary)',
-            }}
-          >
-            {transferStep === 'source'
-              ? t('transactions.fields.from') + ': ' + t('common.transfer')
-              : t('transactions.fields.to') + ': ' + t('common.transfer')}
-          </span>
-        </div>
-      )}
 
       {/* Scrollable list */}
       <div
@@ -221,48 +189,69 @@ function Step1({
           gap: 'var(--space-2)',
         }}
       >
-        {activeTab === 'transfer'
-          ? accounts.map((acc) => (
-              <AccountRow key={acc.id} account={acc} onPress={() => onAccountSelect(acc)} />
-            ))
-          : activeTab === 'income'
-            ? categories
-                .filter((c) => c.type === 'INCOME')
-                .map((cat) => (
-                  <CategoryRow key={cat.id} category={cat} onPress={() => onCategorySelect(cat)} />
-                ))
-            : (() => {
-                const debtAccounts = accounts.filter((a) => a.type === 'DEBT');
-                const expenseCategories = categories.filter((c) => c.type === 'EXPENSE');
-                return (
-                  <>
-                    {debtAccounts.length > 0 && (
-                      <>
-                        {debtAccounts.map((acc) => (
-                          <AccountRow
-                            key={acc.id}
-                            account={acc}
-                            chip="DEBT"
-                            onPress={() => onDebtAccountSelect(acc)}
-                          />
-                        ))}
-                        {expenseCategories.length > 0 && (
-                          <div
-                            style={{
-                              height: '1px',
-                              background: 'var(--color-border)',
-                              marginBlock: 'var(--space-1)',
-                            }}
-                          />
-                        )}
-                      </>
-                    )}
-                    {expenseCategories.map((cat) => (
-                      <CategoryRow key={cat.id} category={cat} onPress={() => onCategorySelect(cat)} />
-                    ))}
-                  </>
-                );
-              })()}
+        {activeTab === 'income'
+          ? categories
+              .filter((c) => c.type === 'INCOME')
+              .map((cat) => (
+                <CategoryRow key={cat.id} category={cat} onPress={() => onCategorySelect(cat)} />
+              ))
+          : (() => {
+              const debtAccounts = accounts.filter((a) => a.type === 'DEBT');
+              const transferAccounts = accounts.filter(
+                (a) => a.type !== 'DEBT' && a.id !== currentAccountId,
+              );
+              const expenseCategories = categories.filter((c) => c.type === 'EXPENSE');
+              return (
+                <>
+                  {debtAccounts.length > 0 && (
+                    <>
+                      {debtAccounts.map((acc) => (
+                        <AccountRow
+                          key={acc.id}
+                          account={acc}
+                          chip="DEBT"
+                          onPress={() => onDebtAccountSelect(acc)}
+                        />
+                      ))}
+                      {(transferAccounts.length > 0 || expenseCategories.length > 0) && (
+                        <div
+                          style={{
+                            height: '1px',
+                            background: 'var(--color-border)',
+                            marginBlock: 'var(--space-1)',
+                          }}
+                        />
+                      )}
+                    </>
+                  )}
+                  {transferAccounts.length > 0 && (
+                    <>
+                      {transferAccounts.map((acc) => (
+                        <AccountRow
+                          key={acc.id}
+                          account={acc}
+                          chip="TRANSFER"
+                          chipColor="var(--color-transfer)"
+                          onPress={() => onAccountSelect(acc)}
+                        />
+                      ))}
+                      {expenseCategories.length > 0 && (
+                        <div
+                          style={{
+                            height: '1px',
+                            background: 'var(--color-border)',
+                            marginBlock: 'var(--space-1)',
+                          }}
+                        />
+                      )}
+                    </>
+                  )}
+                  {expenseCategories.map((cat) => (
+                    <CategoryRow key={cat.id} category={cat} onPress={() => onCategorySelect(cat)} />
+                  ))}
+                </>
+              );
+            })()}
       </div>
     </div>
   );
@@ -305,7 +294,7 @@ function CategoryRow({ category, onPress }: { category: Category; onPress: () =>
   );
 }
 
-function AccountRow({ account, onPress, chip }: { account: Account; onPress: () => void; chip?: string }) {
+function AccountRow({ account, onPress, chip, chipColor }: { account: Account; onPress: () => void; chip?: string; chipColor?: string }) {
   return (
     <button
       onClick={onPress}
@@ -358,9 +347,9 @@ function AccountRow({ account, onPress, chip }: { account: Account; onPress: () 
             fontFamily: '"DM Sans", sans-serif',
             fontSize: 'var(--text-caption)',
             fontWeight: 500,
-            color: 'var(--color-expense)',
-            background: 'oklch(62% 0.28 18 / 12%)',
-            border: '1px solid oklch(62% 0.28 18 / 30%)',
+            color: chipColor ?? 'var(--color-expense)',
+            background: `color-mix(in oklch, ${chipColor ?? 'var(--color-expense)'} 12%, transparent)`,
+            border: `1px solid color-mix(in oklch, ${chipColor ?? 'var(--color-expense)'} 30%, transparent)`,
             borderRadius: 'var(--radius-chip)',
             padding: '2px 8px',
             flexShrink: 0,
@@ -1338,10 +1327,9 @@ export default function TransactionInput() {
   const [step, setStep] = useState<1 | 2>(isEdit ? 2 : 1);
   const [txType, setTxType] = useState<TxTab>(() => {
     const qType = searchParams.get('type');
-    if (qType === 'income' || qType === 'expense' || qType === 'transfer') return qType;
+    if (qType === 'income' || qType === 'expense') return qType;
     return 'expense';
   });
-  const [transferStep, setTransferStep] = useState<TransferStep>('source');
   const [paymentType, setPaymentType] = useState<'regular' | 'overpayment'>('regular');
 
   // Detail form state
@@ -1598,26 +1586,27 @@ export default function TransactionInput() {
     [],
   );
 
-  const handleAccountSelectTransfer = useCallback(
+  const handleTransferAccountSelect = useCallback(
     (acc: Account) => {
-      if (transferStep === 'source') {
-        setAccount(acc);
-        setTransferStep('dest');
-      } else {
-        setToAccount(acc);
-        if (!pushedHistoryRef.current) {
-          history.pushState(null, '', window.location.href);
-          pushedHistoryRef.current = true;
-        }
-        setStep(2);
+      if (!account) return;
+      if (account.id === acc.id) {
+        showToast(t('errors.sameAccount'), 'error');
+        return;
       }
+      setToAccount(acc);
+      setCategory(null);
+      setTxType('transfer');
+      if (!pushedHistoryRef.current) {
+        history.pushState(null, '', window.location.href);
+        pushedHistoryRef.current = true;
+      }
+      setStep(2);
     },
-    [transferStep],
+    [account, showToast, t],
   );
 
   const handleTabChange = useCallback((tab: TxTab) => {
     setTxType(tab);
-    setTransferStep('source');
   }, []);
 
   const handleBack = useCallback(() => {
@@ -1926,9 +1915,9 @@ export default function TransactionInput() {
         onTabChange={handleTabChange}
         categories={allCategories}
         accounts={allAccounts}
-        transferStep={transferStep}
+        currentAccountId={account?.id ?? null}
         onCategorySelect={handleCategorySelect}
-        onAccountSelect={handleAccountSelectTransfer}
+        onAccountSelect={handleTransferAccountSelect}
         onDebtAccountSelect={handleDebtAccountSelect}
         onBack={handleBack}
       />
