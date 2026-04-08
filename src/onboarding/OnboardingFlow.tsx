@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
+import { ChevronLeft } from 'lucide-react';
 import { CurrencyPicker } from '../components/shared/CurrencyPicker';
 import { Numpad } from '../components/shared/Numpad';
 import { getLucideIcon } from '../components/shared/IconPicker';
@@ -26,28 +27,53 @@ function detectLocaleCurrency(): string {
 
 // ── Progress dots ──────────────────────────────────────────────────────────────
 
-function ProgressDots({ current }: { current: number }) {
+function ProgressDots({ current, onBack }: { current: number; onBack?: () => void }) {
   return (
     <div
       style={{
         display: 'flex',
-        gap: 'var(--space-2)',
-        justifyContent: 'center',
+        alignItems: 'center',
         paddingTop: 'var(--space-4)',
+        paddingInline: 'var(--space-2)',
       }}
     >
-      {Array.from({ length: TOTAL_STEPS }, (_, i) => (
-        <div
-          key={i}
-          style={{
-            width: i === current ? '20px' : '8px',
-            height: '8px',
-            borderRadius: '4px',
-            background: i === current ? 'var(--color-primary)' : 'var(--color-border-strong)',
-            transition: 'width 200ms ease-out, background 200ms ease-out',
-          }}
-        />
-      ))}
+      <div style={{ minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {onBack && (
+          <button
+            onClick={onBack}
+            aria-label="Back"
+            style={{
+              minWidth: '44px',
+              minHeight: '44px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--color-text-secondary)',
+              padding: 0,
+            }}
+          >
+            <ChevronLeft size={20} strokeWidth={2} />
+          </button>
+        )}
+      </div>
+      <div style={{ flex: 1, display: 'flex', gap: 'var(--space-2)', justifyContent: 'center' }}>
+        {Array.from({ length: TOTAL_STEPS }, (_, i) => (
+          <div
+            key={i}
+            style={{
+              width: i === current ? '20px' : '8px',
+              height: '8px',
+              borderRadius: '4px',
+              background: i === current ? 'var(--color-primary)' : 'var(--color-border-strong)',
+              transition: 'width 200ms ease-out, background 200ms ease-out',
+            }}
+          />
+        ))}
+      </div>
+      <div style={{ minWidth: '44px' }} />
     </div>
   );
 }
@@ -195,7 +221,7 @@ function StepCurrency({
           {t('onboarding.currency.subtitle')}
         </p>
       </div>
-      <div style={{ flex: 1, overflow: 'hidden' }}>
+      <div style={{ flex: 1 }}>
         <CurrencyPicker value={currency} onChange={onChange} />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', paddingTop: 'var(--space-4)' }}>
@@ -509,7 +535,7 @@ function StepComplete({
 
 // ── Slide container ────────────────────────────────────────────────────────────
 
-function SlideContainer({ step, children }: { step: number; children: React.ReactNode }) {
+function SlideContainer({ step, direction, children }: { step: number; direction: 'forward' | 'back'; children: React.ReactNode }) {
   return (
     <div
       key={step}
@@ -517,7 +543,7 @@ function SlideContainer({ step, children }: { step: number; children: React.Reac
         flex: 1,
         display: 'flex',
         flexDirection: 'column',
-        animation: 'onboarding-slide-in 250ms ease-out',
+        animation: `${direction === 'back' ? 'onboarding-slide-back' : 'onboarding-slide-in'} 250ms ease-out`,
         overflow: 'hidden',
       }}
     >
@@ -534,6 +560,7 @@ export default function OnboardingFlow() {
   const settingsStore = useSettingsStore();
 
   const [step, setStep] = useState(0);
+  const [direction, setDirection] = useState<'forward' | 'back'>('forward');
   const [currency, setCurrency] = useState<string>(() => detectLocaleCurrency());
   const [accountName, setAccountName] = useState('Cash');
   const [numpadValue, setNumpadValue] = useState('');
@@ -550,7 +577,10 @@ export default function OnboardingFlow() {
     setStep(3);
   }, []);
 
-  const goToStep = (n: number) => setStep(n);
+  const goToStep = (n: number) => {
+    setDirection(n > step ? 'forward' : 'back');
+    setStep(n);
+  };
   const skipToComplete = () => { void handleFinish(true); };
 
   const handleToggleCategory = (i: number) => {
@@ -630,6 +660,10 @@ export default function OnboardingFlow() {
           from { opacity: 0; transform: translateX(32px); }
           to   { opacity: 1; transform: translateX(0); }
         }
+        @keyframes onboarding-slide-back {
+          from { opacity: 0; transform: translateX(-32px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
       `}</style>
       <div
         style={{
@@ -642,9 +676,9 @@ export default function OnboardingFlow() {
           padding: 'env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)',
         }}
       >
-        <ProgressDots current={step} />
+        <ProgressDots current={step} onBack={step > 0 ? () => goToStep(step - 1) : undefined} />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', paddingBottom: 'var(--space-6)' }}>
-          <SlideContainer step={step}>
+          <SlideContainer step={step} direction={direction}>
             {step === 0 && (
               <StepWelcome onNext={() => goToStep(1)} onSkip={skipToComplete} />
             )}

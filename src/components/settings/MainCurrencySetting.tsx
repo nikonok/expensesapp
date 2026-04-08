@@ -158,7 +158,7 @@ export function MainCurrencySetting() {
         title={t('settings.mainCurrency.label')}
       >
         <div style={{ paddingInline: 'var(--space-4)', paddingBottom: 'var(--space-6)' }}>
-          <CurrencyPicker value={mainCurrency} onChange={handlePickerChange} />
+          <CurrencyPicker value={mainCurrency} onChange={handlePickerChange} variant="inline" />
         </div>
       </BottomSheet>
 

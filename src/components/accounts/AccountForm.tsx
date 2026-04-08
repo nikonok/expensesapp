@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Lock } from 'lucide-react';
 import { db } from '../../db/database';
 import type { Account, AccountType } from '../../db/models';
 import { accountSchema } from '../../utils/validation';
@@ -40,6 +41,8 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
   const [mortgageTermYears, setMortgageTermYears] = useState('');
   const [mortgageInterestRate, setMortgageInterestRate] = useState('');
 
+  const [debtSubtype, setDebtSubtype] = useState<'regular' | 'mortgage'>('regular');
+
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showNumpad, setShowNumpad] = useState(false);
   const [numpadValue, setNumpadValue] = useState('');
@@ -74,6 +77,12 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       setMortgageStartDate(editAccount.mortgageStartDate ?? '');
       setMortgageTermYears(editAccount.mortgageTermYears != null ? String(editAccount.mortgageTermYears) : '');
       setMortgageInterestRate(editAccount.mortgageInterestRate != null ? String(editAccount.mortgageInterestRate * 100) : '');
+      const isMortgage =
+        editAccount.mortgageLoanAmount != null ||
+        editAccount.mortgageStartDate != null ||
+        editAccount.mortgageTermYears != null ||
+        editAccount.mortgageInterestRate != null;
+      setDebtSubtype(isMortgage ? 'mortgage' : 'regular');
     } else {
       setName('');
       setType('REGULAR');
@@ -90,6 +99,7 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       setMortgageStartDate('');
       setMortgageTermYears('');
       setMortgageInterestRate('');
+      setDebtSubtype('regular');
     }
   }, [isOpen, editAccount, mainCurrency]);
 
@@ -113,6 +123,21 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
     setShowCurrencyWarn(false);
   };
 
+  const handleDebtSubtypeChange = (sub: 'regular' | 'mortgage') => {
+    if (sub === debtSubtype) return;
+    setDebtSubtype(sub);
+    setErrors({});
+    if (sub === 'regular') {
+      setMortgageLoanAmount('');
+      setMortgageStartDate('');
+      setMortgageTermYears('');
+      setMortgageInterestRate('');
+    } else {
+      setInterestRateYearly('');
+      setInterestRateMonthly('');
+    }
+  };
+
   const validate = () => {
     const raw = {
       name: name.trim(),
@@ -124,12 +149,12 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       startingBalance: parseFloat(startingBalance) || 0,
       includeInTotal,
       savingsGoal: type === 'SAVINGS' && savingsGoal ? parseFloat(savingsGoal) : null,
-      interestRateMonthly: type === 'DEBT' && interestRateMonthly ? parseFloat(interestRateMonthly) / 100 : null,
-      interestRateYearly: type === 'DEBT' && interestRateYearly ? parseFloat(interestRateYearly) / 100 : null,
-      mortgageLoanAmount: type === 'DEBT' && mortgageLoanAmount ? parseFloat(mortgageLoanAmount) : null,
-      mortgageStartDate: type === 'DEBT' ? (mortgageStartDate || null) : null,
-      mortgageTermYears: type === 'DEBT' && mortgageTermYears ? parseInt(mortgageTermYears) : null,
-      mortgageInterestRate: type === 'DEBT' && mortgageInterestRate ? parseFloat(mortgageInterestRate) / 100 : null,
+      interestRateMonthly: type === 'DEBT' && debtSubtype === 'regular' && interestRateMonthly ? parseFloat(interestRateMonthly) / 100 : null,
+      interestRateYearly: type === 'DEBT' && debtSubtype === 'regular' && interestRateYearly ? parseFloat(interestRateYearly) / 100 : null,
+      mortgageLoanAmount: type === 'DEBT' && debtSubtype === 'mortgage' && mortgageLoanAmount ? parseFloat(mortgageLoanAmount) : null,
+      mortgageStartDate: type === 'DEBT' && debtSubtype === 'mortgage' ? (mortgageStartDate || null) : null,
+      mortgageTermYears: type === 'DEBT' && debtSubtype === 'mortgage' && mortgageTermYears ? parseInt(mortgageTermYears) : null,
+      mortgageInterestRate: type === 'DEBT' && debtSubtype === 'mortgage' && mortgageInterestRate ? parseFloat(mortgageInterestRate) / 100 : null,
     };
     const result = accountSchema.safeParse(raw);
     if (!result.success) {
@@ -141,6 +166,20 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       setErrors(errs);
       return null;
     }
+
+    if (type === 'DEBT' && debtSubtype === 'regular') {
+      const hasYearly = !!interestRateYearly;
+      const hasMonthly = !!interestRateMonthly;
+      if (hasYearly && hasMonthly) {
+        setErrors({ interestRateYearly: 'Enter yearly or monthly rate — not both' });
+        return null;
+      }
+      if (!hasYearly && !hasMonthly) {
+        setErrors({ interestRateYearly: 'Enter a yearly or monthly interest rate' });
+        return null;
+      }
+    }
+
     setErrors({});
     return raw;
   };
@@ -277,14 +316,37 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
                         fontFamily: '"DM Sans", sans-serif',
                         fontWeight: 500,
                         fontSize: 'var(--text-caption)',
-                        opacity: isEdit ? 0.7 : 1,
+                        opacity: isEdit ? (type === t ? 0.85 : 0.4) : 1,
                         transition: 'all 100ms ease-out',
+                        position: 'relative',
                       }}
                     >
                       {t === 'REGULAR' ? 'Regular' : t === 'DEBT' ? 'Debt' : 'Savings'}
+                      {isEdit && type === t && (
+                        <Lock
+                          size={14}
+                          style={{
+                            position: 'absolute',
+                            top: '4px',
+                            right: '4px',
+                            color: 'var(--color-text-disabled)',
+                          }}
+                        />
+                      )}
                     </button>
                   ))}
                 </div>
+                {isEdit && (
+                  <span
+                    style={{
+                      fontFamily: '"DM Sans", sans-serif',
+                      fontSize: 'var(--text-caption)',
+                      color: 'var(--color-text-disabled)',
+                    }}
+                  >
+                    Account type cannot be changed after creation
+                  </span>
+                )}
               </div>
 
               {/* Name */}
@@ -411,87 +473,158 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
               {/* Debt-specific */}
               {type === 'DEBT' && (
                 <>
+                  {/* Debt subtype toggle */}
                   <div style={sectionStyle}>
-                    <label htmlFor="interest-yearly" style={labelStyle}>Yearly Interest Rate (%)</label>
-                    <input
-                      id="interest-yearly"
-                      type="number"
-                      value={interestRateYearly}
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      onChange={(e) => setInterestRateYearly(e.target.value)}
-                      placeholder="e.g. 5.5"
-                      style={inputStyle}
-                    />
+                    <span style={labelStyle}>Debt Type</span>
+                    <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                      {(['regular', 'mortgage'] as const).map((sub) => (
+                        <button
+                          key={sub}
+                          onClick={() => handleDebtSubtypeChange(sub)}
+                          style={{
+                            flex: 1,
+                            minHeight: '44px',
+                            borderRadius: 'var(--radius-btn)',
+                            background: debtSubtype === sub ? 'var(--color-primary-dim)' : 'var(--color-surface-raised)',
+                            color: debtSubtype === sub ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                            border: debtSubtype === sub ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                            cursor: 'pointer',
+                            fontFamily: '"DM Sans", sans-serif',
+                            fontWeight: 500,
+                            fontSize: 'var(--text-caption)',
+                            transition: 'all 100ms ease-out',
+                          }}
+                        >
+                          {sub === 'regular' ? 'Regular Debt' : 'Mortgage'}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div style={sectionStyle}>
-                    <label htmlFor="interest-monthly" style={labelStyle}>Monthly Interest Rate (%)</label>
-                    <input
-                      id="interest-monthly"
-                      type="number"
-                      value={interestRateMonthly}
-                      min="0"
-                      max="100"
-                      step="0.001"
-                      onChange={(e) => setInterestRateMonthly(e.target.value)}
-                      placeholder="e.g. 0.45"
-                      style={inputStyle}
-                    />
-                  </div>
-                  <div style={sectionStyle}>
-                    <label htmlFor="mortgage-amount" style={labelStyle}>Mortgage Loan Amount</label>
-                    <input
-                      id="mortgage-amount"
-                      type="number"
-                      value={mortgageLoanAmount}
-                      min="0"
-                      onChange={(e) => setMortgageLoanAmount(e.target.value)}
-                      placeholder="e.g. 250000"
-                      style={inputStyle}
-                    />
-                  </div>
-                  <div style={sectionStyle}>
-                    <label htmlFor="mortgage-start" style={labelStyle}>Mortgage Start Date</label>
-                    <input
-                      id="mortgage-start"
-                      type="date"
-                      value={mortgageStartDate}
-                      onChange={(e) => setMortgageStartDate(e.target.value)}
-                      style={{
-                        ...inputStyle,
-                        colorScheme: 'dark',
-                      }}
-                    />
-                  </div>
-                  <div style={sectionStyle}>
-                    <label htmlFor="mortgage-term" style={labelStyle}>Mortgage Term (years)</label>
-                    <input
-                      id="mortgage-term"
-                      type="number"
-                      value={mortgageTermYears}
-                      min="1"
-                      max="50"
-                      step="1"
-                      onChange={(e) => setMortgageTermYears(e.target.value)}
-                      placeholder="e.g. 25"
-                      style={inputStyle}
-                    />
-                  </div>
-                  <div style={sectionStyle}>
-                    <label htmlFor="mortgage-rate" style={labelStyle}>Mortgage Interest Rate (%)</label>
-                    <input
-                      id="mortgage-rate"
-                      type="number"
-                      value={mortgageInterestRate}
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      onChange={(e) => setMortgageInterestRate(e.target.value)}
-                      placeholder="e.g. 3.25"
-                      style={inputStyle}
-                    />
-                  </div>
+
+                  {/* Regular debt fields */}
+                  {debtSubtype === 'regular' && (
+                    <>
+                      <span
+                        style={{
+                          fontFamily: '"DM Sans", sans-serif',
+                          fontSize: 'var(--text-caption)',
+                          color: 'var(--color-text-disabled)',
+                        }}
+                      >
+                        Enter yearly OR monthly interest rate — at least one is required, not both
+                      </span>
+                      <div style={sectionStyle}>
+                        <label htmlFor="interest-yearly" style={labelStyle}>Yearly Interest Rate (%)</label>
+                        <input
+                          id="interest-yearly"
+                          type="number"
+                          value={interestRateYearly}
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          onChange={(e) => setInterestRateYearly(e.target.value)}
+                          placeholder="e.g. 5.5"
+                          style={{
+                            ...inputStyle,
+                            borderColor: errors.interestRateYearly ? 'var(--color-expense)' : 'var(--color-border)',
+                          }}
+                        />
+                        {errors.interestRateYearly && <span style={errorStyle}>{errors.interestRateYearly}</span>}
+                      </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 'var(--space-3)',
+                        }}
+                      >
+                        <div style={{ flex: 1, height: '1px', background: 'var(--color-border)' }} />
+                        <span
+                          style={{
+                            fontFamily: '"DM Sans", sans-serif',
+                            fontSize: 'var(--text-caption)',
+                            color: 'var(--color-text-disabled)',
+                            fontWeight: 500,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.06em',
+                          }}
+                        >
+                          or
+                        </span>
+                        <div style={{ flex: 1, height: '1px', background: 'var(--color-border)' }} />
+                      </div>
+                      <div style={sectionStyle}>
+                        <label htmlFor="interest-monthly" style={labelStyle}>Monthly Interest Rate (%)</label>
+                        <input
+                          id="interest-monthly"
+                          type="number"
+                          value={interestRateMonthly}
+                          min="0"
+                          max="100"
+                          step="0.001"
+                          onChange={(e) => setInterestRateMonthly(e.target.value)}
+                          placeholder="e.g. 0.45"
+                          style={inputStyle}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Mortgage fields */}
+                  {debtSubtype === 'mortgage' && (
+                    <>
+                      <div style={sectionStyle}>
+                        <label htmlFor="mortgage-amount" style={labelStyle}>Loan Amount</label>
+                        <input
+                          id="mortgage-amount"
+                          type="number"
+                          value={mortgageLoanAmount}
+                          min="0"
+                          onChange={(e) => setMortgageLoanAmount(e.target.value)}
+                          placeholder="e.g. 250000"
+                          style={inputStyle}
+                        />
+                      </div>
+                      <div style={sectionStyle}>
+                        <label htmlFor="mortgage-start" style={labelStyle}>Start Date</label>
+                        <input
+                          id="mortgage-start"
+                          type="date"
+                          value={mortgageStartDate}
+                          onChange={(e) => setMortgageStartDate(e.target.value)}
+                          style={{ ...inputStyle, colorScheme: 'dark' }}
+                        />
+                      </div>
+                      <div style={sectionStyle}>
+                        <label htmlFor="mortgage-term" style={labelStyle}>Term (years)</label>
+                        <input
+                          id="mortgage-term"
+                          type="number"
+                          value={mortgageTermYears}
+                          min="1"
+                          max="50"
+                          step="1"
+                          onChange={(e) => setMortgageTermYears(e.target.value)}
+                          placeholder="e.g. 25"
+                          style={inputStyle}
+                        />
+                      </div>
+                      <div style={sectionStyle}>
+                        <label htmlFor="mortgage-rate" style={labelStyle}>Annual Interest Rate (%)</label>
+                        <input
+                          id="mortgage-rate"
+                          type="number"
+                          value={mortgageInterestRate}
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          onChange={(e) => setMortgageInterestRate(e.target.value)}
+                          placeholder="e.g. 3.25"
+                          style={inputStyle}
+                        />
+                      </div>
+                    </>
+                  )}
                 </>
               )}
 
