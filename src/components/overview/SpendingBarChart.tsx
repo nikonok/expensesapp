@@ -25,6 +25,7 @@ import {
 import { autoScaleChartBuckets } from '../../utils/date-utils';
 import { formatAmount } from '../../utils/currency-utils';
 import type { Transaction } from '../../db/models';
+import { isExpenseForReporting } from '../../utils/transaction-utils';
 
 interface SpendingBarChartProps {
   transactions: Transaction[];
@@ -54,7 +55,7 @@ function buildBuckets(transactions: Transaction[], start: Date, end: Date, scale
       void _;
     }
     for (const tx of transactions) {
-      if (tx.type !== 'EXPENSE') continue;
+      if (!isExpenseForReporting(tx)) continue;
       const txDate = new Date(tx.timestamp);
       const h = txDate.getHours();
       if (h >= 0 && h < 24) {
@@ -71,7 +72,7 @@ function buildBuckets(transactions: Transaction[], start: Date, end: Date, scale
       cursor = addDays(cursor, 1);
     }
     for (const tx of transactions) {
-      if (tx.type !== 'EXPENSE') continue;
+      if (!isExpenseForReporting(tx)) continue;
       const txDay = startOfDay(new Date(tx.date + 'T00:00:00'));
       const dayStart2 = startOfDay(start);
       const diffMs = txDay.getTime() - dayStart2.getTime();
@@ -100,7 +101,7 @@ function buildBuckets(transactions: Transaction[], start: Date, end: Date, scale
     }
 
     for (const tx of transactions) {
-      if (tx.type !== 'EXPENSE') continue;
+      if (!isExpenseForReporting(tx)) continue;
       const txDay = new Date(tx.date + 'T00:00:00');
       for (let i = 0; i < weekCursors.length; i++) {
         const wStart = weekCursors[i];
@@ -130,7 +131,7 @@ function buildBuckets(transactions: Transaction[], start: Date, end: Date, scale
     }
 
     for (const tx of transactions) {
-      if (tx.type !== 'EXPENSE') continue;
+      if (!isExpenseForReporting(tx)) continue;
       const txDay = new Date(tx.date + 'T00:00:00');
       for (let i = 0; i < monthCursors.length; i++) {
         const mStart = monthCursors[i];

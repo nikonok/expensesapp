@@ -60,12 +60,16 @@ async function exportTransactions(
 
       if (outTx) {
         const account = accounts.find((a) => a.id === outTx.accountId);
+        const debtAccount = outTx.toAccountId != null
+          ? accounts.find((a) => a.id === outTx.toAccountId)
+          : null;
+        const categoryLabel = debtAccount ? debtAccount.name : 'Transfer';
         dataRows.push([
           sanitizeCell(formatDate(outTx.date)),
           sanitizeCell(outTx.note ?? ''),
           '',
           outTx.amountMainCurrency,
-          'Transfer',
+          sanitizeCell(categoryLabel),
           sanitizeCell(account?.name ?? ''),
         ] as (string | number)[]);
       }

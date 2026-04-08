@@ -68,9 +68,15 @@ describe("Numpad", () => {
     expect(onSave).toHaveBeenCalledWith(52);
   });
 
-  it("does not call onSave when expression is invalid", () => {
+  it("pressing save with empty value calls onSave(0) to allow zero-balance accounts", () => {
     renderNumpad("");
     fireEvent.click(screen.getByRole("button", { name: "save" }));
-    expect(onSave).not.toHaveBeenCalled();
+    expect(onSave).toHaveBeenCalledWith(0);
+  });
+
+  it("pressing save with value '0' calls onSave(0)", () => {
+    renderNumpad("0");
+    fireEvent.click(screen.getByRole("button", { name: "save" }));
+    expect(onSave).toHaveBeenCalledWith(0);
   });
 });

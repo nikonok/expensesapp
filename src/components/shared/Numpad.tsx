@@ -109,6 +109,10 @@ export function Numpad({
   };
 
   const handleSave = () => {
+    if (value === '' || value === '0') {
+      onSave(0);
+      return;
+    }
     const result = evaluateExpression(value);
     if (result === null || isNaN(result)) return;
     onSave(result);

@@ -27,6 +27,7 @@ import { db } from '../../db/database';
 import PeriodFilter from '../shared/PeriodFilter';
 import { EmptyState } from '../shared/EmptyState';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { useToast } from '../shared/Toast';
 
 import DonutChart from './DonutChart';
 import CategoryCard from './CategoryCard';
@@ -34,9 +35,11 @@ import CategoryForm from './CategoryForm';
 
 import type { Category } from '../../db/models';
 import { getUTCISOString, parsePeriodFilter } from '../../utils/date-utils';
+import { isExpenseForReporting } from '../../utils/transaction-utils';
 
 export default function CategoryList() {
   const navigate = useNavigate();
+  const { show: showToast } = useToast();
 
   const {
     categoriesFilter,
@@ -83,7 +86,7 @@ export default function CategoryList() {
   const totalExpense = useMemo(
     () =>
       allTransactions
-        .filter((t) => t.type === 'EXPENSE')
+        .filter(isExpenseForReporting)
         .reduce((sum, t) => sum + t.amountMainCurrency, 0),
     [allTransactions],
   );
@@ -113,11 +116,16 @@ export default function CategoryList() {
 
   async function handleConfirmTrash() {
     if (confirmTrash === null) return;
-    await db.categories.update(confirmTrash, {
-      isTrashed: true,
-      updatedAt: getUTCISOString(),
-    });
-    setConfirmTrash(null);
+    try {
+      await db.categories.update(confirmTrash, {
+        isTrashed: true,
+        updatedAt: getUTCISOString(),
+      });
+      setConfirmTrash(null);
+    } catch (err) {
+      console.error('Failed to trash category:', err);
+      showToast('Failed to move category to trash', 'error');
+    }
   }
 
   function handleCardClick(category: Category) {
@@ -162,7 +170,12 @@ export default function CategoryList() {
       displayOrder: index * 10,
     }));
 
-    await db.categories.bulkPut(updates);
+    try {
+      await db.categories.bulkPut(updates);
+    } catch (err) {
+      console.error('Failed to save category order:', err);
+      showToast('Failed to save order', 'error');
+    }
   }
 
   const confirmCategory = confirmTrash !== null

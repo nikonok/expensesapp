@@ -39,6 +39,9 @@ export const transactionSchema = z.object({
   note: z.string().max(255).default(''),
   transferGroupId: z.string().uuid().nullable().optional(),
   transferDirection: z.enum(['OUT', 'IN']).nullable().optional(),
+  toAccountId: z.number().int().positive().nullable().optional(),
+  interestAmount: z.number().finite().nullable().optional(),
+  principalAmount: z.number().finite().nullable().optional(),
 });
 
 export const budgetSchema = z

@@ -15,6 +15,7 @@ import { evaluateExpression } from '@/services/math-parser';
 import { format, parseISO } from 'date-fns';
 import { getLocalDateString } from '@/utils/date-utils';
 import { getLucideIcon } from '@/components/shared/IconPicker';
+import { getMonthlyRate, calculatePaymentSplit } from '@/services/debt-payment.service';
 import { CalendarPicker } from '@/components/shared/CalendarPicker';
 import { Numpad } from '@/components/shared/Numpad';
 import { ComingSoonStub } from '@/components/shared/ComingSoonStub';
@@ -63,6 +64,7 @@ interface Step1Props {
   transferStep: TransferStep;
   onCategorySelect: (cat: Category) => void;
   onAccountSelect: (acc: Account) => void;
+  onDebtAccountSelect: (acc: Account) => void;
   onBack: () => void;
 }
 
@@ -74,6 +76,7 @@ function Step1({
   transferStep,
   onCategorySelect,
   onAccountSelect,
+  onDebtAccountSelect,
   onBack,
 }: Step1Props) {
   const { t } = useTranslation();
@@ -218,17 +221,48 @@ function Step1({
           gap: 'var(--space-2)',
         }}
       >
-        {activeTab !== 'transfer'
-          ? categories
-              .filter((c) =>
-                activeTab === 'income' ? c.type === 'INCOME' : c.type === 'EXPENSE',
-              )
-              .map((cat) => (
-                <CategoryRow key={cat.id} category={cat} onPress={() => onCategorySelect(cat)} />
-              ))
-          : accounts.map((acc) => (
+        {activeTab === 'transfer'
+          ? accounts.map((acc) => (
               <AccountRow key={acc.id} account={acc} onPress={() => onAccountSelect(acc)} />
-            ))}
+            ))
+          : activeTab === 'income'
+            ? categories
+                .filter((c) => c.type === 'INCOME')
+                .map((cat) => (
+                  <CategoryRow key={cat.id} category={cat} onPress={() => onCategorySelect(cat)} />
+                ))
+            : (() => {
+                const debtAccounts = accounts.filter((a) => a.type === 'DEBT');
+                const expenseCategories = categories.filter((c) => c.type === 'EXPENSE');
+                return (
+                  <>
+                    {debtAccounts.length > 0 && (
+                      <>
+                        {debtAccounts.map((acc) => (
+                          <AccountRow
+                            key={acc.id}
+                            account={acc}
+                            chip="DEBT"
+                            onPress={() => onDebtAccountSelect(acc)}
+                          />
+                        ))}
+                        {expenseCategories.length > 0 && (
+                          <div
+                            style={{
+                              height: '1px',
+                              background: 'var(--color-border)',
+                              marginBlock: 'var(--space-1)',
+                            }}
+                          />
+                        )}
+                      </>
+                    )}
+                    {expenseCategories.map((cat) => (
+                      <CategoryRow key={cat.id} category={cat} onPress={() => onCategorySelect(cat)} />
+                    ))}
+                  </>
+                );
+              })()}
       </div>
     </div>
   );
@@ -271,7 +305,7 @@ function CategoryRow({ category, onPress }: { category: Category; onPress: () =>
   );
 }
 
-function AccountRow({ account, onPress }: { account: Account; onPress: () => void }) {
+function AccountRow({ account, onPress, chip }: { account: Account; onPress: () => void; chip?: string }) {
   return (
     <button
       onClick={onPress}
@@ -318,6 +352,23 @@ function AccountRow({ account, onPress }: { account: Account; onPress: () => voi
           {account.currency}
         </div>
       </div>
+      {chip && (
+        <span
+          style={{
+            fontFamily: '"DM Sans", sans-serif',
+            fontSize: 'var(--text-caption)',
+            fontWeight: 500,
+            color: 'var(--color-expense)',
+            background: 'oklch(62% 0.28 18 / 12%)',
+            border: '1px solid oklch(62% 0.28 18 / 30%)',
+            borderRadius: 'var(--radius-chip)',
+            padding: '2px 8px',
+            flexShrink: 0,
+          }}
+        >
+          {chip}
+        </span>
+      )}
     </button>
   );
 }
@@ -447,6 +498,9 @@ interface Step2Props {
   toAccount2ndCurrencyDiffers: boolean;
   focusedField: 'primary' | 'secondary';
   onFocusedFieldChange: (f: 'primary' | 'secondary') => void;
+  isDebtPaymentMode: boolean;
+  paymentType: 'regular' | 'overpayment';
+  onPaymentTypeChange: (t: 'regular' | 'overpayment') => void;
 }
 
 function Step2({
@@ -478,6 +532,9 @@ function Step2({
   toAccount2ndCurrencyDiffers,
   focusedField,
   onFocusedFieldChange,
+  isDebtPaymentMode,
+  paymentType,
+  onPaymentTypeChange,
 }: Step2Props) {
   const { t } = useTranslation();
   const [pickerMode, setPickerMode] = useState<'account' | 'toAccount' | 'category' | null>(null);
@@ -500,8 +557,18 @@ function Step2({
 
   const fromCurrency = account?.currency ?? mainCurrency;
   const isTransfer = txType === 'transfer';
-  const showForeignCurrency = !isTransfer && fromCurrency !== mainCurrency;
+  const showToTarget = isTransfer || isDebtPaymentMode;
+  const showForeignCurrency = !showToTarget && fromCurrency !== mainCurrency;
   const showTransferDestForeign = isTransfer && toAccount2ndCurrencyDiffers;
+
+  // Debt payment split preview
+  const monthlyRate = isDebtPaymentMode && toAccount ? getMonthlyRate(toAccount) : null;
+  const hasInterestRate = monthlyRate !== null;
+  const currentAmount = evaluateExpression(numpadValue) ?? 0;
+  const paymentSplit =
+    isDebtPaymentMode && hasInterestRate && paymentType === 'regular' && currentAmount > 0 && toAccount
+      ? calculatePaymentSplit(Math.abs(toAccount.balance), monthlyRate!, currentAmount)
+      : null;
 
   const evaluatedAmount = evaluateExpression(numpadValue);
 
@@ -635,7 +702,7 @@ function Step2({
 
           {/* To: category or account */}
           <button
-            onClick={() => setPickerMode(isTransfer ? 'toAccount' : 'category')}
+            onClick={() => setPickerMode(showToTarget ? 'toAccount' : 'category')}
             style={{
               flex: 1,
               display: 'flex',
@@ -649,7 +716,7 @@ function Step2({
               minHeight: '44px',
             }}
           >
-            {isTransfer
+            {showToTarget
               ? toAccount && <EntityIcon icon={toAccount.icon} color={toAccount.color} size={14} />
               : category && <EntityIcon icon={category.icon} color={category.color} size={14} />}
             <span
@@ -659,7 +726,7 @@ function Step2({
                 fontWeight: 500,
                 fontSize: 'var(--text-caption)',
                 color:
-                  (isTransfer ? toAccount : category)
+                  (showToTarget ? toAccount : category)
                     ? 'var(--color-text)'
                     : 'var(--color-text-disabled)',
                 textAlign: 'left',
@@ -668,7 +735,7 @@ function Step2({
                 whiteSpace: 'nowrap',
               }}
             >
-              {isTransfer
+              {showToTarget
                 ? toAccount
                   ? toAccount.name
                   : t('transactions.fields.to')
@@ -857,6 +924,86 @@ function Step2({
                 {toAccount?.currency}
               </span>
             </div>
+          </div>
+        )}
+
+        {/* Debt payment type toggle + split preview */}
+        {isDebtPaymentMode && hasInterestRate && (
+          <div
+            style={{
+              paddingInline: 'var(--space-4)',
+              paddingBottom: 'var(--space-3)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 'var(--space-2)',
+            }}
+          >
+            {/* Toggle */}
+            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+              {(['regular', 'overpayment'] as const).map((pt) => {
+                const isActive = paymentType === pt;
+                return (
+                  <button
+                    key={pt}
+                    onClick={() => onPaymentTypeChange(pt)}
+                    style={{
+                      flex: 1,
+                      minHeight: '44px',
+                      background: isActive ? 'oklch(62% 0.28 18 / 12%)' : 'var(--color-surface)',
+                      border: isActive ? '1px solid oklch(62% 0.28 18 / 50%)' : '1px solid var(--color-border)',
+                      borderRadius: 'var(--radius-btn)',
+                      color: isActive ? 'var(--color-expense)' : 'var(--color-text-secondary)',
+                      fontFamily: '"DM Sans", sans-serif',
+                      fontWeight: 500,
+                      fontSize: 'var(--text-caption)',
+                      cursor: 'pointer',
+                      transition: 'background 120ms, border-color 120ms, color 120ms',
+                    }}
+                  >
+                    {pt === 'regular' ? t('transactions.debtPayment.regular') : t('transactions.debtPayment.overpayment')}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Split preview */}
+            {paymentSplit && (
+              <div
+                style={{
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-card)',
+                  padding: 'var(--space-2) var(--space-3)',
+                  display: 'flex',
+                  gap: 'var(--space-3)',
+                }}
+              >
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--text-caption)', color: 'var(--color-text-secondary)' }}>
+                    {t('transactions.debtPayment.interest')}
+                  </span>
+                  <span style={{ fontFamily: '"JetBrains Mono", monospace', fontWeight: 500, fontSize: 'var(--text-body)', color: 'var(--color-expense)' }}>
+                    {paymentSplit.interestAmount.toFixed(2)}
+                  </span>
+                </div>
+                <div style={{ width: '1px', background: 'var(--color-border)' }} />
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--text-caption)', color: 'var(--color-text-secondary)' }}>
+                    {t('transactions.debtPayment.principal')}
+                  </span>
+                  <span style={{ fontFamily: '"JetBrains Mono", monospace', fontWeight: 500, fontSize: 'var(--text-body)', color: 'var(--color-income)' }}>
+                    {paymentSplit.principalAmount.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Warning when payment doesn't cover interest */}
+            {isDebtPaymentMode && hasInterestRate && paymentType === 'regular' && currentAmount > 0 && paymentSplit && paymentSplit.principalAmount === 0 && (
+              <div style={{ fontSize: 'var(--text-caption)', color: 'var(--color-expense)' }}>
+                {t('transactions.debtPayment.noInterestCover')}
+              </div>
+            )}
           </div>
         )}
 
@@ -1124,10 +1271,14 @@ function Step2({
 
       {pickerMode === 'toAccount' && (
         <PickerSheet title={t('transactions.fields.to')} onClose={() => setPickerMode(null)}>
-          {allAccounts.map((acc) => (
+          {(isDebtPaymentMode
+            ? allAccounts.filter((a) => a.type === 'DEBT')
+            : allAccounts
+          ).map((acc) => (
             <AccountRow
               key={acc.id}
               account={acc}
+              chip={isDebtPaymentMode ? 'DEBT' : undefined}
               onPress={() => {
                 onToAccountChange(acc);
                 setPickerMode(null);
@@ -1191,6 +1342,7 @@ export default function TransactionInput() {
     return 'expense';
   });
   const [transferStep, setTransferStep] = useState<TransferStep>('source');
+  const [paymentType, setPaymentType] = useState<'regular' | 'overpayment'>('regular');
 
   // Detail form state
   const [account, setAccount] = useState<Account | null>(null);
@@ -1205,6 +1357,8 @@ export default function TransactionInput() {
   const [toSecondaryAmount, setToSecondaryAmount] = useState('');
   const [noRateWarning, setNoRateWarning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const isDebtPaymentMode =
+    txType === 'expense' && toAccount !== null && toAccount.type === 'DEBT' && category === null;
   const pushedHistoryRef = useRef(false);
   const isSavingRef = useRef(false);
 
@@ -1297,17 +1451,19 @@ export default function TransactionInput() {
       EXPENSE: 'expense',
       TRANSFER: 'transfer',
     };
-    setTxType(typeMap[existingTx.type]);
-
     const foundAccount = allAccounts.find((a) => a.id === existingTx.accountId);
     if (foundAccount) setAccount(foundAccount);
 
-    if (existingTx.type !== 'TRANSFER' && existingTx.categoryId) {
-      const foundCat = allCategories.find((c) => c.id === existingTx.categoryId);
-      if (foundCat) setCategory(foundCat);
-    }
-
-    if (existingTx.type === 'TRANSFER' && existingTx.transferGroupId) {
+    if (existingTx.type === 'TRANSFER' && existingTx.toAccountId != null) {
+      // Debt payment — restore as expense + debt account mode
+      setTxType('expense');
+      // Look up dest account directly from DB so trashed accounts are found
+      db.accounts.get(existingTx.toAccountId).then((dest) => {
+        if (dest) setToAccount(dest);
+      });
+      setPaymentType(existingTx.interestAmount != null ? 'regular' : 'overpayment');
+    } else if (existingTx.type === 'TRANSFER' && existingTx.transferGroupId) {
+      setTxType('transfer');
       // Load the other half of the transfer
       db.transactions
         .where('transferGroupId')
@@ -1320,6 +1476,12 @@ export default function TransactionInput() {
             if (dest) setToAccount(dest);
           }
         });
+    } else {
+      setTxType(typeMap[existingTx.type]);
+      if (existingTx.categoryId) {
+        const foundCat = allCategories.find((c) => c.id === existingTx.categoryId);
+        if (foundCat) setCategory(foundCat);
+      }
     }
 
     setNumpadValue(String(existingTx.amount));
@@ -1409,8 +1571,24 @@ export default function TransactionInput() {
   const handleCategorySelect = useCallback(
     (cat: Category) => {
       setCategory(cat);
+      setToAccount(null);
       const typeFromCat: TxTab = cat.type === 'INCOME' ? 'income' : 'expense';
       setTxType(typeFromCat);
+      if (!pushedHistoryRef.current) {
+        history.pushState(null, '', window.location.href);
+        pushedHistoryRef.current = true;
+      }
+      setStep(2);
+    },
+    [],
+  );
+
+  const handleDebtAccountSelect = useCallback(
+    (acc: Account) => {
+      setToAccount(acc);
+      setCategory(null);
+      setTxType('expense');
+      setPaymentType('regular');
       if (!pushedHistoryRef.current) {
         history.pushState(null, '', window.location.href);
         pushedHistoryRef.current = true;
@@ -1473,7 +1651,8 @@ export default function TransactionInput() {
         showToast(t('errors.accountRequired'), 'error');
         return;
       }
-      if (txType !== 'transfer' && !category) {
+      const isDebtPmt = isDebtPaymentMode;
+      if (txType !== 'transfer' && !category && !isDebtPmt) {
         showToast(t('errors.categoryRequired'), 'error');
         return;
       }
@@ -1487,13 +1666,97 @@ export default function TransactionInput() {
           return;
         }
       }
+      if (isDebtPmt && account.id === toAccount!.id) {
+        showToast(t('errors.sameAccount'), 'error');
+        return;
+      }
 
       setIsSaving(true);
       isSavingRef.current = true;
       try {
         const now = new Date().toISOString();
 
-        if (txType === 'transfer') {
+        if (isDebtPmt) {
+          // Debt payment — store as TRANSFER pair with toAccountId metadata
+          const outRate = await exchangeRateService
+            .getRate(account.currency, mainCurrency)
+            .then((r) => r ?? 1)
+            .catch(() => 1);
+
+          const outAmountMain = Math.round(amount * outRate * 100) / 100;
+
+          // Same-currency: inAmount = amount; cross-currency: use rate to dest account
+          let inAmount = amount;
+          let inRate = outRate;
+          if (toAccount!.currency !== account.currency) {
+            const crossRate = await exchangeRateService
+              .getRate(account.currency, toAccount!.currency)
+              .then((r) => r ?? 1)
+              .catch(() => 1);
+            inAmount = Math.round(amount * crossRate * 100) / 100;
+            inRate = await exchangeRateService
+              .getRate(toAccount!.currency, mainCurrency)
+              .then((r) => r ?? 1)
+              .catch(() => 1);
+          }
+
+          // Compute split metadata
+          const monthlyRate = getMonthlyRate(toAccount!);
+          let interestAmt: number | null = null;
+          let principalAmt: number | null = null;
+          if (monthlyRate !== null && paymentType === 'regular') {
+            const split = calculatePaymentSplit(Math.abs(toAccount!.balance), monthlyRate, amount);
+            interestAmt = split.interestAmount;
+            principalAmt = split.principalAmount;
+          }
+
+          const groupId = crypto.randomUUID();
+
+          const outTx: Transaction = {
+            type: 'TRANSFER',
+            date,
+            timestamp: now,
+            displayOrder: 0,
+            accountId: account.id!,
+            categoryId: null,
+            currency: account.currency,
+            amount,
+            amountMainCurrency: outAmountMain,
+            exchangeRate: outRate,
+            note: note.trim(),
+            transferGroupId: groupId,
+            transferDirection: 'OUT',
+            toAccountId: toAccount!.id!,
+            interestAmount: interestAmt,
+            principalAmount: principalAmt,
+            createdAt: now,
+            updatedAt: now,
+          };
+
+          const inTx: Transaction = {
+            type: 'TRANSFER',
+            date,
+            timestamp: now,
+            displayOrder: 0,
+            accountId: toAccount!.id!,
+            categoryId: null,
+            currency: toAccount!.currency,
+            amount: inAmount,
+            amountMainCurrency: Math.round(inAmount * inRate * 100) / 100,
+            exchangeRate: inRate,
+            note: note.trim(),
+            transferGroupId: groupId,
+            transferDirection: 'IN',
+            createdAt: now,
+            updatedAt: now,
+          };
+
+          if (isEdit && existingTx?.transferGroupId) {
+            await replaceTransfer(existingTx.transferGroupId, outTx, inTx);
+          } else {
+            await applyTransfer(outTx, inTx);
+          }
+        } else if (txType === 'transfer') {
           // Calculate exchange rates
           const outRate = await exchangeRateService
             .getRate(account.currency, mainCurrency)
@@ -1622,6 +1885,7 @@ export default function TransactionInput() {
       toAccount,
       category,
       txType,
+      paymentType,
       date,
       note,
       mainCurrency,
@@ -1665,6 +1929,7 @@ export default function TransactionInput() {
         transferStep={transferStep}
         onCategorySelect={handleCategorySelect}
         onAccountSelect={handleAccountSelectTransfer}
+        onDebtAccountSelect={handleDebtAccountSelect}
         onBack={handleBack}
       />
     );
@@ -1705,6 +1970,9 @@ export default function TransactionInput() {
         toAccount2ndCurrencyDiffers={toAccount2ndCurrencyDiffers}
         focusedField={focusedField}
         onFocusedFieldChange={setFocusedField}
+        isDebtPaymentMode={isDebtPaymentMode}
+        paymentType={paymentType}
+        onPaymentTypeChange={setPaymentType}
       />
     </div>
   );

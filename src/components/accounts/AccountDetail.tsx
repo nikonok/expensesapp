@@ -9,6 +9,7 @@ import BottomSheet from '../layout/BottomSheet';
 import { Numpad } from '../shared/Numpad';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { getLucideIcon } from '../shared/IconPicker';
+import { useToast } from '../shared/Toast';
 
 interface AccountDetailProps {
   account: Account;
@@ -19,6 +20,7 @@ interface AccountDetailProps {
 
 export default function AccountDetail({ account, isOpen, onClose, onEdit }: AccountDetailProps) {
   const navigate = useNavigate();
+  const { show: showToast } = useToast();
   const setTransactionAccountFilter = useUIStore((s) => s.setTransactionAccountFilter);
 
   const [showAdjust, setShowAdjust] = useState(false);
@@ -301,9 +303,14 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
                 value={adjustValue}
                 onChange={setAdjustValue}
                 onSave={async (v) => {
-                  await adjustBalance(account.id!, v);
-                  setAdjustValue('');
-                  setShowAdjust(false);
+                  try {
+                    await adjustBalance(account.id!, v);
+                    setAdjustValue('');
+                    setShowAdjust(false);
+                  } catch (err) {
+                    console.error('Failed to adjust balance:', err);
+                    showToast('Failed to adjust balance', 'error');
+                  }
                 }}
                 variant="budget"
               />

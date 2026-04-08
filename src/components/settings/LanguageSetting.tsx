@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ChevronRight } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settings-store';
 import BottomSheet from '../layout/BottomSheet';
+import { useToast } from '../shared/Toast';
 
 const LANGUAGES = [
   { code: 'en', label: 'English' },
@@ -11,14 +12,19 @@ const LANGUAGES = [
 export function LanguageSetting() {
   const { t, i18n } = useTranslation();
   const { language, update } = useSettingsStore();
+  const { show: showToast } = useToast();
   const [open, setOpen] = useState(false);
 
   const currentLabel = LANGUAGES.find((l) => l.code === language)?.label ?? 'English';
 
   async function handleSelect(code: string) {
-    await i18n.changeLanguage(code);
-    await update('language', code);
-    setOpen(false);
+    try {
+      await i18n.changeLanguage(code);
+      await update('language', code);
+      setOpen(false);
+    } catch {
+      showToast('Failed to save setting', 'error');
+    }
   }
 
   return (

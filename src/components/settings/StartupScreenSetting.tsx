@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ChevronRight } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settings-store';
 import BottomSheet from '../layout/BottomSheet';
+import { useToast } from '../shared/Toast';
 import type { TabName } from '../../types';
 
 const SCREENS: { value: TabName; label: string }[] = [
@@ -16,14 +17,19 @@ const SCREENS: { value: TabName; label: string }[] = [
 export function StartupScreenSetting() {
   const { t } = useTranslation();
   const { startupScreen, update } = useSettingsStore();
+  const { show: showToast } = useToast();
   const [open, setOpen] = useState(false);
 
   const currentLabel =
     SCREENS.find((s) => s.value === startupScreen)?.label ?? 'Transactions';
 
   async function handleSelect(value: TabName) {
-    await update('startupScreen', value);
-    setOpen(false);
+    try {
+      await update('startupScreen', value);
+      setOpen(false);
+    } catch {
+      showToast('Failed to save setting', 'error');
+    }
   }
 
   return (

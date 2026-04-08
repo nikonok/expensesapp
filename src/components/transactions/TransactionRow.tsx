@@ -6,6 +6,8 @@ import type { Account } from '../../db/models';
 import type { Category } from '../../db/models';
 import { AmountDisplay } from '../shared/AmountDisplay';
 import { getLucideIcon } from '../shared/IconPicker';
+import { isDebtPayment } from '../../utils/transaction-utils';
+import { useTranslation } from '../../hooks/use-translation';
 
 interface TransactionRowProps {
   transaction: Transaction;
@@ -26,6 +28,7 @@ export default function TransactionRow({
 }: TransactionRowProps) {
   const isTransfer = transaction.type === 'TRANSFER';
   const isOut = transaction.transferDirection === 'OUT';
+  const isDebtPmt = isDebtPayment(transaction);
 
   const {
     attributes,
@@ -35,29 +38,40 @@ export default function TransactionRow({
     isDragging,
   } = useSortable({ id: transaction.id! });
 
-  const iconColor = isTransfer
-    ? 'var(--color-transfer)'
-    : category?.color ?? 'var(--color-text-secondary)';
+  const { t } = useTranslation();
 
-  const iconBg = isTransfer
-    ? 'oklch(60% 0.10 265 / 15%)'
-    : category
-      ? `color-mix(in oklch, ${category.color} 20%, transparent)`
-      : 'var(--color-surface-raised)';
+  // Debt payments use the destination account's color/icon like an expense category
+  const iconColor = isDebtPmt
+    ? (toAccount?.color ?? 'var(--color-expense)')
+    : isTransfer
+      ? 'var(--color-transfer)'
+      : category?.color ?? 'var(--color-text-secondary)';
+
+  const iconBg = isDebtPmt
+    ? `color-mix(in oklch, ${toAccount?.color ?? 'var(--color-expense)'} 20%, transparent)`
+    : isTransfer
+      ? 'oklch(60% 0.10 265 / 15%)'
+      : category
+        ? `color-mix(in oklch, ${category.color} 20%, transparent)`
+        : 'var(--color-surface-raised)';
 
   const CategoryIcon = category ? getLucideIcon(category.icon) : null;
+  const AccountIcon = isDebtPmt && toAccount ? getLucideIcon(toAccount.icon) : null;
 
   const amountType =
     transaction.type === 'INCOME'
       ? ('income' as const)
-      : transaction.type === 'EXPENSE'
+      : (transaction.type === 'EXPENSE' || isDebtPmt)
         ? ('expense' as const)
         : ('transfer' as const);
 
   let centerLabel = '';
   let centerSub = '';
 
-  if (isTransfer) {
+  if (isDebtPmt) {
+    centerLabel = toAccount?.name ?? t('transactions.debtPayment.label');
+    centerSub = transaction.note ?? '';
+  } else if (isTransfer) {
     const fromAcc = isOut ? account : toAccount;
     const toAcc = isOut ? toAccount : account;
     centerLabel = fromAcc && toAcc ? `${fromAcc.name} → ${toAcc.name}` : 'Transfer';
@@ -86,7 +100,7 @@ export default function TransactionRow({
         cursor: 'pointer',
         userSelect: 'none',
         WebkitTapHighlightColor: 'transparent',
-        opacity: isDragging ? 0.95 : isTransfer ? 0.5 : 1,
+        opacity: isDragging ? 0.95 : (isTransfer && !isDebtPmt) ? 0.5 : 1,
         transition: isDragging ? 'none' : 'background 120ms ease-out',
         borderBottom: '1px solid var(--color-border)',
         boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.5)' : 'none',
@@ -143,7 +157,13 @@ export default function TransactionRow({
               color: iconColor,
             }}
           >
-            {isTransfer ? (
+            {isDebtPmt ? (
+              AccountIcon ? (
+                <AccountIcon size={16} strokeWidth={1.5} />
+              ) : (
+                <span style={{ fontSize: '16px', lineHeight: 1 }}>{toAccount?.icon ?? '💳'}</span>
+              )
+            ) : isTransfer ? (
               <ArrowLeftRight size={16} strokeWidth={1.5} />
             ) : CategoryIcon ? (
               <CategoryIcon size={16} strokeWidth={1.5} />
@@ -200,7 +220,7 @@ export default function TransactionRow({
       <div
         {...listeners}
         {...attributes}
-        aria-label={`Reorder ${category?.name ?? (isTransfer ? 'Transfer' : 'transaction')}`}
+        aria-label={`Reorder ${category?.name ?? (isDebtPmt ? (toAccount?.name ?? t('transactions.debtPayment.label')) : isTransfer ? 'Transfer' : 'transaction')}`}
         style={{
           width: '44px',
           height: '44px',

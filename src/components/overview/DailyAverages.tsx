@@ -3,6 +3,7 @@ import { startOfDay, endOfDay, differenceInCalendarDays, isWithinInterval, isBef
 import { formatAmount } from '../../utils/currency-utils';
 import { getLocalDateString, getWeekRange } from '../../utils/date-utils';
 import type { Transaction } from '../../db/models';
+import { isExpenseForReporting } from '../../utils/transaction-utils';
 
 interface DailyAveragesProps {
   transactions: Transaction[];
@@ -54,7 +55,7 @@ function StatRow({ label, amount, currency }: StatRowProps) {
 
 export default function DailyAverages({ transactions, start, end, currency }: DailyAveragesProps) {
   const { calendarDays, averagePerDay, todaySpend, thisWeekSpend } = useMemo(() => {
-    const expenses = transactions.filter((t) => t.type === 'EXPENSE');
+    const expenses = transactions.filter(isExpenseForReporting);
     const totalExpense = expenses.reduce((sum, t) => sum + t.amountMainCurrency, 0);
 
     // Calendar days in period (inclusive, 1 minimum)

@@ -24,25 +24,35 @@ export function NotificationSetting() {
           return;
         }
       }
-      await update('notificationEnabled', true);
+      try {
+        await update('notificationEnabled', true);
+      } catch {
+        show('Failed to save setting', 'error');
+        return;
+      }
       try {
         scheduleDailyReminder(notificationTime);
       } catch {
         // stub — noop
       }
     } else {
-      await update('notificationEnabled', false);
+      try {
+        await update('notificationEnabled', false);
+      } catch {
+        show('Failed to save setting', 'error');
+      }
     }
   }
 
   async function handleTimeChange(time: string) {
-    await update('notificationTime', time);
+    try {
+      await update('notificationTime', time);
+    } catch {
+      show('Failed to save setting', 'error');
+      return;
+    }
     if (notificationEnabled) {
-      try {
-        scheduleDailyReminder(time);
-      } catch {
-        // stub — noop
-      }
+      try { scheduleDailyReminder(time); } catch { /* stub */ }
     }
   }
 

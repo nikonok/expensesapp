@@ -29,4 +29,8 @@ db.version(1).stores({
   backups:      '++id, createdAt',
 });
 
+db.version(2).stores({
+  transactions: '++id, date, accountId, categoryId, type, isTrashed, [date+displayOrder], [accountId+date], transferGroupId, toAccountId',
+});
+
 export { db };

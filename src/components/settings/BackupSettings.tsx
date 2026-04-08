@@ -43,8 +43,12 @@ export function BackupSettings() {
   }
 
   async function handleIntervalSelect(value: number | null) {
-    await update('autoBackupIntervalHours', value);
-    setIntervalOpen(false);
+    try {
+      await update('autoBackupIntervalHours', value);
+      setIntervalOpen(false);
+    } catch {
+      show(t('errors.generic'), 'error');
+    }
   }
 
   async function handleRestoreConfirm() {

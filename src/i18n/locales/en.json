@@ -133,6 +133,14 @@
     },
     "transfer": {
       "from": "{{from}} → {{to}}"
+    },
+    "debtPayment": {
+      "label": "Debt Payment",
+      "regular": "Regular Payment",
+      "overpayment": "Overpayment",
+      "interest": "Interest",
+      "principal": "Principal",
+      "noInterestCover": "Payment doesn't cover interest — full amount reduces balance"
     }
   },
   "budget": {

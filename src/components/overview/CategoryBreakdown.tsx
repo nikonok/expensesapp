@@ -1,40 +1,92 @@
 import { useMemo } from 'react';
 import { useCategories } from '../../hooks/use-categories';
+import { useAccounts } from '../../hooks/use-accounts';
 import { getLucideIcon } from '../shared/IconPicker';
 import { formatAmount } from '../../utils/currency-utils';
 import type { Transaction } from '../../db/models';
+import { isExpenseForReporting, isDebtPayment } from '../../utils/transaction-utils';
 
 interface CategoryBreakdownProps {
   transactions: Transaction[];
   currency: string;
 }
 
+interface BreakdownRow {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  amount: number;
+}
+
 export default function CategoryBreakdown({ transactions, currency }: CategoryBreakdownProps) {
   const categories = useCategories('EXPENSE');
+  const accounts = useAccounts(true); // include trashed so old debt payments still resolve
 
   const { rows, totalsMap, totalSpend } = useMemo(() => {
-    const expenses = transactions.filter((t) => t.type === 'EXPENSE');
+    const expenses = transactions.filter(isExpenseForReporting);
 
-    // Aggregate by categoryId
-    const totalsMap = new Map<number, number>();
+    // Aggregate by categoryId (regular expenses) or toAccountId (debt payments)
+    const categoryTotals = new Map<number, number>();
+    const accountTotals = new Map<number, number>();
+
     for (const tx of expenses) {
-      if (tx.categoryId === null) continue;
-      totalsMap.set(tx.categoryId, (totalsMap.get(tx.categoryId) ?? 0) + tx.amountMainCurrency);
+      if (isDebtPayment(tx) && tx.toAccountId != null) {
+        accountTotals.set(tx.toAccountId, (accountTotals.get(tx.toAccountId) ?? 0) + tx.amountMainCurrency);
+      } else if (tx.categoryId !== null) {
+        categoryTotals.set(tx.categoryId, (categoryTotals.get(tx.categoryId) ?? 0) + tx.amountMainCurrency);
+      }
     }
 
-    // Build rows: categories with spending (sorted desc), then zero-spend (sorted alpha)
-    const withSpend = categories
-      .filter((c) => totalsMap.has(c.id!) && (totalsMap.get(c.id!) ?? 0) > 0)
-      .sort((a, b) => (totalsMap.get(b.id!) ?? 0) - (totalsMap.get(a.id!) ?? 0));
+    // Build a unified totals map keyed by row ID string
+    const totalsMap = new Map<string, number>();
 
-    const withoutSpend = categories
-      .filter((c) => !totalsMap.has(c.id!) || (totalsMap.get(c.id!) ?? 0) === 0)
+    // Category rows
+    for (const cat of categories) {
+      const amt = categoryTotals.get(cat.id!) ?? 0;
+      totalsMap.set(`cat-${cat.id}`, amt);
+    }
+
+    // Debt account rows (only accounts that have debt payments in this period)
+    for (const [accountId, amt] of accountTotals) {
+      totalsMap.set(`acc-${accountId}`, amt);
+    }
+
+    // Build unified row array
+    const categoryRows: BreakdownRow[] = categories.map((cat) => ({
+      id: `cat-${cat.id}`,
+      name: cat.name,
+      icon: cat.icon,
+      color: cat.color,
+      amount: categoryTotals.get(cat.id!) ?? 0,
+    }));
+
+    const accountRows: BreakdownRow[] = [];
+    for (const [accountId, amt] of accountTotals) {
+      const acc = accounts.find((a) => a.id === accountId);
+      if (!acc) continue;
+      accountRows.push({
+        id: `acc-${accountId}`,
+        name: acc.name,
+        icon: acc.icon,
+        color: acc.color,
+        amount: amt,
+      });
+    }
+
+    // Sort: with-spend descending, zero-spend alphabetically
+    const allRows = [...categoryRows, ...accountRows];
+    const withSpend = allRows
+      .filter((r) => r.amount > 0)
+      .sort((a, b) => b.amount - a.amount);
+    const withoutSpend = categoryRows // zero-spend account rows are not shown
+      .filter((r) => r.amount === 0)
       .sort((a, b) => a.name.localeCompare(b.name));
 
     const rows = [...withSpend, ...withoutSpend];
     const totalSpend = Array.from(totalsMap.values()).reduce((s, v) => s + v, 0);
     return { rows, totalsMap, totalSpend };
-  }, [transactions, categories]);
+  }, [transactions, categories, accounts]);
 
   if (rows.length === 0) return null;
 
@@ -54,16 +106,16 @@ export default function CategoryBreakdown({ transactions, currency }: CategoryBr
         Categories
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-        {rows.map((cat) => {
-          const amount = totalsMap.get(cat.id!) ?? 0;
+        {rows.map((row) => {
+          const amount = totalsMap.get(row.id) ?? 0;
           const isZero = amount === 0;
           const progress = totalSpend > 0 ? amount / totalSpend : 0;
-          const Icon = getLucideIcon(cat.icon);
-          const isEmoji = !Icon && cat.icon !== '';
+          const Icon = getLucideIcon(row.icon);
+          const isEmoji = !Icon && row.icon !== '';
 
           return (
             <div
-              key={cat.id}
+              key={row.id}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -83,11 +135,11 @@ export default function CategoryBreakdown({ transactions, currency }: CategoryBr
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: isZero ? 'var(--color-text-disabled)' : cat.color,
+                  color: isZero ? 'var(--color-text-disabled)' : row.color,
                 }}
               >
                 {isEmoji ? (
-                  <span style={{ fontSize: '16px', lineHeight: 1 }}>{cat.icon}</span>
+                  <span style={{ fontSize: '16px', lineHeight: 1 }}>{row.icon}</span>
                 ) : Icon ? (
                   <Icon size={16} strokeWidth={1.5} />
                 ) : null}
@@ -115,7 +167,7 @@ export default function CategoryBreakdown({ transactions, currency }: CategoryBr
                       minWidth: 0,
                     }}
                   >
-                    {cat.name}
+                    {row.name}
                   </span>
                   <span
                     style={{
@@ -143,7 +195,7 @@ export default function CategoryBreakdown({ transactions, currency }: CategoryBr
                     style={{
                       height: '100%',
                       width: `${progress * 100}%`,
-                      background: isZero ? 'var(--color-border)' : cat.color,
+                      background: isZero ? 'var(--color-border)' : row.color,
                       borderRadius: '2px',
                       transition: 'width 300ms ease-out',
                     }}

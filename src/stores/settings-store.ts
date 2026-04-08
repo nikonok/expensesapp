@@ -61,8 +61,15 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   },
 
   update: async (key: string, value: unknown) => {
-    if ((get() as unknown as Record<string, unknown>)[key] === value) return;
+    const prev = (get() as unknown as Record<string, unknown>)[key];
+    if (prev === value) return;
     set({ [key]: value } as Partial<SettingsStore>);
-    await db.settings.put({ key, value });
+    try {
+      await db.settings.put({ key, value });
+    } catch (err) {
+      console.error('Failed to persist setting:', key, err);
+      set({ [key]: prev } as Partial<SettingsStore>);
+      throw err;
+    }
   },
 }));

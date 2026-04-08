@@ -77,6 +77,11 @@ export interface Transaction {
   transferGroupId: string | null;  // shared UUID linking the two halves of a transfer
   transferDirection: 'OUT' | 'IN' | null; // OUT = source, IN = destination
 
+  // Debt payment metadata (set on TRANSFER OUT leg only when destination is a DEBT account)
+  toAccountId?: number | null;      // FK to accounts.id — destination DEBT account
+  interestAmount?: number | null;   // informational: interest portion of regular payment
+  principalAmount?: number | null;  // informational: principal portion of regular payment
+
   // Future feature stub
   recurringRule?: {
     frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';

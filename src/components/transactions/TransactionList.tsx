@@ -20,7 +20,9 @@ import { useTransactions } from '../../hooks/use-transactions';
 import { useAccounts } from '../../hooks/use-accounts';
 import { useCategories } from '../../hooks/use-categories';
 import { useUIStore } from '../../stores/ui-store';
+import { useToast } from '../shared/Toast';
 import type { Transaction, Account, Category } from '../../db/models';
+import { isExpenseForReporting } from '../../utils/transaction-utils';
 import { revertTransaction, revertTransfer } from '../../services/balance.service';
 import { db } from '../../db/database';
 import PeriodFilter from '../shared/PeriodFilter';
@@ -33,6 +35,7 @@ import SelectionToolbar from './SelectionToolbar';
 
 export default function TransactionList() {
   const navigate = useNavigate();
+  const { show: showToast } = useToast();
 
   const {
     transactionsFilter,
@@ -144,7 +147,7 @@ export default function TransactionList() {
     let expense = 0;
     for (const t of txs) {
       if (t.type === 'INCOME') income += t.amount;
-      else if (t.type === 'EXPENSE') expense += t.amount;
+      else if (isExpenseForReporting(t)) expense += t.amount;
     }
     return { income, expense };
   }
@@ -253,7 +256,12 @@ export default function TransactionList() {
       displayOrder: index * 10,
     }));
 
-    await db.transactions.bulkPut(updates);
+    try {
+      await db.transactions.bulkPut(updates);
+    } catch (err) {
+      console.error('Failed to save transaction order:', err);
+      showToast('Failed to save order', 'error');
+    }
   }
 
   const hasFilters = hasActiveTransactionFilters();

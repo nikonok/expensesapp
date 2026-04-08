@@ -9,6 +9,7 @@ import { useUIStore } from '../stores/ui-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { useTransactions } from '../hooks/use-transactions';
 import { parsePeriodFilter } from '../utils/date-utils';
+import { isExpenseForReporting } from '../utils/transaction-utils';
 
 export default function OverviewPage() {
   const overviewFilter = useUIStore((s) => s.overviewFilter);
@@ -19,7 +20,7 @@ export default function OverviewPage() {
 
   const { start, end } = parsePeriodFilter(overviewFilter);
 
-  const expenses = transactions.filter((t) => t.type === 'EXPENSE');
+  const expenses = transactions.filter(isExpenseForReporting);
   const incomes = transactions.filter((t) => t.type === 'INCOME');
 
   const totalExpense = expenses.reduce((sum, t) => sum + t.amountMainCurrency, 0);
