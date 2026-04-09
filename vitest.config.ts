@@ -6,7 +6,7 @@ export default defineConfig({
     environment: "node",
     globals: true,
     setupFiles: [],
-    exclude: ["**/node_modules/**", "**/e2e/**"],
+    exclude: ["**/node_modules/**", "**/e2e/**", "**/.claude/**"],
   },
   resolve: {
     alias: {

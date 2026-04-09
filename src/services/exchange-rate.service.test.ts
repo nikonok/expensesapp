@@ -102,7 +102,8 @@ vi.mock('../db/database', () => {
 
 import { exchangeRateService } from './exchange-rate.service';
 
-const TODAY = new Date().toISOString().slice(0, 10);
+const _now = new Date();
+const TODAY = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
 const FRESH = new Date().toISOString();
 const STALE = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(); // 25h ago
 
