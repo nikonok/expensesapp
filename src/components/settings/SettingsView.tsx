@@ -9,6 +9,7 @@ import { MainCurrencySetting } from './MainCurrencySetting';
 import { BackupSettings } from './BackupSettings';
 import { ExportSettings } from './ExportSettings';
 import { ComingSoonStub } from '../shared/ComingSoonStub';
+import { InstallSetting } from './InstallSetting';
 
 function SectionHeader({ label }: { label: string }) {
   return (
@@ -103,6 +104,7 @@ export function SettingsView() {
         {/* General section */}
         <SectionHeader label={t('settings.sections.general')} />
 
+        <InstallSetting />
         <LanguageSetting />
         <ThemeSetting />
         <StartupScreenSetting />

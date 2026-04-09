@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, ArrowDownToLine } from 'lucide-react';
 import { CurrencyPicker } from '../components/shared/CurrencyPicker';
 import { Numpad } from '../components/shared/Numpad';
 import { getLucideIcon } from '../components/shared/IconPicker';
@@ -10,6 +10,7 @@ import { db } from '../db/database';
 import { DEFAULT_CATEGORY_PRESETS } from '../db/seed';
 import type { CategoryPreset } from '../db/seed';
 import { evaluateExpression } from '../services/math-parser';
+import { getCanInstall, triggerInstall, dismissInstall } from '../sw-register';
 
 const TOTAL_STEPS = 5;
 
@@ -533,6 +534,100 @@ function StepComplete({
   );
 }
 
+// ── Step 6: Install ───────────────────────────────────────────────────────────
+
+function StepInstall({
+  onInstall,
+  onSkip,
+  isSaving,
+  error,
+}: {
+  onInstall: () => void;
+  onSkip: () => void;
+  isSaving: boolean;
+  error: string | null;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flex: 1,
+        gap: 'var(--space-4)',
+        padding: '0 var(--space-6)',
+        textAlign: 'center',
+      }}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-8)' }}>
+        <div
+          style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: '16px',
+            background: 'var(--color-primary-dim)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 'var(--space-2)',
+          }}
+        >
+          <ArrowDownToLine size={28} color="var(--color-primary)" strokeWidth={1.5} />
+        </div>
+        <h1
+          style={{
+            fontFamily: '"Syne", sans-serif',
+            fontWeight: 700,
+            fontSize: 'var(--text-display)',
+            color: 'var(--color-primary)',
+            margin: 0,
+            lineHeight: 1,
+            textShadow: '0 0 40px oklch(72% 0.22 210 / 40%)',
+          }}
+        >
+          {t('onboarding.install.title')}
+        </h1>
+        <p
+          style={{
+            fontFamily: '"DM Sans", sans-serif',
+            fontSize: 'var(--text-subheading)',
+            color: 'var(--color-text-secondary)',
+            margin: 0,
+          }}
+        >
+          {t('onboarding.install.subtitle')}
+        </p>
+      </div>
+      <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+        <button
+          style={{ ...primaryBtnStyle, opacity: isSaving ? 0.7 : 1, cursor: isSaving ? 'not-allowed' : 'pointer' }}
+          onClick={onInstall}
+          disabled={isSaving}
+        >
+          {isSaving ? '…' : t('onboarding.install.cta')}
+        </button>
+        <button style={skipLinkStyle} onClick={onSkip} disabled={isSaving}>
+          {t('onboarding.install.skip')}
+        </button>
+        {error && (
+          <span
+            style={{
+              fontFamily: '"DM Sans", sans-serif',
+              fontSize: 'var(--text-caption)',
+              color: 'var(--color-expense)',
+              marginTop: 'var(--space-1)',
+            }}
+          >
+            {error}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Slide container ────────────────────────────────────────────────────────────
 
 function SlideContainer({ step, direction, children }: { step: number; direction: 'forward' | 'back'; children: React.ReactNode }) {
@@ -676,7 +771,7 @@ export default function OnboardingFlow() {
           padding: 'env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)',
         }}
       >
-        <ProgressDots current={step} onBack={step > 0 ? () => goToStep(step - 1) : undefined} />
+        {step < 5 && <ProgressDots current={step} onBack={step > 0 ? () => goToStep(step - 1) : undefined} />}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', paddingBottom: 'var(--space-6)' }}>
           <SlideContainer step={step} direction={direction}>
             {step === 0 && (
@@ -720,7 +815,23 @@ export default function OnboardingFlow() {
                 onSkip={skipToComplete}
               />
             )}
-            {step === 4 && <StepComplete onFinish={() => void handleFinish()} isSaving={isSaving} error={error} />}
+            {step === 4 && (
+              <StepComplete
+                onFinish={() => {
+                  if (getCanInstall()) { goToStep(5); } else { void handleFinish(); }
+                }}
+                isSaving={isSaving}
+                error={error}
+              />
+            )}
+            {step === 5 && (
+              <StepInstall
+                onInstall={() => { void (async () => { try { await triggerInstall(); } finally { void handleFinish(); } })(); }}
+                onSkip={() => { dismissInstall(); void handleFinish(); }}
+                isSaving={isSaving}
+                error={error}
+              />
+            )}
           </SlideContainer>
         </div>
       </div>
