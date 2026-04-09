@@ -6,6 +6,9 @@ import App from "./App";
 import { registerSW } from "./sw-register";
 import { ErrorBoundary } from "./components/shared/ErrorBoundary";
 
+// Register install prompt listeners before React mounts so beforeinstallprompt is never missed.
+registerSW();
+
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Root element not found");
 
@@ -16,5 +19,3 @@ createRoot(rootElement).render(
     </ErrorBoundary>
   </StrictMode>,
 );
-
-registerSW();

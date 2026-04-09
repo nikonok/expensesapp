@@ -4,7 +4,7 @@ import { getCanInstall, onCanInstallChange, triggerInstall, dismissInstall } fro
 export function useInstallPrompt() {
   const [canInstall, setCanInstall] = useState(getCanInstall());
   useEffect(() => {
-    onCanInstallChange(setCanInstall);
+    return onCanInstallChange(setCanInstall);
   }, []);
   return { canInstall, install: triggerInstall, dismiss: dismissInstall };
 }
