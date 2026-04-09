@@ -720,7 +720,7 @@ export default function OnboardingFlow() {
                 onSkip={skipToComplete}
               />
             )}
-            {step === 4 && <StepComplete onFinish={handleFinish} isSaving={isSaving} error={error} />}
+            {step === 4 && <StepComplete onFinish={() => void handleFinish()} isSaving={isSaving} error={error} />}
           </SlideContainer>
         </div>
       </div>
