@@ -1,5 +1,7 @@
 # Manual Smoke Test Runner
 
+> **Never invoke this skill proactively or automatically. Only run it when the user explicitly types `/smoke-test`.**
+
 Run the manual smoke test plan for the Expenses App using Playwright MCP.
 
 ## Instructions
