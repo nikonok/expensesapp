@@ -50,3 +50,42 @@ export async function triggerInstall() {
 export function dismissInstall() {
   setCanInstall(false);
 }
+
+// ── Periodic Background Sync ──────────────────────────────────────────────────
+
+const SYNC_TAG = 'daily-reminder';
+const SYNC_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+type PeriodicSyncManager = {
+  register(tag: string, opts: { minInterval: number }): Promise<void>;
+  unregister(tag: string): Promise<void>;
+};
+
+function getPeriodicSync(reg: ServiceWorkerRegistration): PeriodicSyncManager | null {
+  if (!('periodicSync' in reg)) return null;
+  return (reg as ServiceWorkerRegistration & { periodicSync: PeriodicSyncManager }).periodicSync;
+}
+
+export async function registerPeriodicSync(): Promise<void> {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const ps = getPeriodicSync(reg);
+    if (!ps) return; // Not supported (Firefox, Safari, old Chrome)
+    await ps.register(SYNC_TAG, { minInterval: SYNC_MIN_INTERVAL_MS });
+  } catch {
+    // Browser denied (low engagement score, permissions policy, etc.)
+  }
+}
+
+export async function unregisterPeriodicSync(): Promise<void> {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const ps = getPeriodicSync(reg);
+    if (!ps) return;
+    await ps.unregister(SYNC_TAG);
+  } catch {
+    // noop
+  }
+}

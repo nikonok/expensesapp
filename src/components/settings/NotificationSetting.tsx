@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../../stores/settings-store';
-import { scheduleDailyReminder } from '../../services/notification.service';
 import { useToast } from '../shared/Toast';
 
 export function NotificationSetting() {
@@ -28,12 +27,6 @@ export function NotificationSetting() {
         await update('notificationEnabled', true);
       } catch {
         show('Failed to save setting', 'error');
-        return;
-      }
-      try {
-        scheduleDailyReminder(notificationTime);
-      } catch {
-        // stub — noop
       }
     } else {
       try {
@@ -49,10 +42,6 @@ export function NotificationSetting() {
       await update('notificationTime', time);
     } catch {
       show('Failed to save setting', 'error');
-      return;
-    }
-    if (notificationEnabled) {
-      try { scheduleDailyReminder(time); } catch { /* stub */ }
     }
   }
 
@@ -112,44 +101,64 @@ export function NotificationSetting() {
 
       {/* Time picker — shown when enabled */}
       {notificationEnabled && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            minHeight: '52px',
-            padding: '0 var(--space-4)',
-            borderBottom: '1px solid var(--color-border)',
-          }}
-        >
-          <span
+        <>
+          <div
             style={{
-              fontFamily: '"DM Sans", sans-serif',
-              fontWeight: 500,
-              fontSize: 'var(--text-body)',
-              color: 'var(--color-text)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              minHeight: '52px',
+              padding: '0 var(--space-4)',
+              borderBottom: '1px solid var(--color-border)',
             }}
           >
-            {t('settings.notification.time')}
-          </span>
-          <input
-            type="time"
-            value={notificationTime}
-            onChange={(e) => handleTimeChange(e.target.value)}
+            <span
+              style={{
+                fontFamily: '"DM Sans", sans-serif',
+                fontWeight: 500,
+                fontSize: 'var(--text-body)',
+                color: 'var(--color-text)',
+              }}
+            >
+              {t('settings.notification.time')}
+            </span>
+            <input
+              type="time"
+              value={notificationTime}
+              onChange={(e) => handleTimeChange(e.target.value)}
+              style={{
+                minHeight: '36px',
+                padding: '0 var(--space-3)',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-input)',
+                color: 'var(--color-text)',
+                fontFamily: '"JetBrains Mono", monospace',
+                fontWeight: 500,
+                fontSize: 'var(--text-body)',
+                colorScheme: 'dark',
+              }}
+            />
+          </div>
+          <div
             style={{
-              minHeight: '36px',
-              padding: '0 var(--space-3)',
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-input)',
-              color: 'var(--color-text)',
-              fontFamily: '"JetBrains Mono", monospace',
-              fontWeight: 500,
-              fontSize: 'var(--text-body)',
-              colorScheme: 'dark',
+              padding: 'var(--space-3) var(--space-4)',
+              borderBottom: '1px solid var(--color-border)',
             }}
-          />
-        </div>
+          >
+            <span
+              style={{
+                fontFamily: '"DM Sans", sans-serif',
+                fontWeight: 400,
+                fontSize: 'var(--text-caption)',
+                color: 'var(--color-text-muted)',
+                lineHeight: 1.4,
+              }}
+            >
+              {t('settings.notification.caveat')}
+            </span>
+          </div>
+        </>
       )}
     </div>
   );

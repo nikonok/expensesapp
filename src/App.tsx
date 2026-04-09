@@ -2,6 +2,7 @@ import { useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router';
 import { useSettingsStore } from './stores/settings-store';
 import { scheduleDailyReminder, cancelDailyReminder } from './services/notification.service';
+import { registerPeriodicSync, unregisterPeriodicSync } from './sw-register';
 import { ToastProvider } from './components/shared/Toast';
 import TabLayout from './components/layout/TabLayout';
 import AccountsPage from './pages/AccountsPage';
@@ -35,9 +36,11 @@ function AppRoutes() {
     if (!isLoaded) return;
     if (notificationEnabled) {
       scheduleDailyReminder(notificationTime || '20:00');
+      registerPeriodicSync();
       return () => cancelDailyReminder();
     } else {
       cancelDailyReminder();
+      unregisterPeriodicSync();
     }
   }, [isLoaded, notificationEnabled, notificationTime]);
 

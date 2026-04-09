@@ -10,6 +10,9 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: "autoUpdate",
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
       manifest: {
         name: "Expenses",
         short_name: "Expenses",
@@ -35,40 +38,8 @@ export default defineConfig({
           },
         ],
       },
-      workbox: {
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/fonts\.gstatic\.com\//i,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "google-fonts-webfonts",
-              expiration: {
-                maxAgeSeconds: 365 * 24 * 60 * 60,
-                maxEntries: 30,
-              },
-            },
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\//i,
-            handler: "StaleWhileRevalidate",
-            options: {
-              cacheName: "google-fonts-stylesheets",
-            },
-          },
-          {
-            urlPattern: /^https:\/\/open\.er-api\.com\//i,
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "exchange-rates",
-              networkTimeoutSeconds: 5,
-              expiration: {
-                maxAgeSeconds: 24 * 60 * 60,
-                maxEntries: 10,
-              },
-            },
-          },
-        ],
       },
     }),
   ],

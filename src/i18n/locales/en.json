@@ -203,7 +203,8 @@
       "label": "Daily reminder",
       "time": "Reminder time",
       "enabled": "Enabled",
-      "disabled": "Disabled"
+      "disabled": "Disabled",
+      "caveat": "Timing is approximate when the app is closed — the system decides when to deliver background reminders."
     },
     "mainCurrency": {
       "label": "Main currency",
