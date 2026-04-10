@@ -52,6 +52,7 @@ vi.mock("@/components/shared/CalendarPicker", () => ({
 }));
 vi.mock("@/components/shared/Numpad", () => ({
   Numpad: ({
+    onChange,
     onSave,
     onCalendarPress,
   }: {
@@ -64,6 +65,7 @@ vi.mock("@/components/shared/Numpad", () => ({
   }) => (
     <div>
       <button onClick={() => onSave(100)}>Save</button>
+      <button onClick={() => onChange("99")}>Type 99</button>
       <button onClick={onCalendarPress}>Calendar</button>
     </div>
   ),
@@ -711,6 +713,282 @@ describe("handleStep3ToPick", () => {
     await waitFor(() => {
       expect(screen.getByText("Savings")).toBeTruthy();
       expect(screen.getByText("Salary")).toBeTruthy();
+    });
+  });
+});
+
+// ── Helper shared by cross-currency debt tests ─────────────────────────────
+
+async function navigateToDebtPayment(sourceAccount: Account, debtAccount: Account) {
+  await act(async () => {
+    render(
+      <MemoryRouter initialEntries={["/transactions/new"]}>
+        <TransactionInput />
+      </MemoryRouter>,
+    );
+  });
+  // Step 1: pick source account
+  await act(async () => {
+    fireEvent.click(screen.getByText(sourceAccount.name));
+  });
+  // Step 2: pick debt account → isDebtPaymentMode = true
+  await act(async () => {
+    fireEvent.click(screen.getByText(debtAccount.name));
+  });
+  // Wait for Step 3
+  await waitFor(() => {
+    expect(screen.getByText("Save")).toBeTruthy();
+  });
+}
+
+// ── Bug #2: cross-currency debt payment fields ─────────────────────────────
+
+describe("cross-currency debt payment (Bug #2)", () => {
+  beforeEach(() => {
+    vi.mocked(useCategories).mockReturnValue([]);
+  });
+
+  it("showDebtDestForeign: renders destination currency input when source ≠ debt currency", async () => {
+    // mainCurrency=USD (mock), source=EUR, debt=GBP → toAccount2ndCurrencyDiffers=true
+    const eurAccount = makeAccount({ id: 1, name: "EUR Wallet", currency: "EUR" });
+    const gbpDebt = makeAccount({ id: 2, name: "GBP Loan", type: "DEBT", currency: "GBP" });
+    vi.mocked(useAccounts).mockReturnValue([eurAccount, gbpDebt]);
+
+    await navigateToDebtPayment(eurAccount, gbpDebt);
+
+    // The destination amount input and GBP label should be visible
+    expect(screen.getAllByRole("spinbutton").length).toBeGreaterThan(0);
+    expect(screen.getByText("GBP")).toBeTruthy();
+  });
+
+  it("showDebtMainCurrency: renders ≈ main-currency field when all 3 currencies differ", async () => {
+    // mainCurrency=USD, source=EUR, debt=GBP → EUR≠USD, GBP≠USD, EUR≠GBP
+    const eurAccount = makeAccount({ id: 1, name: "EUR Wallet", currency: "EUR" });
+    const gbpDebt = makeAccount({ id: 2, name: "GBP Loan", type: "DEBT", currency: "GBP" });
+    vi.mocked(useAccounts).mockReturnValue([eurAccount, gbpDebt]);
+
+    await navigateToDebtPayment(eurAccount, gbpDebt);
+
+    expect(screen.getByText("≈")).toBeTruthy();
+    // Main currency (USD) label visible in the 3-currency field
+    const usdLabels = screen.getAllByText("USD");
+    expect(usdLabels.length).toBeGreaterThan(0);
+  });
+
+  it("no cross-currency fields when source and debt share the same currency", async () => {
+    // source=USD=debt → toAccount2ndCurrencyDiffers=false → both flags false
+    const usdAccount = makeAccount({ id: 1, name: "USD Wallet", currency: "USD" });
+    const usdDebt = makeAccount({ id: 2, name: "USD Loan", type: "DEBT", currency: "USD" });
+    vi.mocked(useAccounts).mockReturnValue([usdAccount, usdDebt]);
+
+    await navigateToDebtPayment(usdAccount, usdDebt);
+
+    expect(screen.queryAllByRole("spinbutton")).toHaveLength(0);
+    expect(screen.queryByText("≈")).toBeNull();
+  });
+
+  it("showDebtMainCurrency hidden when source equals main currency (only 2 currencies differ)", async () => {
+    // source=USD=mainCurrency, debt=GBP → showDebtDestForeign=true, showDebtMainCurrency=false
+    const usdAccount = makeAccount({ id: 1, name: "USD Wallet", currency: "USD" });
+    const gbpDebt = makeAccount({ id: 2, name: "GBP Loan", type: "DEBT", currency: "GBP" });
+    vi.mocked(useAccounts).mockReturnValue([usdAccount, gbpDebt]);
+
+    await navigateToDebtPayment(usdAccount, gbpDebt);
+
+    // Destination input shown (showDebtDestForeign=true: USD≠GBP)
+    expect(screen.getAllByRole("spinbutton").length).toBeGreaterThan(0);
+    expect(screen.getByText("GBP")).toBeTruthy();
+    // No ≈ field (showDebtMainCurrency=false: fromCurrency=USD=mainCurrency)
+    expect(screen.queryByText("≈")).toBeNull();
+  });
+
+  it("save uses manually entered destination amount (toSecondaryAmount override)", async () => {
+    const { applyTransfer } = await import("@/services/balance.service");
+    vi.mocked(applyTransfer).mockClear();
+
+    const eurAccount = makeAccount({ id: 1, name: "EUR Wallet", currency: "EUR" });
+    const gbpDebt = makeAccount({ id: 2, name: "GBP Loan", type: "DEBT", currency: "GBP" });
+    vi.mocked(useAccounts).mockReturnValue([eurAccount, gbpDebt]);
+
+    await navigateToDebtPayment(eurAccount, gbpDebt);
+
+    // User types 75 into the destination (GBP) input
+    const destInput = screen.getAllByRole("spinbutton")[0];
+    await act(async () => {
+      fireEvent.change(destInput, { target: { value: "75" } });
+    });
+
+    // Save: Numpad mock calls onSave(100) → primary amount = 100 EUR
+    await act(async () => {
+      fireEvent.click(screen.getByText("Save"));
+    });
+
+    await waitFor(() => {
+      expect(applyTransfer).toHaveBeenCalled();
+      const calls = vi.mocked(applyTransfer).mock.calls;
+      const [, inTx] = calls[calls.length - 1];
+      // IN leg (debt account) must use the user-entered 75, not the exchange-rate auto-calc
+      expect(inTx.amount).toBe(75);
+    });
+  });
+
+  it("save auto-calculates inTx.amount from exchange rate when destination not overridden", async () => {
+    const { applyTransfer } = await import("@/services/balance.service");
+    const { exchangeRateService } = await import("@/services/exchange-rate.service");
+    vi.mocked(applyTransfer).mockClear();
+    vi.mocked(exchangeRateService.getRate).mockImplementation((from, to) => {
+      if (from === "EUR" && to === "GBP") return Promise.resolve(0.85);
+      return Promise.resolve(1);
+    });
+
+    const eurAccount = makeAccount({ id: 1, name: "EUR Wallet", currency: "EUR" });
+    const gbpDebt = makeAccount({ id: 2, name: "GBP Loan", type: "DEBT", currency: "GBP" });
+    vi.mocked(useAccounts).mockReturnValue([eurAccount, gbpDebt]);
+
+    await navigateToDebtPayment(eurAccount, gbpDebt);
+
+    // Do NOT touch the destination input — let auto-calc from exchange rate run
+    // Save: primary amount = 100 EUR (Numpad mock)
+    await act(async () => {
+      fireEvent.click(screen.getByText("Save"));
+    });
+
+    await waitFor(() => {
+      expect(applyTransfer).toHaveBeenCalled();
+      const calls = vi.mocked(applyTransfer).mock.calls;
+      const [, inTx] = calls[calls.length - 1];
+      // 100 EUR × 0.85 = 85 GBP
+      expect(inTx.amount).toBe(85);
+    });
+  });
+});
+
+// ── Bug #1: secondaryManual only resets on primary numpad edit ─────────────
+
+describe("secondaryManual reset fix (Bug #1)", () => {
+  it("manual secondary override is preserved after clicking the primary amount area", async () => {
+    // Bug #1 was: a useEffect reset secondaryManual=false whenever focusedField changed
+    // to 'primary' — even if the user just tapped elsewhere without editing the source amount.
+    // Fix: secondaryManual only resets inside handleNumpadChange (on actual primary keystroke).
+    //
+    // Observable: if user types 99 in the secondary (≈ USD) field, then clicks the primary
+    // amount display (which switches focusedField to 'primary' but does NOT edit the amount),
+    // then saves — amountMainCurrency should be 99, not 100 × exchange_rate.
+    const { applyTransaction } = await import("@/services/balance.service");
+    const { exchangeRateService } = await import("@/services/exchange-rate.service");
+    vi.mocked(applyTransaction).mockClear();
+    // EUR → USD = 1.1 (so auto-calc would give 100 × 1.1 = 110 if override is lost)
+    vi.mocked(exchangeRateService.getRate).mockResolvedValue(1.1);
+
+    const expenseCat = makeCategory({ id: 10, name: "Food", type: "EXPENSE" });
+    const eurAccount = makeAccount({ id: 1, name: "EUR Wallet", currency: "EUR" });
+    vi.mocked(useAccounts).mockReturnValue([eurAccount]);
+    vi.mocked(useCategories).mockReturnValue([expenseCat]);
+
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/transactions/new?accountId=1&categoryId=10"]}>
+          <TransactionInput />
+        </MemoryRouter>,
+      );
+    });
+
+    await waitFor(() => expect(screen.getByText("Save")).toBeTruthy());
+
+    // 1. Click ≈ to switch focusedField → 'secondary'
+    await act(async () => {
+      fireEvent.click(screen.getByText("≈"));
+    });
+
+    // 2. Numpad onChange now routes to handleSecondaryAmountChange
+    //    'Type 99' button calls onChange('99') → secondaryAmount='99', secondaryManual=true
+    await act(async () => {
+      fireEvent.click(screen.getByText("Type 99"));
+    });
+
+    // 3. Click the primary amount display ('0') → onFocusedFieldChange('primary')
+    //    Old bug: this would reset secondaryManual=false, triggering auto-calc
+    //    Fix: this does NOT reset secondaryManual
+    await act(async () => {
+      fireEvent.click(screen.getByText("0"));
+    });
+
+    // Allow any async exchange-rate effects to settle
+    await act(async () => {});
+
+    // 4. Save (Numpad onSave(100) → primary amount = 100 EUR)
+    await act(async () => {
+      fireEvent.click(screen.getByText("Save"));
+    });
+
+    await waitFor(() => {
+      expect(applyTransaction).toHaveBeenCalled();
+      const calls = vi.mocked(applyTransaction).mock.calls;
+      const tx = calls[calls.length - 1][0];
+      // secondaryManual stayed true → amountMainCurrency = 99 (manual override)
+      // If Bug #1 still present: secondaryManual reset → amountMainCurrency = 110 (exchange rate)
+      expect(tx.amountMainCurrency).toBe(99);
+    });
+  });
+
+  it("manual secondary override IS reset when the primary amount is edited via numpad", async () => {
+    // Verifies the forward behavior: handleNumpadChange (primary keystroke) DOES reset
+    // secondaryManual, so the exchange rate auto-calc takes over.
+    const { applyTransaction } = await import("@/services/balance.service");
+    const { exchangeRateService } = await import("@/services/exchange-rate.service");
+    vi.mocked(applyTransaction).mockClear();
+    vi.mocked(exchangeRateService.getRate).mockResolvedValue(1.1); // EUR→USD
+
+    const expenseCat = makeCategory({ id: 10, name: "Food", type: "EXPENSE" });
+    const eurAccount = makeAccount({ id: 1, name: "EUR Wallet", currency: "EUR" });
+    vi.mocked(useAccounts).mockReturnValue([eurAccount]);
+    vi.mocked(useCategories).mockReturnValue([expenseCat]);
+
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/transactions/new?accountId=1&categoryId=10"]}>
+          <TransactionInput />
+        </MemoryRouter>,
+      );
+    });
+
+    await waitFor(() => expect(screen.getByText("Save")).toBeTruthy());
+
+    // 1. Set secondaryManual=true by typing in the secondary field
+    await act(async () => {
+      fireEvent.click(screen.getByText("≈"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Type 99"));
+    });
+
+    // 2. Edit the primary field (Numpad onChange while focusedField='primary')
+    //    First switch back to primary
+    await act(async () => {
+      fireEvent.click(screen.getByText("0"));
+    });
+    // Now 'Type 99' button calls handleNumpadChange('99') → resets secondaryManual=false
+    await act(async () => {
+      fireEvent.click(screen.getByText("Type 99"));
+    });
+
+    // Allow auto-calc effect to run (secondaryManual=false, numpadValue changed)
+    await act(async () => {});
+
+    // 3. Save — auto-calc should have updated secondaryAmount to '99' × 1.1 from exchange rate
+    // Actually: numpadValue='99' → evaluateExpression('99')=99 → secondaryAmount = 99×1.1=108.9
+    // amountMainCurrency should NOT be 99 (that was the old manual value)
+    await act(async () => {
+      fireEvent.click(screen.getByText("Save"));
+    });
+
+    await waitFor(() => {
+      expect(applyTransaction).toHaveBeenCalled();
+      const calls = vi.mocked(applyTransaction).mock.calls;
+      const tx = calls[calls.length - 1][0];
+      // secondaryManual reset → uses exchange rate: 100 × 1.1 = 110
+      // (Save mock always calls onSave(100), so amount=100)
+      expect(tx.amountMainCurrency).toBe(110);
     });
   });
 });
