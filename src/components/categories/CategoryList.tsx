@@ -20,9 +20,11 @@ import {
 } from '@dnd-kit/sortable';
 
 import { useCategories } from '../../hooks/use-categories';
+import { useAccounts } from '../../hooks/use-accounts';
 import { useTransactions } from '../../hooks/use-transactions';
 import { useUIStore } from '../../stores/ui-store';
 import { db } from '../../db/database';
+import { isDebtPayment } from '../../utils/transaction-utils';
 
 import PeriodFilter from '../shared/PeriodFilter';
 import { EmptyState } from '../shared/EmptyState';
@@ -32,10 +34,10 @@ import { useToast } from '../shared/Toast';
 import DonutChart from './DonutChart';
 import CategoryCard from './CategoryCard';
 import CategoryForm from './CategoryForm';
+import DebtPaymentCard from './DebtPaymentCard';
 
-import type { Category } from '../../db/models';
+import type { Category, Account } from '../../db/models';
 import { getUTCISOString, parsePeriodFilter } from '../../utils/date-utils';
-import { isExpenseForReporting } from '../../utils/transaction-utils';
 
 export default function CategoryList() {
   const navigate = useNavigate();
@@ -56,6 +58,8 @@ export default function CategoryList() {
   // Active categories for current view type
   const categories = useCategories(categoriesViewType, false);
 
+  const allAccounts = useAccounts(true);
+
   // All transactions for the period (both expense and income) for the donut/totals
   const allTransactions = useTransactions({ filter: categoriesFilter });
 
@@ -70,23 +74,39 @@ export default function CategoryList() {
     [budgetMonth],
   ) ?? [];
 
-  // Compute spent per category in period
-  const spentByCategoryId = useMemo(() => {
-    const map = new Map<number, number>();
+  // Compute spent per category and debt account payments in period
+  const { expenseById, incomeById, debtAccountTotals } = useMemo(() => {
+    const expenseById = new Map<number, number>();
+    const incomeById = new Map<number, number>();
+    const debtAccountTotals = new Map<number, number>();
     for (const tx of allTransactions) {
-      if (tx.categoryId === null) continue;
-      if (tx.type === 'EXPENSE' || tx.type === 'INCOME') {
-        map.set(tx.categoryId, (map.get(tx.categoryId) ?? 0) + tx.amountMainCurrency);
+      if (isDebtPayment(tx) && tx.toAccountId != null) {
+        debtAccountTotals.set(tx.toAccountId, (debtAccountTotals.get(tx.toAccountId) ?? 0) + tx.amountMainCurrency);
+      } else if (tx.categoryId !== null) {
+        if (tx.type === 'EXPENSE') {
+          expenseById.set(tx.categoryId, (expenseById.get(tx.categoryId) ?? 0) + tx.amountMainCurrency);
+        } else if (tx.type === 'INCOME') {
+          incomeById.set(tx.categoryId, (incomeById.get(tx.categoryId) ?? 0) + tx.amountMainCurrency);
+        }
       }
     }
-    return map;
+    return { expenseById, incomeById, debtAccountTotals };
   }, [allTransactions]);
 
-  // Totals for donut center
+  const spentMap = categoriesViewType === 'EXPENSE' ? expenseById : incomeById;
+
+  const debtAccountsWithSpend = useMemo(() => {
+    if (categoriesViewType !== 'EXPENSE') return [];
+    return allAccounts
+      .filter((a) => a.type === 'DEBT' && (debtAccountTotals.get(a.id!) ?? 0) > 0)
+      .sort((a, b) => (debtAccountTotals.get(b.id!) ?? 0) - (debtAccountTotals.get(a.id!) ?? 0));
+  }, [allAccounts, debtAccountTotals, categoriesViewType]);
+
+  // Totals for donut center — include debt payments so center matches ring area
   const totalExpense = useMemo(
     () =>
       allTransactions
-        .filter(isExpenseForReporting)
+        .filter((t) => (t.type === 'EXPENSE' && t.categoryId !== null) || isDebtPayment(t))
         .reduce((sum, t) => sum + t.amountMainCurrency, 0),
     [allTransactions],
   );
@@ -94,21 +114,30 @@ export default function CategoryList() {
   const totalIncome = useMemo(
     () =>
       allTransactions
-        .filter((t) => t.type === 'INCOME')
+        .filter((t) => t.type === 'INCOME' && t.categoryId !== null)
         .reduce((sum, t) => sum + t.amountMainCurrency, 0),
     [allTransactions],
   );
 
-  // Donut slices — only current view type categories with nonzero spending
+  // Donut slices — current view type categories + debt account payments, nonzero only
   const donutSlices = useMemo(() => {
-    return categories
+    const map = categoriesViewType === 'EXPENSE' ? expenseById : incomeById;
+    const catSlices = categories
       .map((cat) => ({
-        categoryId: cat.id!,
+        id: `cat-${cat.id!}`,
         color: cat.color,
-        amount: spentByCategoryId.get(cat.id!) ?? 0,
+        amount: map.get(cat.id!) ?? 0,
       }))
       .filter((s) => s.amount > 0);
-  }, [categories, spentByCategoryId]);
+
+    const debtSlices = debtAccountsWithSpend.map((acc) => ({
+      id: `acc-${acc.id!}`,
+      color: acc.color,
+      amount: debtAccountTotals.get(acc.id!) ?? 0,
+    }));
+
+    return [...catSlices, ...debtSlices];
+  }, [categories, expenseById, incomeById, categoriesViewType, debtAccountsWithSpend, debtAccountTotals]);
 
   async function handleRemoveCategory(id: number) {
     setConfirmTrash(id);
@@ -132,6 +161,10 @@ export default function CategoryList() {
     navigate(
       `/transactions/new?type=${category.type}&categoryId=${category.id}`,
     );
+  }
+
+  function handleDebtCardClick(account: Account) {
+    navigate(`/accounts/${account.id}`);
   }
 
   function handleEditCategory(category: Category) {
@@ -297,7 +330,7 @@ export default function CategoryList() {
       </div>
 
       {/* Category cards */}
-      {categories.length === 0 ? (
+      {categories.length === 0 && debtAccountsWithSpend.length === 0 ? (
         <EmptyState
           icon={Tag}
           heading="No categories yet"
@@ -325,7 +358,7 @@ export default function CategoryList() {
             <SortableContext items={categoryIds} strategy={verticalListSortingStrategy}>
               {categories.map((cat) => {
                 const budget = budgets.find((b) => b.categoryId === cat.id) ?? null;
-                const spent = spentByCategoryId.get(cat.id!) ?? 0;
+                const spent = spentMap.get(cat.id!) ?? 0;
 
                 return (
                   <CategoryCard
@@ -341,6 +374,18 @@ export default function CategoryList() {
               })}
             </SortableContext>
           </DndContext>
+          {debtAccountsWithSpend.map((acc) => {
+            const budget = budgets.find((b) => b.accountId === acc.id) ?? null;
+            return (
+              <DebtPaymentCard
+                key={`debt-${acc.id!}`}
+                account={acc}
+                spent={debtAccountTotals.get(acc.id!) ?? 0}
+                budget={budget?.plannedAmount ?? null}
+                onClick={handleDebtCardClick}
+              />
+            );
+          })}
         </div>
       )}
 

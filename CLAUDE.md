@@ -39,11 +39,11 @@ The command always closes the browser when done.
 ```
 react@19.2.4          react-dom@19.2.4       typescript@6.0.2
 vite@8.0.3            tailwindcss@4.2.2      @tailwindcss/vite@4.2.2
-vite-plugin-pwa@1.2.0 dexie@4.4.1            react-router@7.13.2
-zustand@5.0.12        lucide-react@1.7.0     date-fns@4.1.0
-i18next@26.0.1        react-i18next@17.0.1   @dnd-kit/core@6.3.1
-@dnd-kit/sortable@10.0.0  zod@4.3.6          recharts@3.8.1
-xlsx@0.18.5
+vite-plugin-pwa@1.2.0 dexie@4.4.1            dexie-react-hooks@4.4.0
+react-router@7.13.2   zustand@5.0.12         lucide-react@1.7.0
+date-fns@4.1.0        i18next@26.0.1         react-i18next@17.0.1
+@dnd-kit/core@6.3.1   @dnd-kit/sortable@10.0.0  zod@4.3.6
+recharts@3.8.1        xlsx@0.18.5            workbox-window@7.4.0
 ```
 
 ## Project structure (src/)
@@ -53,6 +53,7 @@ db/           Dexie database, models, seed data, sync stub
 stores/       Zustand stores (ui-store, settings-store)
 services/     exchange-rate, balance, backup, export, notification, math-parser
 hooks/        useLiveQuery wrappers (use-accounts, use-transactions, etc.)
+pages/        Route-level page components (AccountsPage, TransactionsPage, etc.)
 components/
   layout/     BottomNav, TopBar, ContentColumn, BottomSheet
   shared/     PeriodFilter, Numpad, ColorPicker, IconPicker, AmountDisplay, Toast, ...
@@ -67,6 +68,8 @@ i18n/         i18next setup + locales/en.json
 utils/        constants, validation (Zod), date-utils, currency-utils
 types/        Shared TypeScript types (PeriodFilter, TabName, etc.)
 styles/       index.css — Tailwind + all CSS design tokens
+sw.ts         Service worker (PWA, Workbox-based, built by vite-plugin-pwa)
+sw-register.ts  Service worker registration + install prompt logic
 ```
 
 ## Key design rules (from design_spec.md)

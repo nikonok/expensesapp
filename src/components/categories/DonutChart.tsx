@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useUIStore } from '../../stores/ui-store';
 
 export interface DonutSlice {
-  categoryId: number;
+  id: string;
   color: string;
   amount: number;
 }
@@ -22,10 +22,19 @@ const STROKE_WIDTH = 8;
 // Gap between slices in px (as fraction of circumference)
 const GAP_PX = 2;
 
-function formatAmount(amount: number): string {
+export function formatAmount(amount: number): string {
   if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(1)}M`;
   if (amount >= 1_000) return `${(amount / 1_000).toFixed(1)}k`;
   return amount.toFixed(0);
+}
+
+export function dynamicFontSize(str: string, maxSize: number, minSize: number): number {
+  const usableWidth = 120;
+  const charWidthRatio = 0.6;
+  const fitsAtMax = Math.floor(usableWidth / (charWidthRatio * maxSize));
+  if (str.length <= fitsAtMax) return maxSize;
+  const computed = Math.floor(usableWidth / (str.length * charWidthRatio));
+  return Math.max(minSize, Math.min(maxSize, computed));
 }
 
 export default function DonutChart({ slices, totalExpense, totalIncome, categoriesViewType }: DonutChartProps) {
@@ -88,7 +97,7 @@ export default function DonutChart({ slices, totalExpense, totalIncome, categori
             fill="var(--color-text-disabled)"
             fontFamily='"JetBrains Mono", monospace'
             fontWeight={500}
-            fontSize="18"
+            fontSize="24"
           >
             0
           </text>
@@ -149,7 +158,7 @@ export default function DonutChart({ slices, totalExpense, totalIncome, categori
 
             return (
               <circle
-                key={arc.slice.categoryId}
+                key={arc.slice.id}
                 cx={CX}
                 cy={CY}
                 r={R}
@@ -184,32 +193,36 @@ export default function DonutChart({ slices, totalExpense, totalIncome, categori
           const secondaryColor = isExpense ? 'var(--color-income)' : 'var(--color-expense)';
           const primaryPrefix = isExpense ? '-' : '+';
           const secondaryPrefix = isExpense ? '+' : '-';
+          const primaryStr = `${primaryPrefix}${formatAmount(primaryAmount)}`;
+          const secondaryStr = `${secondaryPrefix}${formatAmount(secondaryAmount)}`;
+          const primaryFontSize = dynamicFontSize(primaryStr, 24, 14);
+          const secondaryFontSize = dynamicFontSize(secondaryStr, 14, 10);
           return (
             <>
               <text
                 x={CX}
-                y={CY - 14}
+                y={CY - 12}
                 textAnchor="middle"
                 dominantBaseline="middle"
                 fill={primaryColor}
                 fontFamily='"JetBrains Mono", monospace'
                 fontWeight={600}
-                fontSize="18"
+                fontSize={primaryFontSize}
               >
-                {primaryPrefix}{formatAmount(primaryAmount)}
+                {primaryStr}
               </text>
               <text
                 x={CX}
-                y={CY + 14}
+                y={CY + 13}
                 textAnchor="middle"
                 dominantBaseline="middle"
                 fill={secondaryColor}
                 fontFamily='"JetBrains Mono", monospace'
                 fontWeight={400}
-                fontSize="12"
+                fontSize={secondaryFontSize}
                 opacity={0.6}
               >
-                {secondaryPrefix}{formatAmount(secondaryAmount)}
+                {secondaryStr}
               </text>
             </>
           );
