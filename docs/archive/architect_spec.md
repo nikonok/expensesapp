@@ -8,40 +8,40 @@
 
 ## 1. Technology Stack (Pinned Versions)
 
-| Package | Version | Purpose |
-|---|---|---|
-| `react` | `19.2.4` | UI framework |
-| `react-dom` | `19.2.4` | DOM renderer |
-| `typescript` | `6.0.2` | Type safety |
-| `vite` | `8.0.3` | Build tool, dev server |
-| `vite-plugin-pwa` | `1.2.0` | Service worker generation, PWA manifest |
-| `workbox-window` | `7.4.0` | Service worker registration/lifecycle |
-| `dexie` | `4.4.1` | IndexedDB wrapper, persistence layer |
-| `dexie-react-hooks` | (bundled with dexie 4.x) | `useLiveQuery` for reactive DB reads |
-| `tailwindcss` | `4.2.2` | Utility-first CSS |
-| `@tailwindcss/vite` | `4.2.2` | Tailwind Vite integration |
-| `react-router` | `7.13.2` | Client-side routing |
-| `zustand` | `5.0.12` | Ephemeral UI state management |
-| `lucide-react` | `1.7.0` | Icon library (tree-shakable) |
-| `date-fns` | `4.1.0` | Date manipulation (tree-shakable, no locale bloat) |
-| `i18next` | `26.0.1` | i18n framework |
-| `react-i18next` | `17.0.1` | React bindings for i18next |
-| `@dnd-kit/core` | `6.3.1` | Drag-and-drop primitives |
-| `@dnd-kit/sortable` | `10.0.0` | Sortable list support |
-| `zod` | `4.3.6` | Runtime schema validation |
-| `recharts` | `3.8.1` | Charts (Overview bar chart only) |
-| `xlsx` | `0.18.5` | Spreadsheet export (.xlsx) |
+| Package             | Version                  | Purpose                                            |
+| ------------------- | ------------------------ | -------------------------------------------------- |
+| `react`             | `19.2.4`                 | UI framework                                       |
+| `react-dom`         | `19.2.4`                 | DOM renderer                                       |
+| `typescript`        | `6.0.2`                  | Type safety                                        |
+| `vite`              | `8.0.3`                  | Build tool, dev server                             |
+| `vite-plugin-pwa`   | `1.2.0`                  | Service worker generation, PWA manifest            |
+| `workbox-window`    | `7.4.0`                  | Service worker registration/lifecycle              |
+| `dexie`             | `4.4.1`                  | IndexedDB wrapper, persistence layer               |
+| `dexie-react-hooks` | (bundled with dexie 4.x) | `useLiveQuery` for reactive DB reads               |
+| `tailwindcss`       | `4.2.2`                  | Utility-first CSS                                  |
+| `@tailwindcss/vite` | `4.2.2`                  | Tailwind Vite integration                          |
+| `react-router`      | `7.13.2`                 | Client-side routing                                |
+| `zustand`           | `5.0.12`                 | Ephemeral UI state management                      |
+| `lucide-react`      | `1.7.0`                  | Icon library (tree-shakable)                       |
+| `date-fns`          | `4.1.0`                  | Date manipulation (tree-shakable, no locale bloat) |
+| `i18next`           | `26.0.1`                 | i18n framework                                     |
+| `react-i18next`     | `17.0.1`                 | React bindings for i18next                         |
+| `@dnd-kit/core`     | `6.3.1`                  | Drag-and-drop primitives                           |
+| `@dnd-kit/sortable` | `10.0.0`                 | Sortable list support                              |
+| `zod`               | `4.3.6`                  | Runtime schema validation                          |
+| `recharts`          | `3.8.1`                  | Charts (Overview bar chart only)                   |
+| `xlsx`              | `0.18.5`                 | Spreadsheet export (.xlsx)                         |
 
 > **Note on React version**: This architecture uses React 19 (latest stable). All listed dependencies are compatible with React 19.
 
 ### Dev Dependencies
 
-| Package | Version | Purpose |
-|---|---|---|
-| `vitest` | `4.1.2` | Unit/integration testing |
-| `@testing-library/react` | `16.3.2` | Component testing |
-| `eslint` | `10.1.0` | Linting |
-| `prettier` | `3.8.1` | Formatting |
+| Package                  | Version  | Purpose                  |
+| ------------------------ | -------- | ------------------------ |
+| `vitest`                 | `4.1.2`  | Unit/integration testing |
+| `@testing-library/react` | `16.3.2` | Component testing        |
+| `eslint`                 | `10.1.0` | Linting                  |
+| `prettier`               | `3.8.1`  | Formatting               |
 
 ---
 
@@ -179,26 +179,27 @@ All tables use auto-incrementing `id` (number) as primary key unless noted. All 
 
 ```typescript
 // db/database.ts
-import Dexie, { type EntityTable } from 'dexie';
+import Dexie, { type EntityTable } from "dexie";
 
-const db = new Dexie('expenses-app-db') as Dexie & {
-  accounts: EntityTable<Account, 'id'>;
-  categories: EntityTable<Category, 'id'>;
-  transactions: EntityTable<Transaction, 'id'>;
-  budgets: EntityTable<Budget, 'id'>;
-  exchangeRates: EntityTable<ExchangeRateCache, 'id'>;
-  settings: EntityTable<Setting, 'key'>;
-  backups: EntityTable<Backup, 'id'>;
+const db = new Dexie("expenses-app-db") as Dexie & {
+  accounts: EntityTable<Account, "id">;
+  categories: EntityTable<Category, "id">;
+  transactions: EntityTable<Transaction, "id">;
+  budgets: EntityTable<Budget, "id">;
+  exchangeRates: EntityTable<ExchangeRateCache, "id">;
+  settings: EntityTable<Setting, "key">;
+  backups: EntityTable<Backup, "id">;
 };
 
 db.version(1).stores({
-  accounts:     '++id, type, name, isTrashed, currency',
-  categories:   '++id, type, name, isTrashed, displayOrder',
-  transactions: '++id, date, accountId, categoryId, type, [date+displayOrder], [accountId+date], transferGroupId',
-  budgets:      '++id, categoryId, accountId, month, [categoryId+month], [accountId+month]',
-  exchangeRates:'++id, baseCurrency, &[baseCurrency+date]',
-  settings:     'key',
-  backups:      '++id, createdAt',
+  accounts: "++id, type, name, isTrashed, currency",
+  categories: "++id, type, name, isTrashed, displayOrder",
+  transactions:
+    "++id, date, accountId, categoryId, type, [date+displayOrder], [accountId+date], transferGroupId",
+  budgets: "++id, categoryId, accountId, month, [categoryId+month], [accountId+month]",
+  exchangeRates: "++id, baseCurrency, &[baseCurrency+date]",
+  settings: "key",
+  backups: "++id, createdAt",
 });
 
 export { db };
@@ -211,38 +212,38 @@ export { db };
 
 // ── Accounts ──
 
-type AccountType = 'REGULAR' | 'DEBT' | 'SAVINGS';
+type AccountType = "REGULAR" | "DEBT" | "SAVINGS";
 
 interface Account {
   id?: number;
-  name: string;                    // max 64 chars
+  name: string; // max 64 chars
   type: AccountType;
-  color: string;                   // oklch value from shared palette
-  icon: string;                    // Lucide icon name or emoji
-  currency: string;                // ISO 4217 code (e.g. "PLN", "USD")
-  description: string;             // max 255 chars
-  balance: number;                 // current stored balance (updated on tx add/edit/delete/manual adjust)
-  startingBalance: number;         // initial balance at creation (informational, never changes)
-  includeInTotal: boolean;         // include in total balance / Total Wealth
-  isTrashed: boolean;              // soft delete
+  color: string; // oklch value from shared palette
+  icon: string; // Lucide icon name or emoji
+  currency: string; // ISO 4217 code (e.g. "PLN", "USD")
+  description: string; // max 255 chars
+  balance: number; // current stored balance (updated on tx add/edit/delete/manual adjust)
+  startingBalance: number; // initial balance at creation (informational, never changes)
+  includeInTotal: boolean; // include in total balance / Total Wealth
+  isTrashed: boolean; // soft delete
 
   // Savings-specific
-  savingsGoal?: number | null;     // optional target amount
+  savingsGoal?: number | null; // optional target amount
   savingsInterestRate?: number | null; // future feature stub: annual interest rate as decimal
 
   // Debt-specific
-  interestRateMonthly?: number | null;    // stored as decimal (e.g. 0.01 = 1%)
-  interestRateYearly?: number | null;     // stored as decimal
+  interestRateMonthly?: number | null; // stored as decimal (e.g. 0.01 = 1%)
+  interestRateYearly?: number | null; // stored as decimal
   mortgageLoanAmount?: number | null;
-  mortgageStartDate?: string | null;      // ISO-8601
+  mortgageStartDate?: string | null; // ISO-8601
   mortgageTermYears?: number | null;
-  mortgageInterestRate?: number | null;   // stored as decimal
+  mortgageInterestRate?: number | null; // stored as decimal
 
   // Future feature stub
-  autoAccrueInterest?: boolean;           // debt auto-interest accrual (not implemented)
+  autoAccrueInterest?: boolean; // debt auto-interest accrual (not implemented)
 
-  createdAt: string;               // ISO-8601 UTC
-  updatedAt: string;               // ISO-8601 UTC
+  createdAt: string; // ISO-8601 UTC
+  updatedAt: string; // ISO-8601 UTC
 }
 ```
 
@@ -251,16 +252,16 @@ interface Account {
 ```typescript
 // ── Categories ──
 
-type CategoryType = 'EXPENSE' | 'INCOME';
+type CategoryType = "EXPENSE" | "INCOME";
 
 interface Category {
   id?: number;
-  name: string;                    // max 64 chars
-  type: CategoryType;              // immutable after creation
-  color: string;                   // oklch value from shared palette
-  icon: string;                    // Lucide icon name or emoji
-  displayOrder: number;            // drag-reorder position; lower = first
-  isTrashed: boolean;              // soft delete
+  name: string; // max 64 chars
+  type: CategoryType; // immutable after creation
+  color: string; // oklch value from shared palette
+  icon: string; // Lucide icon name or emoji
+  displayOrder: number; // drag-reorder position; lower = first
+  isTrashed: boolean; // soft delete
 
   createdAt: string;
   updatedAt: string;
@@ -268,38 +269,38 @@ interface Category {
 
 // ── Transactions ──
 
-type TransactionType = 'EXPENSE' | 'INCOME' | 'TRANSFER';
+type TransactionType = "EXPENSE" | "INCOME" | "TRANSFER";
 
 interface Transaction {
   id?: number;
   type: TransactionType;
-  date: string;                    // local date as "YYYY-MM-DD" (wall-clock date at entry time)
-  timestamp: string;               // full ISO-8601 UTC (creation moment, for ordering within a day)
-  displayOrder: number;            // user-reorderable position within the day; lower = first
+  date: string; // local date as "YYYY-MM-DD" (wall-clock date at entry time)
+  timestamp: string; // full ISO-8601 UTC (creation moment, for ordering within a day)
+  displayOrder: number; // user-reorderable position within the day; lower = first
 
-  accountId: number;               // FK to accounts.id
-  categoryId: number | null;       // FK to categories.id; null for transfers
+  accountId: number; // FK to accounts.id
+  categoryId: number | null; // FK to categories.id; null for transfers
 
-  currency: string;                // ISO 4217 — account's currency AT THE TIME of transaction creation
-                                   // (spec §1b: old transactions always display their original currency,
-                                   //  not the account's current currency if it was changed)
+  currency: string; // ISO 4217 — account's currency AT THE TIME of transaction creation
+  // (spec §1b: old transactions always display their original currency,
+  //  not the account's current currency if it was changed)
 
-  amount: number;                  // in account's currency; always positive
-  amountMainCurrency: number;      // converted to main currency; always positive
-  exchangeRate: number;            // rate used: 1 unit of account currency = X main currency
-                                   // Example: account=USD, main=PLN, 1 USD=4 PLN → exchangeRate=4.0
-                                   // Conversion: amountMainCurrency = amount × exchangeRate
+  amount: number; // in account's currency; always positive
+  amountMainCurrency: number; // converted to main currency; always positive
+  exchangeRate: number; // rate used: 1 unit of account currency = X main currency
+  // Example: account=USD, main=PLN, 1 USD=4 PLN → exchangeRate=4.0
+  // Conversion: amountMainCurrency = amount × exchangeRate
 
-  note: string;                    // max 255 chars
+  note: string; // max 255 chars
 
   // Transfer-specific
-  transferGroupId: string | null;  // shared UUID linking the two halves of a transfer
-  transferDirection: 'OUT' | 'IN' | null; // OUT = source, IN = destination
+  transferGroupId: string | null; // shared UUID linking the two halves of a transfer
+  transferDirection: "OUT" | "IN" | null; // OUT = source, IN = destination
 
   // Future feature stub
   recurringRule?: {
-    frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
-    endDate?: string;              // ISO-8601, optional
+    frequency: "daily" | "weekly" | "monthly" | "yearly";
+    endDate?: string; // ISO-8601, optional
   } | null;
 
   createdAt: string;
@@ -310,10 +311,10 @@ interface Transaction {
 
 interface Budget {
   id?: number;
-  categoryId: number | null;       // FK to categories.id; null when budget is for an account
-  accountId: number | null;        // FK to accounts.id (DEBT or SAVINGS only); null when budget is for a category
-  month: string;                   // "YYYY-MM" format
-  plannedAmount: number;           // positive number
+  categoryId: number | null; // FK to categories.id; null when budget is for an account
+  accountId: number | null; // FK to accounts.id (DEBT or SAVINGS only); null when budget is for a category
+  month: string; // "YYYY-MM" format
+  plannedAmount: number; // positive number
 
   createdAt: string;
   updatedAt: string;
@@ -327,17 +328,17 @@ interface Budget {
 
 interface ExchangeRateCache {
   id?: number;
-  baseCurrency: string;            // ISO 4217
-  date: string;                    // "YYYY-MM-DD"
-  rates: Record<string, number>;   // { "EUR": 0.85, "GBP": 0.73, ... }
-  fetchedAt: string;               // ISO-8601 UTC
+  baseCurrency: string; // ISO 4217
+  date: string; // "YYYY-MM-DD"
+  rates: Record<string, number>; // { "EUR": 0.85, "GBP": 0.73, ... }
+  fetchedAt: string; // ISO-8601 UTC
 }
 
 // ── Settings (key-value) ──
 
 interface Setting {
-  key: string;                     // primary key
-  value: unknown;                  // JSON-serializable value
+  key: string; // primary key
+  value: unknown; // JSON-serializable value
 }
 
 // Predefined setting keys:
@@ -355,9 +356,9 @@ interface Setting {
 
 interface Backup {
   id?: number;
-  createdAt: string;               // ISO-8601 UTC
-  data: string;                    // JSON-serialized full database snapshot
-  isAutomatic: boolean;            // true if created by scheduled backup
+  createdAt: string; // ISO-8601 UTC
+  data: string; // JSON-serialized full database snapshot
+  isAutomatic: boolean; // true if created by scheduled backup
 }
 ```
 
@@ -407,7 +408,7 @@ export interface SyncConfig {
 
 export function initSync(_config: SyncConfig): void {
   // Stub: no-op. Future implementation will use Dexie Cloud or custom sync.
-  console.info('[Sync] Sync not implemented. Stub initialized.');
+  console.info("[Sync] Sync not implemented. Stub initialized.");
 }
 
 export function isSyncEnabled(): boolean {
@@ -433,10 +434,10 @@ Categories and accounts use soft delete (`isTrashed = true`). The trash cannot b
 
 ### 4.1 Two-Layer Approach
 
-| Layer | Tool | What it holds | Persistence |
-|---|---|---|---|
-| **Persistent** | Dexie + `useLiveQuery` | All domain data (accounts, categories, transactions, budgets, settings, rates) | IndexedDB — survives app close |
-| **Ephemeral** | Zustand | UI-only state (active filters, selection mode, current period, bottom sheet open/close) | Memory — resets on app close |
+| Layer          | Tool                   | What it holds                                                                           | Persistence                    |
+| -------------- | ---------------------- | --------------------------------------------------------------------------------------- | ------------------------------ |
+| **Persistent** | Dexie + `useLiveQuery` | All domain data (accounts, categories, transactions, budgets, settings, rates)          | IndexedDB — survives app close |
+| **Ephemeral**  | Zustand                | UI-only state (active filters, selection mode, current period, bottom sheet open/close) | Memory — resets on app close   |
 
 ### 4.2 Why Zustand for ephemeral state
 
@@ -451,9 +452,9 @@ Categories and accounts use soft delete (`isTrashed = true`). The trash cannot b
 // stores/ui-store.ts
 
 interface PeriodFilter {
-  type: 'all' | 'today' | 'custom' | 'day' | 'week' | 'month' | 'year';
-  startDate: string;    // "YYYY-MM-DD"
-  endDate: string;      // "YYYY-MM-DD"
+  type: "all" | "today" | "custom" | "day" | "week" | "month" | "year";
+  startDate: string; // "YYYY-MM-DD"
+  endDate: string; // "YYYY-MM-DD"
 }
 
 interface UIStore {
@@ -461,10 +462,10 @@ interface UIStore {
   categoriesFilter: PeriodFilter;
   transactionsFilter: PeriodFilter;
   overviewFilter: PeriodFilter;
-  budgetMonth: string;  // "YYYY-MM"
+  budgetMonth: string; // "YYYY-MM"
 
   // Categories tab: which list is shown (toggled by donut chart tap)
-  categoriesViewType: 'EXPENSE' | 'INCOME';   // default: 'EXPENSE'
+  categoriesViewType: "EXPENSE" | "INCOME"; // default: 'EXPENSE'
 
   // Categories tab: edit mode
   categoriesEditMode: boolean;
@@ -478,14 +479,14 @@ interface UIStore {
   selectedTransactionIds: Set<number>;
 
   // Derived
-  hasActiveTransactionFilters: () => boolean;  // true if any of note/category/account filter is non-default
+  hasActiveTransactionFilters: () => boolean; // true if any of note/category/account filter is non-default
 
   // Actions
   setCategoriesFilter: (f: PeriodFilter) => void;
   setTransactionsFilter: (f: PeriodFilter) => void;
   setOverviewFilter: (f: PeriodFilter) => void;
   setBudgetMonth: (m: string) => void;
-  toggleCategoriesViewType: () => void;         // toggles between EXPENSE and INCOME
+  toggleCategoriesViewType: () => void; // toggles between EXPENSE and INCOME
   setCategoriesEditMode: (on: boolean) => void;
   setTransactionNoteFilter: (note: string) => void;
   setTransactionCategoryFilter: (id: number | null) => void;
@@ -518,7 +519,7 @@ interface SettingsStore {
   hasCompletedOnboarding: boolean;
   isLoaded: boolean;
 
-  load: () => Promise<void>;                    // reads all settings from Dexie
+  load: () => Promise<void>; // reads all settings from Dexie
   update: (key: string, value: unknown) => Promise<void>; // writes to Dexie + updates store
 }
 ```
@@ -553,7 +554,9 @@ interface SettingsStore {
 ```tsx
 // App.tsx
 <Routes>
-  <Route element={<TabLayout />}>     {/* renders BottomNav + TopBar + ContentColumn */}
+  <Route element={<TabLayout />}>
+    {" "}
+    {/* renders BottomNav + TopBar + ContentColumn */}
     <Route path="accounts" element={<AccountsTab />}>
       <Route path="trash" element={<TrashedAccounts />} />
       <Route path="new" element={<AccountForm />} />
@@ -585,6 +588,7 @@ Account detail, account form, and trashed views render as **bottom sheets/overla
 **Category tap (normal mode, spec §2c)**: When user taps a category card outside of edit mode, navigate to `/transactions/new?type={expense|income}&categoryId={id}`. The `TransactionInput` component detects these query params and **skips** the tab selection and category picker steps — it goes directly to the amount/detail view with the category and type pre-selected.
 
 **Account detail shortcuts (spec §1c)**:
+
 - "Add incoming transaction" button → navigate to `/transactions/new?type=income&accountId={id}`
 - "Add withdrawal" button → navigate to `/transactions/new?type=expense&accountId={id}`
 - "View transactions" button → call `setTransactionAccountFilter(accountId)` on the UI store, then navigate to `/transactions`
@@ -625,17 +629,20 @@ interface ExchangeRateService {
 ```
 
 **Exchange rate direction convention**:
+
 - The API returns rates where `baseCurrency` is the base: `rates["PLN"]` on a USD base means 1 USD = X PLN.
 - On a Transaction, `exchangeRate` means: 1 unit of account currency = X units of main currency.
 - Example: account currency is USD, main currency is PLN, API reports 1 USD = 4.0 PLN → `exchangeRate = 4.0`, `amountMainCurrency = amount × 4.0`.
 - All conversions in the app are `accountCurrency → mainCurrency`, so a single fetch per day (for the main currency as base) suffices.
 
 **Fetch failure behavior**:
+
 - Show a dismissible toast/banner: "Could not fetch exchange rates. Using cached rates." (if cache exists)
 - Show a persistent banner: "No exchange rate available — using 1:1 conversion." (if no cache at all)
 - The banner must be visible on any screen where conversion is happening.
 
 **Caching strategy**:
+
 - Cache keyed by `(baseCurrency, date)` in `exchangeRates` table.
 - On app startup, fetch rates for the main currency. On success, cache. On failure, log and use stale cache.
 - Keep last 90 days of cached rates. Prune older entries on startup.
@@ -699,6 +706,7 @@ interface BalanceService {
 ```
 
 Balance effect rules:
+
 - `INCOME` transaction on account: `balance += amount`
 - `EXPENSE` transaction on account: `balance -= amount`
 - `TRANSFER OUT` on source account: `balance -= amount`
@@ -783,6 +791,7 @@ interface BackupService {
 ```
 
 **Backup format**: JSON containing:
+
 ```json
 {
   "version": 1,
@@ -872,6 +881,7 @@ interface NotificationService {
 ```
 
 **Platform behavior**:
+
 - **Android (Chrome PWA)**: Full support — service worker + `showNotification()`. Use `periodicSync` if available, otherwise use `setTimeout` recalculated on each service worker wake.
 - **iOS (Safari PWA)**: Notifications supported since iOS 16.4 in installed PWAs. Same approach, but `periodicSync` is not available. Fallback: on app open, check if today's reminder was missed and show an in-app prompt.
 - **Desktop browser**: Use standard `Notification` API. No persistent scheduling — only fires if tab is open. Show a note in settings: "Desktop notifications only work when the app is open."
@@ -885,15 +895,15 @@ All user input is validated using Zod schemas before writing to the database.
 ```typescript
 // utils/validation.ts
 
-import { z } from 'zod';
+import { z } from "zod";
 
 export const accountSchema = z.object({
   name: z.string().min(1).max(64),
-  type: z.enum(['REGULAR', 'DEBT', 'SAVINGS']),
+  type: z.enum(["REGULAR", "DEBT", "SAVINGS"]),
   color: z.string(),
   icon: z.string(),
   currency: z.string().length(3),
-  description: z.string().max(255).default(''),
+  description: z.string().max(255).default(""),
   startingBalance: z.number().finite(),
   includeInTotal: z.boolean().default(true),
   savingsGoal: z.number().positive().nullable().optional(),
@@ -901,20 +911,24 @@ export const accountSchema = z.object({
   interestRateMonthly: z.number().min(0).max(1).nullable().optional(),
   interestRateYearly: z.number().min(0).max(1).nullable().optional(),
   mortgageLoanAmount: z.number().positive().nullable().optional(),
-  mortgageStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  mortgageStartDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .optional(),
   mortgageTermYears: z.number().positive().int().nullable().optional(),
   mortgageInterestRate: z.number().min(0).max(1).nullable().optional(),
 });
 
 export const categorySchema = z.object({
   name: z.string().min(1).max(64),
-  type: z.enum(['EXPENSE', 'INCOME']),
+  type: z.enum(["EXPENSE", "INCOME"]),
   color: z.string(),
   icon: z.string(),
 });
 
 export const transactionSchema = z.object({
-  type: z.enum(['EXPENSE', 'INCOME', 'TRANSFER']),
+  type: z.enum(["EXPENSE", "INCOME", "TRANSFER"]),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   accountId: z.number().int().positive(),
   categoryId: z.number().int().positive().nullable(),
@@ -922,25 +936,26 @@ export const transactionSchema = z.object({
   amount: z.number().positive().finite(),
   amountMainCurrency: z.number().positive().finite(),
   exchangeRate: z.number().positive().finite(),
-  note: z.string().max(255).default(''),
+  note: z.string().max(255).default(""),
   transferGroupId: z.string().uuid().nullable().optional(),
-  transferDirection: z.enum(['OUT', 'IN']).nullable().optional(),
+  transferDirection: z.enum(["OUT", "IN"]).nullable().optional(),
 });
 
-export const budgetSchema = z.object({
-  categoryId: z.number().int().positive().nullable(),
-  accountId: z.number().int().positive().nullable(),
-  month: z.string().regex(/^\d{4}-\d{2}$/),
-  plannedAmount: z.number().positive().finite(),
-}).refine(
-  (data) => (data.categoryId != null) !== (data.accountId != null),
-  { message: 'Budget must target exactly one of categoryId or accountId' }
-);
+export const budgetSchema = z
+  .object({
+    categoryId: z.number().int().positive().nullable(),
+    accountId: z.number().int().positive().nullable(),
+    month: z.string().regex(/^\d{4}-\d{2}$/),
+    plannedAmount: z.number().positive().finite(),
+  })
+  .refine((data) => (data.categoryId != null) !== (data.accountId != null), {
+    message: "Budget must target exactly one of categoryId or accountId",
+  });
 
 export const settingSchemas = {
   mainCurrency: z.string().length(3),
   language: z.string().min(2).max(10),
-  startupScreen: z.enum(['accounts', 'categories', 'transactions', 'budget', 'overview']),
+  startupScreen: z.enum(["accounts", "categories", "transactions", "budget", "overview"]),
   notificationEnabled: z.boolean(),
   notificationTime: z.string().regex(/^\d{2}:\d{2}$/),
   autoBackupIntervalHours: z.number().positive().int().nullable(),
@@ -957,39 +972,44 @@ Validation errors are surfaced to the UI via the form components. Character coun
 
 ```typescript
 // vite.config.ts
-import { VitePWA } from 'vite-plugin-pwa';
+import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'prompt',           // show update prompt to user
-      includeAssets: ['fonts/**/*'],     // cache custom fonts
+      registerType: "prompt", // show update prompt to user
+      includeAssets: ["fonts/**/*"], // cache custom fonts
       manifest: {
-        name: 'Expenses',
-        short_name: 'Expenses',
-        description: 'Personal expense and finance tracker',
-        theme_color: '#0A0B12',          // --color-bg
-        background_color: '#0A0B12',
-        display: 'standalone',
-        orientation: 'portrait',
-        start_url: '/',
+        name: "Expenses",
+        short_name: "Expenses",
+        description: "Personal expense and finance tracker",
+        theme_color: "#0A0B12", // --color-bg
+        background_color: "#0A0B12",
+        display: "standalone",
+        orientation: "portrait",
+        start_url: "/",
         icons: [
-          { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: '/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
+          { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+          {
+            src: "/icon-512-maskable.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/open\.er-api\.com\/.*/i,
-            handler: 'NetworkFirst',
+            handler: "NetworkFirst",
             options: {
-              cacheName: 'exchange-rates',
-              expiration: { maxAgeSeconds: 86400 },  // 24h
+              cacheName: "exchange-rates",
+              expiration: { maxAgeSeconds: 86400 }, // 24h
               networkTimeoutSeconds: 5,
             },
           },
@@ -1006,7 +1026,7 @@ export default defineConfig({
 
 ```typescript
 // sw-register.ts
-import { registerSW } from 'virtual:pwa-register';
+import { registerSW } from "virtual:pwa-register";
 
 const updateSW = registerSW({
   onNeedRefresh() {
@@ -1042,15 +1062,15 @@ const updateSW = registerSW({
 
 ```typescript
 // i18n/index.ts
-import i18n from 'i18next';
-import { initReactI18next } from 'react-i18next';
-import en from './locales/en.json';
+import i18n from "i18next";
+import { initReactI18next } from "react-i18next";
+import en from "./locales/en.json";
 
 i18n.use(initReactI18next).init({
   resources: { en: { translation: en } },
-  lng: 'en',
-  fallbackLng: 'en',
-  interpolation: { escapeValue: false },  // React handles XSS
+  lng: "en",
+  fallbackLng: "en",
+  interpolation: { escapeValue: false }, // React handles XSS
 });
 
 export default i18n;
@@ -1094,6 +1114,7 @@ Total Balance (in main currency) =
 > Debt balances are positive numbers representing amount owed, so they are subtracted from total balance.
 
 For the Total Wealth sub-view (§1a), group by currency before converting:
+
 - Assets = SUM(balance) for REGULAR + SAVINGS accounts, grouped by currency
 - Debts = SUM(balance) for DEBT accounts, grouped by currency
 - Exclude: trashed accounts AND accounts where includeInTotal == false
@@ -1165,6 +1186,7 @@ These are **display-only** calculations. They never modify the stored balance.
 ### 10.6 Transaction Display Order
 
 Each transaction has a `displayOrder` field (integer). Within a day:
+
 - New transactions get `displayOrder = MAX(displayOrder for that day) + 1`
 - Drag-reorder updates the `displayOrder` values for all affected transactions in the day
 - When a transaction's date is changed via edit, its `displayOrder` is set to `MAX(displayOrder for new day) + 1` (bottom of the new day)
@@ -1174,6 +1196,7 @@ Each transaction has a `displayOrder` field (integer). Within a day:
 ### 10.7 Category Display Order
 
 Same pattern as transaction display order. Categories have a `displayOrder` field:
+
 - Initially set alphabetically (by insertion order if created one at a time)
 - Drag-reorder in edit mode updates `displayOrder` for all affected categories
 - Queried with index on `displayOrder`
@@ -1217,6 +1240,7 @@ When opening the add-transaction flow:
 ### 10.10 Donut Chart Data (Categories Tab §2)
 
 The donut chart **always** displays expense category data regardless of the active view toggle:
+
 - **Slices**: One per expense category, sized proportionally to that category's share of total expenses in the selected period. Colored by that category's color.
 - **Center text**: Total expenses in `--color-expense` (red) and total income in `--color-income` (green).
 - **Tap behavior**: Toggles `categoriesViewType` between `'EXPENSE'` and `'INCOME'`. The chart itself does not change appearance — only the category list below it changes. This is intentional per spec.
@@ -1272,6 +1296,7 @@ transaction list shows new entry, charts recalculate.
 **"Use last note" behavior**: When a category is selected, query the most recent transaction with that `categoryId`, ordered by `timestamp` DESC. If found, display its `note` as a suggestion in the notes field (lighter color per design spec). A "Use last note" chip allows one-tap acceptance. Tapping into the field clears the suggestion and allows fresh input.
 
 **Foreign currency dual-amount field (spec §3a)**: If the selected account's currency differs from the main currency:
+
 1. Primary field: amount in account's currency (user types here)
 2. Secondary field: amount in main currency (auto-calculated as `amount × exchangeRate`)
 3. Secondary field becomes **editable only after** user enters a value in the primary field
@@ -1332,12 +1357,12 @@ No manual cache invalidation. No event bus. Dexie's reactivity handles it.
 
 The app is **offline-first**. All features work without a network connection except:
 
-| Feature | Online | Offline |
-|---|---|---|
-| Core app (all CRUD) | Works | Works |
-| Exchange rates | Fetches fresh | Uses cached rates; if no cache → 1:1 fallback with banner |
-| Font loading | Self-hosted — no network needed | Works from service worker cache |
-| App updates | Detects and prompts | Uses cached version |
+| Feature             | Online                          | Offline                                                   |
+| ------------------- | ------------------------------- | --------------------------------------------------------- |
+| Core app (all CRUD) | Works                           | Works                                                     |
+| Exchange rates      | Fetches fresh                   | Uses cached rates; if no cache → 1:1 fallback with banner |
+| Font loading        | Self-hosted — no network needed | Works from service worker cache                           |
+| App updates         | Detects and prompts             | Uses cached version                                       |
 
 ### Font Caching Strategy
 
@@ -1347,16 +1372,16 @@ Self-host the three fonts (Syne, DM Sans, JetBrains Mono) as `.woff2` files in `
 
 ## 13. Testing Strategy
 
-| Layer | Tool | What to test |
-|---|---|---|
-| Math parser | Vitest | All expression edge cases, PEMDAS, trailing operators, invalid input |
-| Validation schemas | Vitest | Boundary values, invalid inputs, type coercion, budget mutual exclusivity |
-| Balance service | Vitest + Dexie (fake-indexeddb) | Balance mutations, atomicity, edge cases |
-| Exchange rate service | Vitest (mocked fetch) | Cache hit/miss, fallback behavior, stale cache |
-| Backup/restore | Vitest + Dexie | Round-trip serialization, version compatibility |
-| Period filter logic | Vitest | All period types, boundary dates, navigation |
-| Budget calculations | Vitest | Category budgets, account budgets, transfer counting |
-| Components | @testing-library/react | Critical user flows (add tx, edit account, etc.) |
+| Layer                 | Tool                            | What to test                                                              |
+| --------------------- | ------------------------------- | ------------------------------------------------------------------------- |
+| Math parser           | Vitest                          | All expression edge cases, PEMDAS, trailing operators, invalid input      |
+| Validation schemas    | Vitest                          | Boundary values, invalid inputs, type coercion, budget mutual exclusivity |
+| Balance service       | Vitest + Dexie (fake-indexeddb) | Balance mutations, atomicity, edge cases                                  |
+| Exchange rate service | Vitest (mocked fetch)           | Cache hit/miss, fallback behavior, stale cache                            |
+| Backup/restore        | Vitest + Dexie                  | Round-trip serialization, version compatibility                           |
+| Period filter logic   | Vitest                          | All period types, boundary dates, navigation                              |
+| Budget calculations   | Vitest                          | Category budgets, account budgets, transfer counting                      |
+| Components            | @testing-library/react          | Critical user flows (add tx, edit account, etc.)                          |
 
 ---
 
@@ -1387,36 +1412,36 @@ Defined as a constant array of 24 oklch color values matching design_spec.md exa
 // utils/constants.ts
 export const COLOR_PALETTE: string[] = [
   // 4 reds/pinks
-  'oklch(65% 0.22 0)',     // true red
-  'oklch(65% 0.22 10)',    // warm red
-  'oklch(65% 0.22 340)',   // pink-red
-  'oklch(65% 0.22 355)',   // cool red
+  "oklch(65% 0.22 0)", // true red
+  "oklch(65% 0.22 10)", // warm red
+  "oklch(65% 0.22 340)", // pink-red
+  "oklch(65% 0.22 355)", // cool red
   // 3 oranges
-  'oklch(65% 0.22 30)',    // orange
-  'oklch(65% 0.22 45)',    // amber
-  'oklch(65% 0.22 60)',    // yellow-orange
+  "oklch(65% 0.22 30)", // orange
+  "oklch(65% 0.22 45)", // amber
+  "oklch(65% 0.22 60)", // yellow-orange
   // 3 yellows
-  'oklch(65% 0.22 75)',    // gold
-  'oklch(65% 0.22 90)',    // yellow
-  'oklch(65% 0.22 100)',   // lime-yellow
+  "oklch(65% 0.22 75)", // gold
+  "oklch(65% 0.22 90)", // yellow
+  "oklch(65% 0.22 100)", // lime-yellow
   // 3 greens
-  'oklch(65% 0.22 130)',   // lime
-  'oklch(65% 0.22 150)',   // green
-  'oklch(65% 0.22 165)',   // teal-green
+  "oklch(65% 0.22 130)", // lime
+  "oklch(65% 0.22 150)", // green
+  "oklch(65% 0.22 165)", // teal-green
   // 4 blues/cyans
-  'oklch(65% 0.22 180)',   // cyan
-  'oklch(65% 0.22 200)',   // sky
-  'oklch(65% 0.22 220)',   // blue
-  'oklch(65% 0.22 240)',   // deep blue
+  "oklch(65% 0.22 180)", // cyan
+  "oklch(65% 0.22 200)", // sky
+  "oklch(65% 0.22 220)", // blue
+  "oklch(65% 0.22 240)", // deep blue
   // 3 purples
-  'oklch(65% 0.22 270)',   // blue-purple
-  'oklch(65% 0.22 290)',   // purple
-  'oklch(65% 0.22 310)',   // magenta-purple
+  "oklch(65% 0.22 270)", // blue-purple
+  "oklch(65% 0.22 290)", // purple
+  "oklch(65% 0.22 310)", // magenta-purple
   // 4 neutrals (lower chroma)
-  'oklch(65% 0.08 30)',    // warm brown
-  'oklch(65% 0.06 60)',    // sand
-  'oklch(65% 0.04 265)',   // cool gray
-  'oklch(48% 0.03 265)',   // dark slate
+  "oklch(65% 0.08 30)", // warm brown
+  "oklch(65% 0.06 60)", // sand
+  "oklch(65% 0.04 265)", // cool gray
+  "oklch(48% 0.03 265)", // dark slate
 ];
 ```
 
@@ -1425,30 +1450,31 @@ export const COLOR_PALETTE: string[] = [
 ## 17. Future Feature Stubs
 
 Each stub has:
+
 1. A visible but disabled UI entry point (opacity 40%, "Coming soon" tooltip on tap)
 2. A schema/model that won't need breaking changes when implemented
 
-| Feature | UI Stub Location | Schema Stub |
-|---|---|---|
+| Feature                | UI Stub Location                                 | Schema Stub                                                                |
+| ---------------------- | ------------------------------------------------ | -------------------------------------------------------------------------- |
 | Recurring transactions | "Repeat" option below numpad in TransactionInput | `recurringRule` field on Transaction interface (nullable, defined in §3.2) |
-| Passcode / biometric | Settings → "Passcode" row | None needed — will use Web Authentication API |
-| Server sync | Settings → "Sync" row (below backup) | `sync-stub.ts` already defined in §3.6 |
-| Savings interest rate | Account form → "Interest rate" field for savings | `savingsInterestRate` field on Account interface (defined in §3.2) |
-| Debt auto-interest | Account detail → "Auto-accrue interest" toggle | `autoAccrueInterest` field on Account interface (defined in §3.2) |
+| Passcode / biometric   | Settings → "Passcode" row                        | None needed — will use Web Authentication API                              |
+| Server sync            | Settings → "Sync" row (below backup)             | `sync-stub.ts` already defined in §3.6                                     |
+| Savings interest rate  | Account form → "Interest rate" field for savings | `savingsInterestRate` field on Account interface (defined in §3.2)         |
+| Debt auto-interest     | Account detail → "Auto-accrue interest" toggle   | `autoAccrueInterest` field on Account interface (defined in §3.2)          |
 
 ---
 
 ## 18. Error Handling Strategy
 
-| Error type | Handling |
-|---|---|
-| Validation error | Inline field errors + character counters. Do not submit to DB. |
-| Dexie write failure | Toast with retry option. Log to console. On quota exceeded: suggest exporting data and clearing old backups. |
-| Exchange rate fetch failure | Dismissible banner. Use cached or 1:1 fallback. Never block the user. |
-| Backup restore failure | Error dialog with details. Do not partially restore — all-or-nothing via Dexie transaction. |
-| Export failure | Toast with error details. |
-| Notification permission denied | Show explanation in settings. Do not re-prompt. |
-| Invalid backup file import | Error dialog: "Invalid backup file format." |
+| Error type                     | Handling                                                                                                     |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| Validation error               | Inline field errors + character counters. Do not submit to DB.                                               |
+| Dexie write failure            | Toast with retry option. Log to console. On quota exceeded: suggest exporting data and clearing old backups. |
+| Exchange rate fetch failure    | Dismissible banner. Use cached or 1:1 fallback. Never block the user.                                        |
+| Backup restore failure         | Error dialog with details. Do not partially restore — all-or-nothing via Dexie transaction.                  |
+| Export failure                 | Toast with error details.                                                                                    |
+| Notification permission denied | Show explanation in settings. Do not re-prompt.                                                              |
+| Invalid backup file import     | Error dialog: "Invalid backup file format."                                                                  |
 
 General principle: **never block the user from using the app**. Network failures degrade gracefully. Storage failures show actionable errors.
 

@@ -13,34 +13,34 @@
 
 ## Task Index
 
-| ID | Task | Phase | Status | Depends on |
-|---|---|---|---|---|
-| [T00](#t00--repo-cleanup--project-init--) | Repo Cleanup & Project Init | 0 — Setup | `[x]` | — |
-| [T01](#t01--project-scaffold--) | Project Scaffold | 1 — Foundation | `[x]` | T00 |
-| [T02](#t02--database-layer--) | Database Layer | 1 — Foundation | `[x]` | T01 |
-| [T03](#t03--core-utilities--) | Core Utilities | 1 — Foundation | `[x]` | T01 |
-| [T04](#t04--i18n-setup--) | i18n Setup | 1 — Foundation | `[x]` | T01 |
-| [T05](#t05--zustand-state-stores--) | Zustand State Stores | 1 — Foundation | `[x]` | T01, T03 |
-| [T06](#t06--exchange-rate-service--) | Exchange Rate Service | 2 — Services | `[x]` | T02 |
-| [T07](#t07--balance-service--) | Balance Service | 2 — Services | `[x]` | T02 |
-| [T08](#t08--layout-shell--routing--) | Layout Shell & Routing | 3 — Layout | `[x]` | T01, T03, T04, T05 |
-| [T09](#t09--shared-ui-components--) | Shared UI Components | 3 — Layout | `[x]` | T01, T03, T04 |
-| [T10](#t10--numpad-component--) | Numpad Component | 3 — Layout | `[x]` | T01, T03, T05 |
-| [T11](#t11--period-filter-component--) | Period Filter Component | 3 — Layout | `[x]` | T03, T04, T08 |
-| [T12](#t12--onboarding-flow--) | Onboarding Flow | 4 — Features | `[~]` | T08, T09, T04, T05 |
-| [T13](#t13--accounts-tab--) | Accounts Tab | 4 — Features | `[x]` | T08, T09, T05, T06, T07 |
-| [T14](#t14--categories-tab--) | Categories Tab | 4 — Features | `[x]` | T08, T09, T05 |
-| [T15](#t15--transactions-tab--) | Transactions Tab | 4 — Features | `[x]` | T08, T09, T05 |
-| [T16](#t16--transaction-input-add--edit--) | Transaction Input (Add/Edit) | 4 — Features | `[x]` | T09, T10, T06, T07, T05 |
-| [T17](#t17--budget-tab--) | Budget Tab | 4 — Features | `[x]` | T08, T09, T10, T05, T02, T06, T07 |
-| [T18](#t18--overview-tab--) | Overview Tab | 4 — Features | `[x]` | T08, T09, T05 |
-| [T19](#t19--settings-view--) | Settings View | 4 — Features | `[x]` | T08, T09, T04, T05, T06 |
-| [T20](#t20--backup-service--) | Backup Service | 5 — Polish | `[x]` | T02 |
-| [T21](#t21--export-service--) | Export Service | 5 — Polish | `[x]` | T02, T03 |
-| [T22](#t22--notification-service--) | Notification Service | 5 — Polish | `[x]` | T01 |
-| [T23](#t23--pwa-configuration--) | PWA Configuration | 5 — Polish | `[x]` | T01, T22 |
-| [T24](#t24--drag-and-drop-reordering--) | Drag-and-Drop Reordering | 5 — Polish | `[x]` | T13, T14, T15 |
-| [T25](#t25--accessibility--performance-pass--) | Accessibility & Performance Pass | 5 — Polish | `[x]` | all |
+| ID                                             | Task                             | Phase          | Status | Depends on                        |
+| ---------------------------------------------- | -------------------------------- | -------------- | ------ | --------------------------------- |
+| [T00](#t00--repo-cleanup--project-init--)      | Repo Cleanup & Project Init      | 0 — Setup      | `[x]`  | —                                 |
+| [T01](#t01--project-scaffold--)                | Project Scaffold                 | 1 — Foundation | `[x]`  | T00                               |
+| [T02](#t02--database-layer--)                  | Database Layer                   | 1 — Foundation | `[x]`  | T01                               |
+| [T03](#t03--core-utilities--)                  | Core Utilities                   | 1 — Foundation | `[x]`  | T01                               |
+| [T04](#t04--i18n-setup--)                      | i18n Setup                       | 1 — Foundation | `[x]`  | T01                               |
+| [T05](#t05--zustand-state-stores--)            | Zustand State Stores             | 1 — Foundation | `[x]`  | T01, T03                          |
+| [T06](#t06--exchange-rate-service--)           | Exchange Rate Service            | 2 — Services   | `[x]`  | T02                               |
+| [T07](#t07--balance-service--)                 | Balance Service                  | 2 — Services   | `[x]`  | T02                               |
+| [T08](#t08--layout-shell--routing--)           | Layout Shell & Routing           | 3 — Layout     | `[x]`  | T01, T03, T04, T05                |
+| [T09](#t09--shared-ui-components--)            | Shared UI Components             | 3 — Layout     | `[x]`  | T01, T03, T04                     |
+| [T10](#t10--numpad-component--)                | Numpad Component                 | 3 — Layout     | `[x]`  | T01, T03, T05                     |
+| [T11](#t11--period-filter-component--)         | Period Filter Component          | 3 — Layout     | `[x]`  | T03, T04, T08                     |
+| [T12](#t12--onboarding-flow--)                 | Onboarding Flow                  | 4 — Features   | `[~]`  | T08, T09, T04, T05                |
+| [T13](#t13--accounts-tab--)                    | Accounts Tab                     | 4 — Features   | `[x]`  | T08, T09, T05, T06, T07           |
+| [T14](#t14--categories-tab--)                  | Categories Tab                   | 4 — Features   | `[x]`  | T08, T09, T05                     |
+| [T15](#t15--transactions-tab--)                | Transactions Tab                 | 4 — Features   | `[x]`  | T08, T09, T05                     |
+| [T16](#t16--transaction-input-add--edit--)     | Transaction Input (Add/Edit)     | 4 — Features   | `[x]`  | T09, T10, T06, T07, T05           |
+| [T17](#t17--budget-tab--)                      | Budget Tab                       | 4 — Features   | `[x]`  | T08, T09, T10, T05, T02, T06, T07 |
+| [T18](#t18--overview-tab--)                    | Overview Tab                     | 4 — Features   | `[x]`  | T08, T09, T05                     |
+| [T19](#t19--settings-view--)                   | Settings View                    | 4 — Features   | `[x]`  | T08, T09, T04, T05, T06           |
+| [T20](#t20--backup-service--)                  | Backup Service                   | 5 — Polish     | `[x]`  | T02                               |
+| [T21](#t21--export-service--)                  | Export Service                   | 5 — Polish     | `[x]`  | T02, T03                          |
+| [T22](#t22--notification-service--)            | Notification Service             | 5 — Polish     | `[x]`  | T01                               |
+| [T23](#t23--pwa-configuration--)               | PWA Configuration                | 5 — Polish     | `[x]`  | T01, T22                          |
+| [T24](#t24--drag-and-drop-reordering--)        | Drag-and-Drop Reordering         | 5 — Polish     | `[x]`  | T13, T14, T15                     |
+| [T25](#t25--accessibility--performance-pass--) | Accessibility & Performance Pass | 5 — Polish     | `[x]`  | all                               |
 
 ---
 
@@ -60,6 +60,7 @@ claude
 **Running tasks in parallel** — open multiple terminal tabs, one Claude Code session per tab, each with a different task prompt. Tasks within the same phase have no inter-dependencies and can run simultaneously.
 
 **Recommended skill usage per task type**:
+
 - Foundation/service tasks → Claude works directly (no special skill needed)
 - UI feature tasks → Agent will invoke `/feature-dev` skill automatically
 - Visual/design-heavy tasks → Agent will invoke `/frontend-design` or `/frontend-polish`
@@ -76,6 +77,7 @@ claude
 **Goal**: Clean up the repo, move specs to `docs/`, set up git, `.gitignore`, VS Code workspace.
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 
@@ -158,6 +160,7 @@ Verification:
 **Goal**: Set up React 19 + TypeScript + Vite + Tailwind CSS 4 + PWA scaffold with all dependencies.
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/architect_spec.md (§1 Technology Stack, §2 Project Structure)
@@ -253,6 +256,7 @@ Verification:
 **Goal**: Dexie database schema, all TypeScript entity interfaces, and sync stub.
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/architect_spec.md §3 (Data Model — read this section fully before writing any code)
@@ -322,6 +326,7 @@ Verification:
 **Goal**: Shared constants, Zod validation schemas, date utilities, currency utilities, math parser.
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/spec.md §5 (chart bucket logic), docs/design_spec.md §Color System, §Account/Category Color Palette
@@ -417,6 +422,7 @@ Verification:
 **Goal**: i18next with comprehensive English translations covering every user-facing string.
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/spec.md (all sections — read for exact wording of UI strings)
@@ -606,6 +612,7 @@ Verification:
 **Goal**: Zustand UI store (ephemeral state) and settings store (DB-backed).
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/architect_spec.md §4 (State Management — read all sub-sections)
@@ -671,6 +678,7 @@ Verification:
 **Goal**: Fetch, cache, and retrieve exchange rates. Handle recalculation when main currency changes.
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/architect_spec.md §6.1 (Exchange Rate Service — read fully)
@@ -741,6 +749,7 @@ Verification:
 **Goal**: Atomic balance mutation service — all account balance changes go through this.
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/architect_spec.md §3.4 (Balance Calculation), §3.3 (Transfer Storage Model)
@@ -826,6 +835,7 @@ Verification:
 **Goal**: App shell — routing, bottom nav, top bar, content column, bottom sheet.
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/architect_spec.md §5 (Routing — read all sub-sections)
@@ -901,6 +911,7 @@ Verification:
 **Goal**: Reusable shared UI components — the building blocks for all features.
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/design_spec.md §Empty States, §Toast/Snackbar, §Coming Soon Stubs,
@@ -990,6 +1001,7 @@ Verification:
 **Goal**: The transaction and budget numpad with PEMDAS math support.
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/design_spec.md §Transaction Input (Numpad) — read the full section including both layouts
@@ -1066,6 +1078,7 @@ Verification:
 **Goal**: Shared period filter chip + sheet used on all tabs.
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/design_spec.md §Period Filter, docs/spec.md §2 (filter options), §4 (budget month-only)
@@ -1133,6 +1146,7 @@ Verification:
 **Goal**: First-run 5-step setup flow.
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/spec.md §First-Run Setup (read fully)
@@ -1190,6 +1204,7 @@ Verification:
 **Goal**: Full accounts tab — list, total wealth, account card, create/edit form, detail view, trash.
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/spec.md §1, §1a, §1b, §1c (read all Account sections)
@@ -1289,6 +1304,7 @@ Verification:
 **Goal**: Categories tab with custom SVG donut chart, category cards, edit mode, and trash.
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/spec.md §2, §2a, §2b, §2c, §2d
@@ -1372,6 +1388,7 @@ Verification:
 **Goal**: Transaction list with day grouping, sticky headers, filters, and selection mode.
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/spec.md §3 (Transactions Tab — read all)
@@ -1465,6 +1482,7 @@ Verification:
 **Goal**: The full transaction add/edit flow — income, expense, transfer with foreign currency support.
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/spec.md §3a, §3b (read both sections fully — this is the most complex UI)
@@ -1576,6 +1594,7 @@ Verification:
 **Goal**: Budget tab with four sections, progress bars, and budget input numpad with stats.
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/spec.md §4 (Budget Tab — read fully)
@@ -1654,6 +1673,7 @@ Verification:
 **Goal**: Overview tab with net balance, Recharts bar chart, daily averages, and category breakdown.
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/spec.md §5 (Overview Tab — read fully, all 5 items)
@@ -1729,6 +1749,7 @@ Verification:
 **Goal**: Full settings view with all 8 settings options.
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/spec.md §6 (Settings — read all items)
@@ -1829,6 +1850,7 @@ Verification:
 **Depends on**: T02 complete
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/spec.md §6 item 7 (Backup behavior)
@@ -1903,6 +1925,7 @@ Verification:
 **Depends on**: T02, T03 complete
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/spec.md §6 item 8 (Export Data — read column spec carefully)
@@ -1966,6 +1989,7 @@ Verification:
 **Depends on**: T01 complete
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/spec.md §6 item 5 (Daily Notification)
@@ -2016,6 +2040,7 @@ Verification:
 **Depends on**: T01, T22 complete
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/design_spec.md §Android PWA Specifics
@@ -2108,6 +2133,7 @@ Verification:
 **Depends on**: T13, T14, T15 complete
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/spec.md §2 (category drag-reorder), §3 (transaction drag-reorder)
@@ -2168,6 +2194,7 @@ Verification:
 **Depends on**: All other tasks complete
 
 **Agent prompt**:
+
 ```
 Working directory: /home/anton/Project/expensesapp
 Specs: docs/design_spec.md §Accessibility, §Motion

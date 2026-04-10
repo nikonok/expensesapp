@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 
 tasks:
   setup:
@@ -34,6 +34,17 @@ tasks:
   format:
     desc: Run Prettier
     cmd: npm run format
+
+  format:check:
+    desc: Check formatting without writing (useful for CI)
+    cmd: npx prettier --check .
+
+  ci:
+    desc: Full CI pass — lint, unit tests, build
+    cmds:
+      - npm run lint
+      - npm test -- --run
+      - npm run build
 
   clean:
     desc: Remove build artifacts and test results

@@ -11,7 +11,8 @@
     "test:e2e": "playwright test",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "screenshots": "tsx scripts/generate-pwa-screenshots.ts"
+    "screenshots": "tsx scripts/generate-pwa-screenshots.ts",
+    "prepare": "husky"
   },
   "dependencies": {
     "@dnd-kit/core": "6.3.1",
@@ -36,6 +37,15 @@
     "zod": "4.3.6",
     "zustand": "5.0.12"
   },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{css,json,md,yml,yaml}": [
+      "prettier --write"
+    ]
+  },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
     "@testing-library/dom": "^10.4.1",
@@ -45,7 +55,9 @@
     "@vitejs/plugin-react": "latest",
     "eslint": "10.1.0",
     "fake-indexeddb": "latest",
+    "husky": "^9.1.7",
     "jsdom": "^29.0.1",
+    "lint-staged": "^16.4.0",
     "prettier": "3.8.1",
     "sharp": "^0.34.5",
     "tsx": "^4.21.0",

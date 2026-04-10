@@ -76,12 +76,14 @@ The flow can be skipped at any step via a "Skip" link. A `hasCompletedOnboarding
 ### 1. Accounts Tab
 
 The Accounts tab shows:
+
 1. List of user accounts
 2. Balance for each account in that account's currency
 3. Total balance across all accounts (in main currency, excluding accounts marked as excluded)
 4. Button to create a new account
 
 Accounts are divided into three types:
+
 1. **Regular** — cash, debit card, etc.
 2. **Debt** — credit card, mortgage, loan, etc.
 3. **Savings** — savings account, goal, etc.
@@ -92,10 +94,10 @@ A trash icon on this tab opens the trashed accounts view (see §1c).
 
 Shows a table of total assets and debts grouped by currency:
 
-| | ASSETS | DEBTS |
-|-|-|-|
+|     | ASSETS | DEBTS  |
+| --- | ------ | ------ |
 | PLN | 13 000 | 50 000 |
-| USD | 5 | 0 |
+| USD | 5      | 0      |
 
 **Scope**: Assets = sum of Regular and Savings account balances, grouped by currency. Debts = sum of Debt account balances, grouped by currency. Accounts marked as "exclude from total balance" and trashed accounts are both excluded from this table.
 
@@ -104,6 +106,7 @@ Shows a table of total assets and debts grouped by currency:
 Appears when the user taps the "create account" button.
 
 **General fields (all account types):**
+
 1. Name (text input, max 64 chars)
 2. Color (selection from the shared color palette)
 3. Icon (emoji or icon from a large predefined set)
@@ -113,9 +116,11 @@ Appears when the user taps the "create account" button.
 7. Include in total balance (toggle) — if off, this account is excluded from the total balance and Total Wealth calculations
 
 **Savings account additional fields:**
+
 1. Savings goal (optional target amount)
 
 **Debt account additional fields:**
+
 1. Monthly / yearly interest rate (optional; informational only — see §1c)
 2. Mortgage fields (optional): loan amount, start date, term in years, interest rate
 
@@ -126,6 +131,7 @@ Appears when the user taps the "create account" button.
 #### 1c. Tapping an Account
 
 Opens an account detail view where the user can:
+
 - Rename the account
 - Change the icon or color
 - Manually adjust the current balance (modifies stored balance; no transaction created)
@@ -134,6 +140,7 @@ Opens an account detail view where the user can:
 - **"View transactions" shortcut**: navigates to the Transactions tab with this account pre-applied as a filter
 
 **Debt account detail**: Shows calculated values (informational only, updated on-demand each time the account detail is opened):
+
 - Remaining balance
 - Monthly payment
 - Time left to pay off
@@ -152,6 +159,7 @@ These calculations do not modify the stored balance or create transactions.
 Shows a summary of spending (or income) per category for the selected period.
 
 **Period filter** (top of screen): When tapped, opens a sub-dialog with options:
+
 - All time
 - Today
 - Custom range (from date to date)
@@ -167,6 +175,7 @@ Filter settings are per-tab and reset when the app is closed.
 **Empty state**: If no categories exist, the donut chart is still rendered as an empty ring (tappable to toggle expense/income view), with a "Create category" button below. The button opens the category creation form directly (bypasses edit mode). The category type (EXPENSE or INCOME) is determined by the currently active view.
 
 **Category cards**: Each category is shown as a card. Cards are ordered by the custom drag-reorder order set in edit mode; if never reordered, they are sorted alphabetically. The card displays:
+
 - Category icon and name
 - Planned budget for the period (from Budget tab; shown as 0 if no budget is set)
 - Actual amount spent (or earned) in the selected period
@@ -180,6 +189,7 @@ Tapping the donut chart toggles which category list is displayed below it (expen
 #### 2a. Tapping a Category in Edit Mode
 
 The user can:
+
 1. Rename it
 2. Change icon
 3. Change color
@@ -190,6 +200,7 @@ The user can:
 #### 2b. Adding a New Category (+ in edit mode)
 
 Input fields:
+
 1. Category name (max 64 chars)
 2. Category color (shared palette)
 3. Category icon
@@ -211,6 +222,7 @@ To view or edit income categories, the user taps the donut chart to switch to th
 **Period filter**: Same filtering options as the Categories tab. Filter settings are per-tab and reset when the app is closed.
 
 **Additional filter button** (top of screen): Filters transactions by:
+
 1. Note (contains match)
 2. Category
 3. Account (active accounts listed first; a collapsible "Archived" section below shows trashed accounts — filtering by a trashed account shows all its historical transactions)
@@ -220,6 +232,7 @@ A "Clear filters" button appears when any filter is active and resets all filter
 Transactions are displayed in reverse-chronological order, grouped by day. Within a day, transactions are initially ordered by creation timestamp. The user can manually reorder them by drag-and-drop; drag-to-reorder is initiated exclusively by pressing and dragging the grip handle icon on the right side of the row. Tapping anywhere else on the row triggers selection mode. The grip handle has a distinct touch target and does not trigger selection. The custom order is stored as a `display_order` field and persists across sessions. When a transaction is re-dated via the edit view, its `display_order` is reset to the bottom of the new day. Drag-and-drop cannot move a transaction across day boundaries; use the calendar picker in the edit view to change a transaction's date.
 
 Each day header shows:
+
 - Large day number, small grayed day-of-week, small month and year (left side)
 - Total income and total expense for that day in the main currency (right side)
 
@@ -228,6 +241,7 @@ Each day header shows:
 **Transfers** appear in the list as a single greyed-out row, showing "Source account → Destination account" with the source amount. Internally, transfers are stored as two records; the list groups them by transfer ID and displays one merged row. When filtering by a specific account, only that account's half of the transfer is shown (as a single row with the other account named). Transfers are not counted toward any income or expense total.
 
 **Selection mode**: Tapping a transaction selects it (checkbox appears). A bottom toolbar appears with:
+
 - Single transaction selected: **Edit** button and **Remove** button both active.
 - Multiple transactions selected: only **Remove** button is active.
 
@@ -272,6 +286,7 @@ Tapping a transaction selects it; tapping **Edit** in the bottom toolbar opens t
 ### 4. Budget Tab
 
 Contains four sections:
+
 1. Expenses (expense categories)
 2. Income (income categories)
 3. Savings accounts
@@ -284,12 +299,14 @@ Contains four sections:
 Each section contains category or account cards stacked vertically, sorted in descending order by amount spent/received.
 
 If a budget is planned for a category or account, a progress bar spanning the full screen width shows how much of the budget has been used. Items with a planned budget are pinned to the top of the section, sorted by planned amount (descending). Each such card shows:
+
 - Planned amount
 - Spent amount (red background if it exceeds the budget)
 
 **Savings and Debt account sections**: Budgets can be planned for individual savings and debt accounts, just like for categories. The "spent" amount for these accounts is calculated as the sum of transfers TO the account during the selected month. A transfer to a debt account represents a debt payment; a transfer to a savings account represents a deposit. These transfers count as "spending toward" the account's budget.
 
 **Budget input numpad**: Same layout as the transaction numpad, except the calendar button is replaced by a "stats" button. The stats button shows:
+
 - Average monthly spend (all time history)
 - Last month's actual spend
 - Last set budget for this category or account
@@ -305,6 +322,7 @@ If no history exists for a given stat, it shows "N/A".
 **Empty state**: If no transactions exist for the selected period, show a "No data for this period" message.
 
 Displays in order:
+
 1. **Net balance** for the period (income minus expenses): green if positive, red if negative
 2. **Total income** and **total expenses** as two numbers
 3. **Auto-scaled bar chart** of spending over time:
@@ -313,9 +331,9 @@ Displays in order:
    - For a 1–3 month range (31–90 calendar days): one bar per week (weeks start Monday; partial weeks at the boundary get their own bar)
    - For ranges longer than 90 days: one bar per month
 4. **Daily averages**: three figures shown when applicable:
-   - *Average per day* = total spending ÷ number of calendar days in the period (including zero-spend days)
-   - *Today* = sum of expenses dated today (local date); shown only when today falls within the selected period
-   - *This week* = sum of expenses dated Mon–Sun of the current calendar week; shown only when the period includes at least one day of the current week
+   - _Average per day_ = total spending ÷ number of calendar days in the period (including zero-spend days)
+   - _Today_ = sum of expenses dated today (local date); shown only when today falls within the selected period
+   - _This week_ = sum of expenses dated Mon–Sun of the current calendar week; shown only when the period includes at least one day of the current week
 5. **Category breakdown**: categories sorted descending by amount spent, each with a progress bar where 100% = total spending for the period. Categories with zero spending are shown at the bottom, greyed out, sorted alphabetically.
 
 ---
@@ -346,8 +364,7 @@ Options:
    Columns:
 
    | Date (dd.mm.yyyy) | Note | Income (main currency) | Expense (main currency) | Category | Account |
-   |---|---|---|---|---|---|
-
+   | ----------------- | ---- | ---------------------- | ----------------------- | -------- | ------- |
    - Income transactions: amount in the "Income" column, "Expense" column empty.
    - Expense transactions: amount in the "Expense" column, "Income" column empty.
    - All amounts are positive numbers.

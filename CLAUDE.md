@@ -6,27 +6,18 @@
 
 A personal finance tracking **Progressive Web App** (PWA). React 19 + TypeScript + Vite + Tailwind CSS 4 + Dexie (IndexedDB). Primary platform: Android mobile. Works in any browser.
 
-## Specs (source of truth)
+## Historical specs
 
-| File | Contents |
-|---|---|
-| `docs/spec.md` | Business logic, all feature requirements, user flows |
-| `docs/design_spec.md` | Visual design — color tokens, typography, component specs, motion |
-| `docs/architect_spec.md` | Technical architecture, data model, library versions, code contracts |
+Initial planning specs live in `docs/archive/` (may be outdated — trust the code over these):
 
-**Always read the relevant spec section before implementing anything.** The specs are authoritative. If you find a conflict between specs, or a spec problem, **stop and ask the user** with your proposed solution.
-
-## Task tracking
-
-`TASKS.md` — 26 tasks for AI agents. Each task has a self-contained prompt.
-- `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
-- Mark `[~]` before starting, `[x]` when done.
+- `docs/archive/spec.md` — original business logic / feature requirements
+- `docs/archive/design_spec.md` — visual design tokens, typography, component specs
+- `docs/archive/architect_spec.md` — technical architecture, data model, module contracts
 
 ## Manual testing
 
-`docs/test-plan.md` — 77 manual smoke test cases (TC-001–TC-076) covering all feature areas.
-
 Run tests with the `/smoke-test` slash command (uses Playwright MCP, viewport 390×844):
+
 - `/smoke-test` — runs all P0 smoke tests
 - `/smoke-test onboarding` — runs only onboarding cases
 - `/smoke-test TC-007` — runs a specific test case
@@ -72,7 +63,7 @@ sw.ts         Service worker (PWA, Workbox-based, built by vite-plugin-pwa)
 sw-register.ts  Service worker registration + install prompt logic
 ```
 
-## Key design rules (from design_spec.md)
+## Key design rules
 
 - **Dark theme only.** `oklch()` colors throughout. No light theme.
 - **Fonts**: Syne 700 (headings), DM Sans 400/500 (body/labels), JetBrains Mono 500/600 (all amounts).
@@ -82,7 +73,7 @@ sw-register.ts  Service worker registration + install prompt logic
 - Mobile-first (Android PWA), max content width 480px centered on desktop.
 - All interactive targets: min 44×44px.
 
-## Key data rules (from architect_spec.md)
+## Key data rules
 
 - **Balances are stored**, not derived. Updated by `balance.service.ts` on every tx add/edit/delete.
 - **Transfers = 2 Transaction records** sharing `transferGroupId` (UUID v4).
@@ -105,11 +96,12 @@ Full-screen views (no bottom nav): `/transactions/new`, `/transactions/:id/edit`
 ## Commands
 
 ```bash
-npm run dev      # start dev server
-npm run build    # TypeScript check + production build
-npm test         # Vitest unit tests
-npm run lint     # ESLint
-npm run format   # Prettier
+npm run dev        # start dev server
+npm run build      # TypeScript check + production build
+npm test           # Vitest unit tests
+npm run test:e2e   # Playwright e2e tests
+npm run lint       # ESLint
+npm run format     # Prettier (auto-fix)
 ```
 
 ## What NOT to do
