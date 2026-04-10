@@ -1,31 +1,36 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router';
-import { ArrowLeft, ChevronDown, X } from 'lucide-react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { useAccounts } from '@/hooks/use-accounts';
-import { useCategories } from '@/hooks/use-categories';
-import { useSettingsStore } from '@/stores/settings-store';
-import { useUIStore } from '@/stores/ui-store';
-import { db } from '@/db/database';
-import type { Transaction, TransactionType, CategoryType } from '@/db/models';
-import type { Account, Category } from '@/db/models';
-import { applyTransaction, applyTransfer, replaceTransaction, replaceTransfer } from '@/services/balance.service';
-import { exchangeRateService } from '@/services/exchange-rate.service';
-import { evaluateExpression } from '@/services/math-parser';
-import { format, parseISO } from 'date-fns';
-import { getLocalDateString } from '@/utils/date-utils';
-import { getLucideIcon } from '@/components/shared/IconPicker';
-import { getMonthlyRate, calculatePaymentSplit } from '@/services/debt-payment.service';
-import { CalendarPicker } from '@/components/shared/CalendarPicker';
-import { Numpad } from '@/components/shared/Numpad';
-import { ComingSoonStub } from '@/components/shared/ComingSoonStub';
-import { useToast } from '@/components/shared/Toast';
-import { useTranslation } from '@/hooks/use-translation';
-import { formatNumpadDisplay } from '@/utils/numpad-utils';
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router";
+import { ArrowLeft, ChevronDown, X } from "lucide-react";
+import { useLiveQuery } from "dexie-react-hooks";
+import { useAccounts } from "@/hooks/use-accounts";
+import { useCategories } from "@/hooks/use-categories";
+import { useSettingsStore } from "@/stores/settings-store";
+import { useUIStore } from "@/stores/ui-store";
+import { db } from "@/db/database";
+import type { Transaction, TransactionType } from "@/db/models";
+import type { Account, Category } from "@/db/models";
+import {
+  applyTransaction,
+  applyTransfer,
+  replaceTransaction,
+  replaceTransfer,
+} from "@/services/balance.service";
+import { exchangeRateService } from "@/services/exchange-rate.service";
+import { evaluateExpression } from "@/services/math-parser";
+import { format, parseISO } from "date-fns";
+import { getLocalDateString } from "@/utils/date-utils";
+import { getLucideIcon } from "@/components/shared/IconPicker";
+import { getMonthlyRate, calculatePaymentSplit } from "@/services/debt-payment.service";
+import { CalendarPicker } from "@/components/shared/CalendarPicker";
+import { Numpad } from "@/components/shared/Numpad";
+import { ComingSoonStub } from "@/components/shared/ComingSoonStub";
+import { useToast } from "@/components/shared/Toast";
+import { useTranslation } from "@/hooks/use-translation";
+import { formatNumpadDisplay } from "@/utils/numpad-utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type TxTab = 'income' | 'expense' | 'transfer';
+type TxTab = "income" | "expense" | "transfer";
 
 // ── Helper: icon renderer ──────────────────────────────────────────────────────
 
@@ -36,11 +41,11 @@ function EntityIcon({ icon, color, size = 18 }: { icon: string; color: string; s
       style={{
         width: size + 10,
         height: size + 10,
-        borderRadius: '50%',
+        borderRadius: "50%",
         background: `color-mix(in oklch, ${color} 20%, transparent)`,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
         flexShrink: 0,
         color,
       }}
@@ -75,44 +80,44 @@ function Step1({
 }: Step1Props) {
   const { t } = useTranslation();
 
-  const nonDebtAccounts = accounts.filter((a) => a.type !== 'DEBT');
-  const incomeCategories = categories.filter((c) => c.type === 'INCOME');
+  const nonDebtAccounts = accounts.filter((a) => a.type !== "DEBT");
+  const incomeCategories = categories.filter((c) => c.type === "INCOME");
 
   return (
     <div
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100dvh',
-        background: 'var(--color-bg)',
-        maxWidth: '480px',
-        marginInline: 'auto',
+        display: "flex",
+        flexDirection: "column",
+        height: "100dvh",
+        background: "var(--color-bg)",
+        maxWidth: "480px",
+        marginInline: "auto",
       }}
     >
       {/* Header */}
       <div
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          height: '56px',
-          paddingInline: 'var(--space-4)',
+          display: "flex",
+          alignItems: "center",
+          height: "56px",
+          paddingInline: "var(--space-4)",
           flexShrink: 0,
-          borderBottom: '1px solid var(--color-border)',
+          borderBottom: "1px solid var(--color-border)",
         }}
       >
         <button
           onClick={onBack}
-          aria-label={t('common.back')}
+          aria-label={t("common.back")}
           style={{
-            minWidth: '44px',
-            minHeight: '44px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-start',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: 'var(--color-text-secondary)',
+            minWidth: "44px",
+            minHeight: "44px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-start",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "var(--color-text-secondary)",
             padding: 0,
           }}
         >
@@ -121,17 +126,17 @@ function Step1({
         <h1
           style={{
             flex: 1,
-            textAlign: 'center',
-            fontFamily: 'Syne, sans-serif',
+            textAlign: "center",
+            fontFamily: "Syne, sans-serif",
             fontWeight: 700,
-            fontSize: 'var(--text-heading)',
-            color: 'var(--color-text)',
+            fontSize: "var(--text-heading)",
+            color: "var(--color-text)",
             margin: 0,
           }}
         >
-          {t('transactions.newTransaction')}
+          {t("transactions.newTransaction")}
         </h1>
-        <div style={{ minWidth: '44px' }} />
+        <div style={{ minWidth: "44px" }} />
       </div>
 
       {/* Scrollable list */}
@@ -139,19 +144,23 @@ function Step1({
         className="scroll-container"
         style={{
           flex: 1,
-          overflowY: 'auto',
-          paddingInline: 'var(--space-4)',
-          paddingTop: 'var(--space-3)',
-          paddingBottom: 'var(--space-6)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 'var(--space-2)',
+          overflowY: "auto",
+          paddingInline: "var(--space-4)",
+          paddingTop: "var(--space-3)",
+          paddingBottom: "var(--space-6)",
+          display: "flex",
+          flexDirection: "column",
+          gap: "var(--space-2)",
         }}
       >
-        {txType === 'income' ? (
+        {txType === "income" ? (
           // Income TO pre-set (from AccountDetail): user picks income category (FROM)
           incomeCategories.map((cat) => (
-            <CategoryRow key={cat.id} category={cat} onPress={() => onFromIncomeCategorySelect(cat)} />
+            <CategoryRow
+              key={cat.id}
+              category={cat}
+              onPress={() => onFromIncomeCategorySelect(cat)}
+            />
           ))
         ) : (
           <>
@@ -159,10 +168,20 @@ function Step1({
               <AccountRow key={acc.id} account={acc} onPress={() => onFromAccountSelect(acc)} />
             ))}
             {nonDebtAccounts.length > 0 && incomeCategories.length > 0 && (
-              <div style={{ height: '1px', background: 'var(--color-border)', marginBlock: 'var(--space-1)' }} />
+              <div
+                style={{
+                  height: "1px",
+                  background: "var(--color-border)",
+                  marginBlock: "var(--space-1)",
+                }}
+              />
             )}
             {incomeCategories.map((cat) => (
-              <CategoryRow key={cat.id} category={cat} onPress={() => onFromIncomeCategorySelect(cat)} />
+              <CategoryRow
+                key={cat.id}
+                category={cat}
+                onPress={() => onFromIncomeCategorySelect(cat)}
+              />
             ))}
           </>
         )}
@@ -201,38 +220,38 @@ function Step2TO({
   return (
     <div
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100dvh',
-        background: 'var(--color-bg)',
-        maxWidth: '480px',
-        marginInline: 'auto',
+        display: "flex",
+        flexDirection: "column",
+        height: "100dvh",
+        background: "var(--color-bg)",
+        maxWidth: "480px",
+        marginInline: "auto",
       }}
     >
       {/* Header */}
       <div
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          height: '56px',
-          paddingInline: 'var(--space-4)',
+          display: "flex",
+          alignItems: "center",
+          height: "56px",
+          paddingInline: "var(--space-4)",
           flexShrink: 0,
-          borderBottom: '1px solid var(--color-border)',
+          borderBottom: "1px solid var(--color-border)",
         }}
       >
         <button
           onClick={onBack}
-          aria-label={t('common.back')}
+          aria-label={t("common.back")}
           style={{
-            minWidth: '44px',
-            minHeight: '44px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-start',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: 'var(--color-text-secondary)',
+            minWidth: "44px",
+            minHeight: "44px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-start",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "var(--color-text-secondary)",
             padding: 0,
           }}
         >
@@ -241,17 +260,17 @@ function Step2TO({
         <h1
           style={{
             flex: 1,
-            textAlign: 'center',
-            fontFamily: 'Syne, sans-serif',
+            textAlign: "center",
+            fontFamily: "Syne, sans-serif",
             fontWeight: 700,
-            fontSize: 'var(--text-heading)',
-            color: 'var(--color-text)',
+            fontSize: "var(--text-heading)",
+            color: "var(--color-text)",
             margin: 0,
           }}
         >
-          {t('transactions.newTransaction')}
+          {t("transactions.newTransaction")}
         </h1>
-        <div style={{ minWidth: '44px' }} />
+        <div style={{ minWidth: "44px" }} />
       </div>
 
       {/* Scrollable list */}
@@ -259,69 +278,87 @@ function Step2TO({
         className="scroll-container"
         style={{
           flex: 1,
-          overflowY: 'auto',
-          paddingInline: 'var(--space-4)',
-          paddingTop: 'var(--space-3)',
-          paddingBottom: 'var(--space-6)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 'var(--space-2)',
+          overflowY: "auto",
+          paddingInline: "var(--space-4)",
+          paddingTop: "var(--space-3)",
+          paddingBottom: "var(--space-6)",
+          display: "flex",
+          flexDirection: "column",
+          gap: "var(--space-2)",
         }}
       >
-        {txType === 'income' ? (
-          // Income FROM was category: show accounts as TO destination
-          accounts
-            .filter((a) => a.type !== 'DEBT')
-            .map((acc) => (
-              <AccountRow key={acc.id} account={acc} onPress={() => onToIncomeAccountSelect(acc)} />
-            ))
-        ) : (
-          (() => {
-            const debtAccounts = accounts.filter((a) => a.type === 'DEBT');
-            const transferAccounts = accounts.filter(
-              (a) => a.type !== 'DEBT' && a.id !== fromAccountId,
-            );
-            const expenseCategories = categories.filter((c) => c.type === 'EXPENSE');
-            return (
-              <>
-                {debtAccounts.length > 0 && (
-                  <>
-                    {debtAccounts.map((acc) => (
-                      <AccountRow
-                        key={acc.id}
-                        account={acc}
-                        chip="DEBT"
-                        onPress={() => onToDebtAccountSelect(acc)}
-                      />
-                    ))}
-                    {(transferAccounts.length > 0 || expenseCategories.length > 0) && (
-                      <div style={{ height: '1px', background: 'var(--color-border)', marginBlock: 'var(--space-1)' }} />
-                    )}
-                  </>
-                )}
-                {transferAccounts.length > 0 && (
-                  <>
-                    {transferAccounts.map((acc) => (
-                      <AccountRow
-                        key={acc.id}
-                        account={acc}
-                        chip="TRANSFER"
-                        chipColor="var(--color-transfer)"
-                        onPress={() => onToTransferAccountSelect(acc)}
-                      />
-                    ))}
-                    {expenseCategories.length > 0 && (
-                      <div style={{ height: '1px', background: 'var(--color-border)', marginBlock: 'var(--space-1)' }} />
-                    )}
-                  </>
-                )}
-                {expenseCategories.map((cat) => (
-                  <CategoryRow key={cat.id} category={cat} onPress={() => onToExpenseCategorySelect(cat)} />
-                ))}
-              </>
-            );
-          })()
-        )}
+        {txType === "income"
+          ? // Income FROM was category: show accounts as TO destination
+            accounts
+              .filter((a) => a.type !== "DEBT")
+              .map((acc) => (
+                <AccountRow
+                  key={acc.id}
+                  account={acc}
+                  onPress={() => onToIncomeAccountSelect(acc)}
+                />
+              ))
+          : (() => {
+              const debtAccounts = accounts.filter((a) => a.type === "DEBT");
+              const transferAccounts = accounts.filter(
+                (a) => a.type !== "DEBT" && a.id !== fromAccountId,
+              );
+              const expenseCategories = categories.filter((c) => c.type === "EXPENSE");
+              return (
+                <>
+                  {debtAccounts.length > 0 && (
+                    <>
+                      {debtAccounts.map((acc) => (
+                        <AccountRow
+                          key={acc.id}
+                          account={acc}
+                          chip="DEBT"
+                          onPress={() => onToDebtAccountSelect(acc)}
+                        />
+                      ))}
+                      {(transferAccounts.length > 0 || expenseCategories.length > 0) && (
+                        <div
+                          style={{
+                            height: "1px",
+                            background: "var(--color-border)",
+                            marginBlock: "var(--space-1)",
+                          }}
+                        />
+                      )}
+                    </>
+                  )}
+                  {transferAccounts.length > 0 && (
+                    <>
+                      {transferAccounts.map((acc) => (
+                        <AccountRow
+                          key={acc.id}
+                          account={acc}
+                          chip="TRANSFER"
+                          chipColor="var(--color-transfer)"
+                          onPress={() => onToTransferAccountSelect(acc)}
+                        />
+                      ))}
+                      {expenseCategories.length > 0 && (
+                        <div
+                          style={{
+                            height: "1px",
+                            background: "var(--color-border)",
+                            marginBlock: "var(--space-1)",
+                          }}
+                        />
+                      )}
+                    </>
+                  )}
+                  {expenseCategories.map((cat) => (
+                    <CategoryRow
+                      key={cat.id}
+                      category={cat}
+                      onPress={() => onToExpenseCategorySelect(cat)}
+                    />
+                  ))}
+                </>
+              );
+            })()}
       </div>
     </div>
   );
@@ -331,31 +368,33 @@ function CategoryRow({ category, onPress }: { category: Category; onPress: () =>
   return (
     <button
       onClick={onPress}
-      style={{
-        '--card-color': category.color,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--space-3)',
-        padding: 'var(--space-3) var(--space-4)',
-        background: 'var(--color-surface)',
-        border: 'none',
-        borderLeft: '3px solid var(--card-color)',
-        borderRadius: 'var(--radius-card)',
-        width: '100%',
-        textAlign: 'left',
-        cursor: 'pointer',
-        minHeight: '56px',
-        userSelect: 'none',
-        WebkitTapHighlightColor: 'transparent',
-      } as React.CSSProperties}
+      style={
+        {
+          "--card-color": category.color,
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--space-3)",
+          padding: "var(--space-3) var(--space-4)",
+          background: "var(--color-surface)",
+          border: "none",
+          borderLeft: "3px solid var(--card-color)",
+          borderRadius: "var(--radius-card)",
+          width: "100%",
+          textAlign: "left",
+          cursor: "pointer",
+          minHeight: "56px",
+          userSelect: "none",
+          WebkitTapHighlightColor: "transparent",
+        } as React.CSSProperties
+      }
     >
       <EntityIcon icon={category.icon} color={category.color} />
       <span
         style={{
           fontFamily: '"DM Sans", sans-serif',
           fontWeight: 500,
-          fontSize: 'var(--text-body)',
-          color: 'var(--color-text)',
+          fontSize: "var(--text-body)",
+          color: "var(--color-text)",
         }}
       >
         {category.name}
@@ -364,27 +403,39 @@ function CategoryRow({ category, onPress }: { category: Category; onPress: () =>
   );
 }
 
-function AccountRow({ account, onPress, chip, chipColor }: { account: Account; onPress: () => void; chip?: string; chipColor?: string }) {
+function AccountRow({
+  account,
+  onPress,
+  chip,
+  chipColor,
+}: {
+  account: Account;
+  onPress: () => void;
+  chip?: string;
+  chipColor?: string;
+}) {
   return (
     <button
       onClick={onPress}
-      style={{
-        '--card-color': account.color,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--space-3)',
-        padding: 'var(--space-3) var(--space-4)',
-        background: 'var(--color-surface)',
-        border: 'none',
-        borderLeft: '3px solid var(--card-color)',
-        borderRadius: 'var(--radius-card)',
-        width: '100%',
-        textAlign: 'left',
-        cursor: 'pointer',
-        minHeight: '56px',
-        userSelect: 'none',
-        WebkitTapHighlightColor: 'transparent',
-      } as React.CSSProperties}
+      style={
+        {
+          "--card-color": account.color,
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--space-3)",
+          padding: "var(--space-3) var(--space-4)",
+          background: "var(--color-surface)",
+          border: "none",
+          borderLeft: "3px solid var(--card-color)",
+          borderRadius: "var(--radius-card)",
+          width: "100%",
+          textAlign: "left",
+          cursor: "pointer",
+          minHeight: "56px",
+          userSelect: "none",
+          WebkitTapHighlightColor: "transparent",
+        } as React.CSSProperties
+      }
     >
       <EntityIcon icon={account.icon} color={account.color} />
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -392,11 +443,11 @@ function AccountRow({ account, onPress, chip, chipColor }: { account: Account; o
           style={{
             fontFamily: '"DM Sans", sans-serif',
             fontWeight: 500,
-            fontSize: 'var(--text-body)',
-            color: 'var(--color-text)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            fontSize: "var(--text-body)",
+            color: "var(--color-text)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
           }}
         >
           {account.name}
@@ -404,8 +455,8 @@ function AccountRow({ account, onPress, chip, chipColor }: { account: Account; o
         <div
           style={{
             fontFamily: '"JetBrains Mono", monospace',
-            fontSize: 'var(--text-caption)',
-            color: 'var(--color-text-secondary)',
+            fontSize: "var(--text-caption)",
+            color: "var(--color-text-secondary)",
           }}
         >
           {account.currency}
@@ -415,13 +466,13 @@ function AccountRow({ account, onPress, chip, chipColor }: { account: Account; o
         <span
           style={{
             fontFamily: '"DM Sans", sans-serif',
-            fontSize: 'var(--text-caption)',
+            fontSize: "var(--text-caption)",
             fontWeight: 500,
-            color: chipColor ?? 'var(--color-expense)',
-            background: `color-mix(in oklch, ${chipColor ?? 'var(--color-expense)'} 12%, transparent)`,
-            border: `1px solid color-mix(in oklch, ${chipColor ?? 'var(--color-expense)'} 30%, transparent)`,
-            borderRadius: 'var(--radius-chip)',
-            padding: '2px 8px',
+            color: chipColor ?? "var(--color-expense)",
+            background: `color-mix(in oklch, ${chipColor ?? "var(--color-expense)"} 12%, transparent)`,
+            border: `1px solid color-mix(in oklch, ${chipColor ?? "var(--color-expense)"} 30%, transparent)`,
+            borderRadius: "var(--radius-chip)",
+            padding: "2px 8px",
             flexShrink: 0,
           }}
         >
@@ -444,35 +495,35 @@ function PickerSheet({ title, onClose, children }: PickerSheetProps) {
   // Close on Escape using capture phase so it fires before the form-level bubble handler
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         e.stopPropagation();
         onClose();
       }
     };
-    document.addEventListener('keydown', h, true);
-    return () => document.removeEventListener('keydown', h, true);
+    document.addEventListener("keydown", h, true);
+    return () => document.removeEventListener("keydown", h, true);
   }, [onClose]);
 
   return (
     <div
       style={{
-        position: 'fixed',
+        position: "fixed",
         inset: 0,
-        background: 'var(--color-bg)',
-        zIndex: 'var(--z-overlay)',
-        display: 'flex',
-        flexDirection: 'column',
-        maxWidth: '480px',
-        marginInline: 'auto',
+        background: "var(--color-bg)",
+        zIndex: "var(--z-overlay)",
+        display: "flex",
+        flexDirection: "column",
+        maxWidth: "480px",
+        marginInline: "auto",
       }}
     >
       <div
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          height: '56px',
-          paddingInline: 'var(--space-4)',
-          borderBottom: '1px solid var(--color-border)',
+          display: "flex",
+          alignItems: "center",
+          height: "56px",
+          paddingInline: "var(--space-4)",
+          borderBottom: "1px solid var(--color-border)",
           flexShrink: 0,
         }}
       >
@@ -480,15 +531,15 @@ function PickerSheet({ title, onClose, children }: PickerSheetProps) {
           onClick={onClose}
           aria-label="Close"
           style={{
-            minWidth: '44px',
-            minHeight: '44px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-start',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: 'var(--color-text-secondary)',
+            minWidth: "44px",
+            minHeight: "44px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-start",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "var(--color-text-secondary)",
             padding: 0,
           }}
         >
@@ -497,27 +548,27 @@ function PickerSheet({ title, onClose, children }: PickerSheetProps) {
         <h2
           style={{
             flex: 1,
-            textAlign: 'center',
-            fontFamily: 'Syne, sans-serif',
+            textAlign: "center",
+            fontFamily: "Syne, sans-serif",
             fontWeight: 700,
-            fontSize: 'var(--text-heading)',
-            color: 'var(--color-text)',
+            fontSize: "var(--text-heading)",
+            color: "var(--color-text)",
             margin: 0,
           }}
         >
           {title}
         </h2>
-        <div style={{ minWidth: '44px' }} />
+        <div style={{ minWidth: "44px" }} />
       </div>
       <div
         className="scroll-container"
         style={{
           flex: 1,
-          overflowY: 'auto',
-          padding: 'var(--space-3) var(--space-4)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 'var(--space-2)',
+          overflowY: "auto",
+          padding: "var(--space-3) var(--space-4)",
+          display: "flex",
+          flexDirection: "column",
+          gap: "var(--space-2)",
         }}
       >
         {children}
@@ -534,14 +585,21 @@ interface Step3Props {
   toAccount: Account | null; // transfer only
   category: Category | null; // income/expense only
   allAccounts: Account[];
-  allCategories: Category[];
+  allCategoriesUnfiltered: Category[];
   numpadValue: string;
   onNumpadChange: (v: string) => void;
   onSave: (amount: number) => void;
   onBack: () => void;
-  onAccountChange: (acc: Account) => void;
-  onToAccountChange: (acc: Account) => void;
-  onCategoryChange: (cat: Category) => void;
+  onFromPick: (
+    pick: { type: "account"; account: Account } | { type: "incomeCategory"; category: Category },
+  ) => void;
+  onToPick: (
+    pick:
+      | { type: "expenseCategory"; category: Category }
+      | { type: "debtAccount"; account: Account }
+      | { type: "transferAccount"; account: Account }
+      | { type: "incomeDestAccount"; account: Account },
+  ) => void;
   note: string;
   onNoteChange: (v: string) => void;
   lastNote: string;
@@ -555,11 +613,11 @@ interface Step3Props {
   toSecondaryAmount: string;
   onToSecondaryAmountChange: (v: string) => void;
   toAccount2ndCurrencyDiffers: boolean;
-  focusedField: 'primary' | 'secondary';
-  onFocusedFieldChange: (f: 'primary' | 'secondary') => void;
+  focusedField: "primary" | "secondary";
+  onFocusedFieldChange: (f: "primary" | "secondary") => void;
   isDebtPaymentMode: boolean;
-  paymentType: 'regular' | 'overpayment';
-  onPaymentTypeChange: (t: 'regular' | 'overpayment') => void;
+  paymentType: "regular" | "overpayment";
+  onPaymentTypeChange: (t: "regular" | "overpayment") => void;
 }
 
 function Step3({
@@ -568,14 +626,13 @@ function Step3({
   toAccount,
   category,
   allAccounts,
-  allCategories,
+  allCategoriesUnfiltered,
   numpadValue,
   onNumpadChange,
   onSave,
   onBack,
-  onAccountChange,
-  onToAccountChange,
-  onCategoryChange,
+  onFromPick,
+  onToPick,
   note,
   onNoteChange,
   lastNote,
@@ -596,7 +653,7 @@ function Step3({
   onPaymentTypeChange,
 }: Step3Props) {
   const { t } = useTranslation();
-  const [pickerMode, setPickerMode] = useState<'account' | 'toAccount' | 'category' | null>(null);
+  const [pickerMode, setPickerMode] = useState<"from" | "to" | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [noteActive, setNoteActive] = useState(false);
   const noteRef = useRef<HTMLTextAreaElement>(null);
@@ -605,20 +662,34 @@ function Step3({
   useEffect(() => {
     if (!showDatePicker) return;
     const h = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         e.stopPropagation();
         setShowDatePicker(false);
       }
     };
-    document.addEventListener('keydown', h, true);
-    return () => document.removeEventListener('keydown', h, true);
+    document.addEventListener("keydown", h, true);
+    return () => document.removeEventListener("keydown", h, true);
   }, [showDatePicker]);
 
+  const debtAccounts = allAccounts.filter((a) => a.type === "DEBT");
+  const nonDebtAccounts = allAccounts.filter(
+    (a) => a.type !== "DEBT" && (txType !== "transfer" || a.id !== toAccount?.id),
+  );
+  const incomeCategories = allCategoriesUnfiltered.filter((c) => c.type === "INCOME");
+  const expenseCategories = allCategoriesUnfiltered.filter((c) => c.type === "EXPENSE");
+  const transferAccounts = allAccounts.filter((a) => a.type !== "DEBT" && a.id !== account?.id);
+
   const fromCurrency = account?.currency ?? mainCurrency;
-  const isTransfer = txType === 'transfer';
+  const isTransfer = txType === "transfer";
   const showToTarget = isTransfer || isDebtPaymentMode;
   const showForeignCurrency = !showToTarget && fromCurrency !== mainCurrency;
   const showTransferDestForeign = isTransfer && toAccount2ndCurrencyDiffers;
+  const showDebtDestForeign = isDebtPaymentMode && toAccount2ndCurrencyDiffers;
+  const showDebtMainCurrency =
+    isDebtPaymentMode &&
+    fromCurrency !== mainCurrency &&
+    (toAccount?.currency ?? mainCurrency) !== mainCurrency &&
+    toAccount2ndCurrencyDiffers;
 
   // Debt payment split preview
   const monthlyRate = isDebtPaymentMode && toAccount ? getMonthlyRate(toAccount) : null;
@@ -629,7 +700,11 @@ function Step3({
     (toAccount.mortgageTermYears != null || toAccount.mortgageLoanAmount != null);
   const currentAmount = evaluateExpression(numpadValue) ?? 0;
   const paymentSplit =
-    isDebtPaymentMode && hasInterestRate && paymentType === 'regular' && currentAmount > 0 && toAccount
+    isDebtPaymentMode &&
+    hasInterestRate &&
+    paymentType === "regular" &&
+    currentAmount > 0 &&
+    toAccount
       ? calculatePaymentSplit(Math.abs(toAccount.balance), monthlyRate!, currentAmount)
       : null;
 
@@ -641,44 +716,44 @@ function Step3({
   };
 
   const handleClearLastNote = () => {
-    onNoteChange('');
+    onNoteChange("");
   };
 
   return (
     <div
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100dvh',
-        background: 'var(--color-bg)',
-        maxWidth: '480px',
-        marginInline: 'auto',
+        display: "flex",
+        flexDirection: "column",
+        height: "100dvh",
+        background: "var(--color-bg)",
+        maxWidth: "480px",
+        marginInline: "auto",
       }}
     >
       {/* Header */}
       <div
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          height: '56px',
-          paddingInline: 'var(--space-4)',
+          display: "flex",
+          alignItems: "center",
+          height: "56px",
+          paddingInline: "var(--space-4)",
           flexShrink: 0,
-          borderBottom: '1px solid var(--color-border)',
+          borderBottom: "1px solid var(--color-border)",
         }}
       >
         <button
           onClick={onBack}
-          aria-label={t('common.back')}
+          aria-label={t("common.back")}
           style={{
-            minWidth: '44px',
-            minHeight: '44px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-start',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: 'var(--color-text-secondary)',
+            minWidth: "44px",
+            minHeight: "44px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-start",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "var(--color-text-secondary)",
             padding: 0,
           }}
         >
@@ -687,17 +762,17 @@ function Step3({
         <h1
           style={{
             flex: 1,
-            textAlign: 'center',
-            fontFamily: 'Syne, sans-serif',
+            textAlign: "center",
+            fontFamily: "Syne, sans-serif",
             fontWeight: 700,
-            fontSize: 'var(--text-heading)',
-            color: 'var(--color-text)',
+            fontSize: "var(--text-heading)",
+            color: "var(--color-text)",
             margin: 0,
           }}
         >
-          {isEdit ? t('transactions.editTransaction') : t('transactions.newTransaction')}
+          {isEdit ? t("transactions.editTransaction") : t("transactions.newTransaction")}
         </h1>
-        <div style={{ minWidth: '44px' }} />
+        <div style={{ minWidth: "44px" }} />
       </div>
 
       {/* Scrollable form area */}
@@ -705,39 +780,39 @@ function Step3({
         className="scroll-container"
         style={{
           flex: 1,
-          overflowY: 'auto',
-          display: 'flex',
-          flexDirection: 'column',
+          overflowY: "auto",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
         {/* From → To header row */}
         <div
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-2)',
-            paddingInline: 'var(--space-4)',
-            paddingTop: 'var(--space-3)',
-            paddingBottom: 'var(--space-2)',
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-2)",
+            paddingInline: "var(--space-4)",
+            paddingTop: "var(--space-3)",
+            paddingBottom: "var(--space-2)",
           }}
         >
           {/* From */}
           <button
-            onClick={() => setPickerMode(txType === 'income' ? 'category' : 'account')}
+            onClick={() => setPickerMode("from")}
             style={{
               flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--space-2)',
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-btn)',
-              padding: 'var(--space-2) var(--space-3)',
-              cursor: 'pointer',
-              minHeight: '44px',
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--space-2)",
+              background: "var(--color-surface)",
+              border: "1px solid var(--color-border)",
+              borderRadius: "var(--radius-btn)",
+              padding: "var(--space-2) var(--space-3)",
+              cursor: "pointer",
+              minHeight: "44px",
             }}
           >
-            {txType === 'income'
+            {txType === "income"
               ? category && <EntityIcon icon={category.icon} color={category.color} size={14} />
               : account && <EntityIcon icon={account.icon} color={account.color} size={14} />}
             <span
@@ -745,100 +820,128 @@ function Step3({
                 flex: 1,
                 fontFamily: '"DM Sans", sans-serif',
                 fontWeight: 500,
-                fontSize: 'var(--text-caption)',
-                color: (txType === 'income' ? category : account) ? 'var(--color-text)' : 'var(--color-text-disabled)',
-                textAlign: 'left',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
+                fontSize: "var(--text-caption)",
+                color: (txType === "income" ? category : account)
+                  ? "var(--color-text)"
+                  : "var(--color-text-disabled)",
+                textAlign: "left",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
               }}
             >
-              {txType === 'income'
-                ? category ? category.name : t('transactions.fields.from')
-                : account ? account.name : t('transactions.fields.from')}
+              {txType === "income"
+                ? category
+                  ? category.name
+                  : t("transactions.fields.from")
+                : account
+                  ? account.name
+                  : t("transactions.fields.from")}
             </span>
-            <ChevronDown size={12} style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }} />
+            <ChevronDown
+              size={12}
+              style={{ color: "var(--color-text-secondary)", flexShrink: 0 }}
+            />
           </button>
 
           {/* Arrow */}
-          <span style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-caption)', flexShrink: 0 }}>
+          <span
+            style={{
+              color: "var(--color-text-secondary)",
+              fontSize: "var(--text-caption)",
+              flexShrink: 0,
+            }}
+          >
             →
           </span>
 
           {/* To */}
           <button
-            onClick={() => setPickerMode(txType === 'income' ? 'account' : (showToTarget ? 'toAccount' : 'category'))}
+            onClick={() => setPickerMode("to")}
             style={{
               flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--space-2)',
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-btn)',
-              padding: 'var(--space-2) var(--space-3)',
-              cursor: 'pointer',
-              minHeight: '44px',
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--space-2)",
+              background: "var(--color-surface)",
+              border: "1px solid var(--color-border)",
+              borderRadius: "var(--radius-btn)",
+              padding: "var(--space-2) var(--space-3)",
+              cursor: "pointer",
+              minHeight: "44px",
             }}
           >
-            {txType === 'income'
+            {txType === "income"
               ? account && <EntityIcon icon={account.icon} color={account.color} size={14} />
               : showToTarget
-                ? toAccount && <EntityIcon icon={toAccount.icon} color={toAccount.color} size={14} />
+                ? toAccount && (
+                    <EntityIcon icon={toAccount.icon} color={toAccount.color} size={14} />
+                  )
                 : category && <EntityIcon icon={category.icon} color={category.color} size={14} />}
             <span
               style={{
                 flex: 1,
                 fontFamily: '"DM Sans", sans-serif',
                 fontWeight: 500,
-                fontSize: 'var(--text-caption)',
-                color:
-                  (txType === 'income' ? account : (showToTarget ? toAccount : category))
-                    ? 'var(--color-text)'
-                    : 'var(--color-text-disabled)',
-                textAlign: 'left',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
+                fontSize: "var(--text-caption)",
+                color: (txType === "income" ? account : showToTarget ? toAccount : category)
+                  ? "var(--color-text)"
+                  : "var(--color-text-disabled)",
+                textAlign: "left",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
               }}
             >
-              {txType === 'income'
-                ? account ? account.name : t('transactions.fields.to')
+              {txType === "income"
+                ? account
+                  ? account.name
+                  : t("transactions.fields.to")
                 : showToTarget
-                  ? toAccount ? toAccount.name : t('transactions.fields.to')
-                  : category ? category.name : t('transactions.fields.category')}
+                  ? toAccount
+                    ? toAccount.name
+                    : t("transactions.fields.to")
+                  : category
+                    ? category.name
+                    : t("transactions.fields.category")}
             </span>
-            <ChevronDown size={12} style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }} />
+            <ChevronDown
+              size={12}
+              style={{ color: "var(--color-text-secondary)", flexShrink: 0 }}
+            />
           </button>
         </div>
 
         {/* Amount display */}
         <div
-          onClick={showForeignCurrency ? () => onFocusedFieldChange('primary') : undefined}
+          onClick={showForeignCurrency ? () => onFocusedFieldChange("primary") : undefined}
           style={{
-            paddingInline: 'var(--space-4)',
-            paddingBottom: 'var(--space-2)',
-            textAlign: 'right',
-            cursor: showForeignCurrency ? 'pointer' : undefined,
-            borderBottom: showForeignCurrency && focusedField === 'primary' ? '2px solid var(--color-primary)' : '2px solid transparent',
+            paddingInline: "var(--space-4)",
+            paddingBottom: "var(--space-2)",
+            textAlign: "right",
+            cursor: showForeignCurrency ? "pointer" : undefined,
+            borderBottom:
+              showForeignCurrency && focusedField === "primary"
+                ? "2px solid var(--color-primary)"
+                : "2px solid transparent",
           }}
         >
           <span
             style={{
               fontFamily: '"JetBrains Mono", monospace',
               fontWeight: 600,
-              fontSize: 'var(--text-amount-lg)',
+              fontSize: "var(--text-amount-lg)",
               color:
-                txType === 'income'
-                  ? 'var(--color-income)'
-                  : txType === 'expense'
-                    ? 'var(--color-expense)'
-                    : 'var(--color-transfer)',
+                txType === "income"
+                  ? "var(--color-income)"
+                  : txType === "expense"
+                    ? "var(--color-expense)"
+                    : "var(--color-transfer)",
               textShadow:
-                txType === 'income'
-                  ? '0 0 12px oklch(73% 0.23 160 / 45%)'
-                  : txType === 'expense'
-                    ? '0 0 12px oklch(62% 0.28 18 / 45%)'
+                txType === "income"
+                  ? "0 0 12px oklch(73% 0.23 160 / 45%)"
+                  : txType === "expense"
+                    ? "0 0 12px oklch(62% 0.28 18 / 45%)"
                     : undefined,
             }}
           >
@@ -846,12 +949,12 @@ function Step3({
             {numpadValue && evaluatedAmount !== null && numpadValue.match(/[+\-×÷]/) && (
               <span
                 style={{
-                  fontSize: 'var(--text-body)',
-                  color: 'var(--color-text-secondary)',
-                  marginLeft: 'var(--space-2)',
+                  fontSize: "var(--text-body)",
+                  color: "var(--color-text-secondary)",
+                  marginLeft: "var(--space-2)",
                 }}
               >
-                = {formatNumpadDisplay(String(evaluatedAmount ?? ''))}
+                = {formatNumpadDisplay(String(evaluatedAmount ?? ""))}
               </span>
             )}
           </span>
@@ -859,9 +962,9 @@ function Step3({
             <span
               style={{
                 fontFamily: '"JetBrains Mono", monospace',
-                fontSize: 'var(--text-caption)',
-                color: 'var(--color-text-secondary)',
-                marginLeft: 'var(--space-2)',
+                fontSize: "var(--text-caption)",
+                color: "var(--color-text-secondary)",
+                marginLeft: "var(--space-2)",
               }}
             >
               {fromCurrency}
@@ -873,37 +976,40 @@ function Step3({
         {showForeignCurrency && (
           <div
             style={{
-              paddingInline: 'var(--space-4)',
-              paddingBottom: 'var(--space-2)',
+              paddingInline: "var(--space-4)",
+              paddingBottom: "var(--space-2)",
             }}
           >
             {noRateWarning && (
               <div
                 style={{
-                  fontSize: 'var(--text-caption)',
-                  color: 'var(--color-expense)',
-                  marginBottom: 'var(--space-1)',
+                  fontSize: "var(--text-caption)",
+                  color: "var(--color-expense)",
+                  marginBottom: "var(--space-1)",
                 }}
               >
-                {t('transactions.noExchangeRate')}
+                {t("transactions.noExchangeRate")}
               </div>
             )}
             <div
-              onClick={() => onFocusedFieldChange('secondary')}
+              onClick={() => onFocusedFieldChange("secondary")}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--space-2)',
-                cursor: 'pointer',
-                borderBottom: focusedField === 'secondary' ? '2px solid var(--color-primary)' : '2px solid transparent',
-                paddingBottom: 'var(--space-1)',
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-2)",
+                cursor: "pointer",
+                borderBottom:
+                  focusedField === "secondary"
+                    ? "2px solid var(--color-primary)"
+                    : "2px solid transparent",
+                paddingBottom: "var(--space-1)",
               }}
             >
               <span
                 style={{
                   fontFamily: '"JetBrains Mono", monospace',
-                  fontSize: 'var(--text-caption)',
-                  color: 'var(--color-text-secondary)',
+                  fontSize: "var(--text-caption)",
+                  color: "var(--color-text-secondary)",
                   flexShrink: 0,
                 }}
               >
@@ -912,25 +1018,25 @@ function Step3({
               <div
                 style={{
                   flex: 1,
-                  background: 'var(--color-surface-raised)',
-                  border: `1px solid ${focusedField === 'secondary' ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                  borderRadius: 'var(--radius-input)',
-                  padding: 'var(--space-2) var(--space-3)',
+                  background: "var(--color-surface-raised)",
+                  border: `1px solid ${focusedField === "secondary" ? "var(--color-primary)" : "var(--color-border)"}`,
+                  borderRadius: "var(--radius-input)",
+                  padding: "var(--space-2) var(--space-3)",
                   fontFamily: '"JetBrains Mono", monospace',
-                  fontSize: 'var(--text-caption)',
-                  color: secondaryAmount ? 'var(--color-text)' : 'var(--color-text-disabled)',
-                  minHeight: '44px',
-                  display: 'flex',
-                  alignItems: 'center',
+                  fontSize: "var(--text-caption)",
+                  color: secondaryAmount ? "var(--color-text)" : "var(--color-text-disabled)",
+                  minHeight: "44px",
+                  display: "flex",
+                  alignItems: "center",
                 }}
               >
-                {secondaryAmount || '0.00'}
+                {secondaryAmount || "0.00"}
               </div>
               <span
                 style={{
                   fontFamily: '"JetBrains Mono", monospace',
-                  fontSize: 'var(--text-caption)',
-                  color: 'var(--color-text-secondary)',
+                  fontSize: "var(--text-caption)",
+                  color: "var(--color-text-secondary)",
                   flexShrink: 0,
                 }}
               >
@@ -944,45 +1050,46 @@ function Step3({
         {showTransferDestForeign && (
           <div
             style={{
-              paddingInline: 'var(--space-4)',
-              paddingBottom: 'var(--space-2)',
+              paddingInline: "var(--space-4)",
+              paddingBottom: "var(--space-2)",
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
               <span
                 style={{
                   fontFamily: '"JetBrains Mono", monospace',
-                  fontSize: 'var(--text-caption)',
-                  color: 'var(--color-text-secondary)',
+                  fontSize: "var(--text-caption)",
+                  color: "var(--color-text-secondary)",
                   flexShrink: 0,
                 }}
               >
-                {t('transactions.fields.to')}:
+                {t("transactions.fields.to")}:
               </span>
               <input
                 type="number"
                 inputMode="decimal"
+                min="0"
                 value={toSecondaryAmount}
                 onChange={(e) => onToSecondaryAmountChange(e.target.value)}
                 placeholder="0.00"
                 style={{
                   flex: 1,
-                  background: 'var(--color-surface-raised)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-input)',
-                  padding: 'var(--space-2) var(--space-3)',
+                  background: "var(--color-surface-raised)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "var(--radius-input)",
+                  padding: "var(--space-2) var(--space-3)",
                   fontFamily: '"JetBrains Mono", monospace',
-                  fontSize: 'var(--text-caption)',
-                  color: 'var(--color-text)',
-                  minHeight: '44px',
-                  outline: 'none',
+                  fontSize: "var(--text-caption)",
+                  color: "var(--color-text)",
+                  minHeight: "44px",
+                  outline: "none",
                 }}
               />
               <span
                 style={{
                   fontFamily: '"JetBrains Mono", monospace',
-                  fontSize: 'var(--text-caption)',
-                  color: 'var(--color-text-secondary)',
+                  fontSize: "var(--text-caption)",
+                  color: "var(--color-text-secondary)",
                   flexShrink: 0,
                 }}
               >
@@ -992,20 +1099,147 @@ function Step3({
           </div>
         )}
 
+        {/* Debt payment destination amount (cross-currency debt) */}
+        {showDebtDestForeign && (
+          <div
+            style={{
+              paddingInline: "var(--space-4)",
+              paddingBottom: "var(--space-2)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+              <span
+                style={{
+                  fontFamily: '"JetBrains Mono", monospace',
+                  fontSize: "var(--text-caption)",
+                  color: "var(--color-text-secondary)",
+                  flexShrink: 0,
+                }}
+              >
+                {t("transactions.fields.to")}:
+              </span>
+              <input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                value={toSecondaryAmount}
+                onChange={(e) => onToSecondaryAmountChange(e.target.value)}
+                placeholder="0.00"
+                style={{
+                  flex: 1,
+                  background: "var(--color-surface-raised)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "var(--radius-input)",
+                  padding: "var(--space-2) var(--space-3)",
+                  fontFamily: '"JetBrains Mono", monospace',
+                  fontSize: "var(--text-caption)",
+                  color: "var(--color-text)",
+                  minHeight: "44px",
+                  outline: "none",
+                }}
+              />
+              <span
+                style={{
+                  fontFamily: '"JetBrains Mono", monospace',
+                  fontSize: "var(--text-caption)",
+                  color: "var(--color-text-secondary)",
+                  flexShrink: 0,
+                }}
+              >
+                {toAccount?.currency}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Debt payment main-currency equivalent (3-currency case) */}
+        {showDebtMainCurrency && (
+          <div
+            style={{
+              paddingInline: "var(--space-4)",
+              paddingBottom: "var(--space-2)",
+            }}
+          >
+            {noRateWarning && (
+              <div
+                style={{
+                  fontSize: "var(--text-caption)",
+                  color: "var(--color-expense)",
+                  marginBottom: "var(--space-1)",
+                }}
+              >
+                {t("transactions.noExchangeRate")}
+              </div>
+            )}
+            <div
+              onClick={() => onFocusedFieldChange("secondary")}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-2)",
+                cursor: "pointer",
+                borderBottom:
+                  focusedField === "secondary"
+                    ? "2px solid var(--color-primary)"
+                    : "2px solid transparent",
+                paddingBottom: "var(--space-1)",
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: '"JetBrains Mono", monospace',
+                  fontSize: "var(--text-caption)",
+                  color: "var(--color-text-secondary)",
+                  flexShrink: 0,
+                }}
+              >
+                ≈
+              </span>
+              <div
+                style={{
+                  flex: 1,
+                  background: "var(--color-surface-raised)",
+                  border: `1px solid ${focusedField === "secondary" ? "var(--color-primary)" : "var(--color-border)"}`,
+                  borderRadius: "var(--radius-input)",
+                  padding: "var(--space-2) var(--space-3)",
+                  fontFamily: '"JetBrains Mono", monospace',
+                  fontSize: "var(--text-caption)",
+                  color: secondaryAmount ? "var(--color-text)" : "var(--color-text-disabled)",
+                  minHeight: "44px",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                {secondaryAmount || "0.00"}
+              </div>
+              <span
+                style={{
+                  fontFamily: '"JetBrains Mono", monospace',
+                  fontSize: "var(--text-caption)",
+                  color: "var(--color-text-secondary)",
+                  flexShrink: 0,
+                }}
+              >
+                {mainCurrency}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Debt payment type toggle + split preview */}
         {isDebtPaymentMode && hasInterestRate && (
           <div
             style={{
-              paddingInline: 'var(--space-4)',
-              paddingBottom: 'var(--space-3)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 'var(--space-2)',
+              paddingInline: "var(--space-4)",
+              paddingBottom: "var(--space-3)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "var(--space-2)",
             }}
           >
             {/* Toggle */}
-            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-              {(['regular', 'overpayment'] as const).map((pt) => {
+            <div style={{ display: "flex", gap: "var(--space-2)" }}>
+              {(["regular", "overpayment"] as const).map((pt) => {
                 const isActive = paymentType === pt;
                 return (
                   <button
@@ -1013,19 +1247,23 @@ function Step3({
                     onClick={() => onPaymentTypeChange(pt)}
                     style={{
                       flex: 1,
-                      minHeight: '44px',
-                      background: isActive ? 'oklch(62% 0.28 18 / 12%)' : 'var(--color-surface)',
-                      border: isActive ? '1px solid oklch(62% 0.28 18 / 50%)' : '1px solid var(--color-border)',
-                      borderRadius: 'var(--radius-btn)',
-                      color: isActive ? 'var(--color-expense)' : 'var(--color-text-secondary)',
+                      minHeight: "44px",
+                      background: isActive ? "oklch(62% 0.28 18 / 12%)" : "var(--color-surface)",
+                      border: isActive
+                        ? "1px solid oklch(62% 0.28 18 / 50%)"
+                        : "1px solid var(--color-border)",
+                      borderRadius: "var(--radius-btn)",
+                      color: isActive ? "var(--color-expense)" : "var(--color-text-secondary)",
                       fontFamily: '"DM Sans", sans-serif',
                       fontWeight: 500,
-                      fontSize: 'var(--text-caption)',
-                      cursor: 'pointer',
-                      transition: 'background 120ms, border-color 120ms, color 120ms',
+                      fontSize: "var(--text-caption)",
+                      cursor: "pointer",
+                      transition: "background 120ms, border-color 120ms, color 120ms",
                     }}
                   >
-                    {pt === 'regular' ? t('transactions.debtPayment.regular') : t('transactions.debtPayment.overpayment')}
+                    {pt === "regular"
+                      ? t("transactions.debtPayment.regular")
+                      : t("transactions.debtPayment.overpayment")}
                   </button>
                 );
               })}
@@ -1034,13 +1272,13 @@ function Step3({
             {isMortgage && hasInterestRate && (
               <div
                 style={{
-                  fontSize: 'var(--text-caption)',
-                  color: 'var(--color-text-secondary)',
+                  fontSize: "var(--text-caption)",
+                  color: "var(--color-text-secondary)",
                   fontFamily: '"DM Sans", sans-serif',
                   lineHeight: 1.4,
                 }}
               >
-                {t('transactions.debtPayment.mortgageInfo')}
+                {t("transactions.debtPayment.mortgageInfo")}
               </div>
             )}
 
@@ -1048,28 +1286,54 @@ function Step3({
             {paymentSplit && (
               <div
                 style={{
-                  background: 'var(--color-surface)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-card)',
-                  padding: 'var(--space-2) var(--space-3)',
-                  display: 'flex',
-                  gap: 'var(--space-3)',
+                  background: "var(--color-surface)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "var(--radius-card)",
+                  padding: "var(--space-2) var(--space-3)",
+                  display: "flex",
+                  gap: "var(--space-3)",
                 }}
               >
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--text-caption)', color: 'var(--color-text-secondary)' }}>
-                    {t('transactions.debtPayment.interest')}
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "2px" }}>
+                  <span
+                    style={{
+                      fontFamily: '"DM Sans", sans-serif',
+                      fontSize: "var(--text-caption)",
+                      color: "var(--color-text-secondary)",
+                    }}
+                  >
+                    {t("transactions.debtPayment.interest")}
                   </span>
-                  <span style={{ fontFamily: '"JetBrains Mono", monospace', fontWeight: 500, fontSize: 'var(--text-body)', color: 'var(--color-expense)' }}>
+                  <span
+                    style={{
+                      fontFamily: '"JetBrains Mono", monospace',
+                      fontWeight: 500,
+                      fontSize: "var(--text-body)",
+                      color: "var(--color-expense)",
+                    }}
+                  >
                     {paymentSplit.interestAmount.toFixed(2)}
                   </span>
                 </div>
-                <div style={{ width: '1px', background: 'var(--color-border)' }} />
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--text-caption)', color: 'var(--color-text-secondary)' }}>
-                    {t('transactions.debtPayment.principal')}
+                <div style={{ width: "1px", background: "var(--color-border)" }} />
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "2px" }}>
+                  <span
+                    style={{
+                      fontFamily: '"DM Sans", sans-serif',
+                      fontSize: "var(--text-caption)",
+                      color: "var(--color-text-secondary)",
+                    }}
+                  >
+                    {t("transactions.debtPayment.principal")}
                   </span>
-                  <span style={{ fontFamily: '"JetBrains Mono", monospace', fontWeight: 500, fontSize: 'var(--text-body)', color: 'var(--color-income)' }}>
+                  <span
+                    style={{
+                      fontFamily: '"JetBrains Mono", monospace',
+                      fontWeight: 500,
+                      fontSize: "var(--text-body)",
+                      color: "var(--color-income)",
+                    }}
+                  >
                     {paymentSplit.principalAmount.toFixed(2)}
                   </span>
                 </div>
@@ -1077,41 +1341,46 @@ function Step3({
             )}
 
             {/* Warning when payment doesn't cover interest */}
-            {isDebtPaymentMode && hasInterestRate && paymentType === 'regular' && currentAmount > 0 && paymentSplit && paymentSplit.principalAmount === 0 && (
-              <div style={{ fontSize: 'var(--text-caption)', color: 'var(--color-expense)' }}>
-                {t('transactions.debtPayment.noInterestCover')}
-              </div>
-            )}
+            {isDebtPaymentMode &&
+              hasInterestRate &&
+              paymentType === "regular" &&
+              currentAmount > 0 &&
+              paymentSplit &&
+              paymentSplit.principalAmount === 0 && (
+                <div style={{ fontSize: "var(--text-caption)", color: "var(--color-expense)" }}>
+                  {t("transactions.debtPayment.noInterestCover")}
+                </div>
+              )}
           </div>
         )}
 
         {/* Note field */}
         <div
           style={{
-            paddingInline: 'var(--space-4)',
-            paddingBottom: 'var(--space-3)',
+            paddingInline: "var(--space-4)",
+            paddingBottom: "var(--space-3)",
           }}
         >
           <div
             style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: 'var(--space-1)',
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "var(--space-1)",
             }}
           >
             <label
               style={{
-                fontSize: 'var(--text-caption)',
-                color: 'var(--color-text-secondary)',
+                fontSize: "var(--text-caption)",
+                color: "var(--color-text-secondary)",
               }}
             >
-              {t('transactions.fields.note')}
+              {t("transactions.fields.note")}
             </label>
             <span
               style={{
-                fontSize: 'var(--text-caption)',
-                color: note.length > 229 ? 'var(--color-expense)' : 'var(--color-text-disabled)',
+                fontSize: "var(--text-caption)",
+                color: note.length > 229 ? "var(--color-expense)" : "var(--color-text-disabled)",
               }}
             >
               {note.length}/255
@@ -1125,43 +1394,43 @@ function Step3({
             onFocus={() => setNoteActive(true)}
             onBlur={() => setNoteActive(false)}
             onChange={(e) => onNoteChange(e.target.value)}
-            placeholder={!noteActive && lastNote && !note ? lastNote : ''}
+            placeholder={!noteActive && lastNote && !note ? lastNote : ""}
             style={{
-              width: '100%',
-              boxSizing: 'border-box',
-              background: 'var(--color-surface-raised)',
-              border: `1px solid ${noteActive ? 'var(--color-primary)' : 'var(--color-border)'}`,
-              borderRadius: 'var(--radius-input)',
-              padding: 'var(--space-2) var(--space-3)',
+              width: "100%",
+              boxSizing: "border-box",
+              background: "var(--color-surface-raised)",
+              border: `1px solid ${noteActive ? "var(--color-primary)" : "var(--color-border)"}`,
+              borderRadius: "var(--radius-input)",
+              padding: "var(--space-2) var(--space-3)",
               fontFamily: '"DM Sans", sans-serif',
-              fontSize: 'var(--text-body)',
-              color: 'var(--color-text)',
-              resize: 'none',
-              outline: noteActive ? '2px solid var(--color-primary)' : 'none',
-              outlineOffset: '2px',
-              boxShadow: noteActive ? '0 0 0 4px var(--color-primary-dim)' : 'none',
+              fontSize: "var(--text-body)",
+              color: "var(--color-text)",
+              resize: "none",
+              outline: noteActive ? "2px solid var(--color-primary)" : "none",
+              outlineOffset: "2px",
+              boxShadow: noteActive ? "0 0 0 4px var(--color-primary-dim)" : "none",
             }}
           />
           {/* Use last note chip */}
           {lastNote && !note && (
-            <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+            <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-2)" }}>
               <button
                 onClick={handleUseLastNote}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 'var(--space-1)',
-                  background: 'var(--color-surface-raised)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-chip)',
-                  padding: '4px 10px',
-                  fontSize: 'var(--text-caption)',
-                  color: 'var(--color-text-secondary)',
-                  cursor: 'pointer',
-                  minHeight: '28px',
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "var(--space-1)",
+                  background: "var(--color-surface-raised)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "var(--radius-chip)",
+                  padding: "4px 10px",
+                  fontSize: "var(--text-caption)",
+                  color: "var(--color-text-secondary)",
+                  cursor: "pointer",
+                  minHeight: "28px",
                 }}
               >
-                <span>{t('transactions.noteHint')}</span>
+                <span>{t("transactions.noteHint")}</span>
                 <X
                   size={12}
                   onClick={(e) => {
@@ -1177,46 +1446,46 @@ function Step3({
         {/* Date display (read-only, edited via calendar button) */}
         <div
           style={{
-            paddingInline: 'var(--space-4)',
-            paddingBottom: 'var(--space-3)',
+            paddingInline: "var(--space-4)",
+            paddingBottom: "var(--space-3)",
           }}
         >
           <label
             style={{
-              display: 'block',
-              fontSize: 'var(--text-caption)',
-              color: 'var(--color-text-secondary)',
-              marginBottom: 'var(--space-1)',
+              display: "block",
+              fontSize: "var(--text-caption)",
+              color: "var(--color-text-secondary)",
+              marginBottom: "var(--space-1)",
             }}
           >
-            {t('transactions.fields.date')}
+            {t("transactions.fields.date")}
           </label>
           <div
             onClick={() => setShowDatePicker(true)}
             style={{
               fontFamily: '"DM Sans", sans-serif',
-              fontSize: 'var(--text-body)',
-              color: 'var(--color-text)',
-              background: 'var(--color-surface-raised)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-input)',
-              padding: 'var(--space-2) var(--space-3)',
-              minHeight: '44px',
-              display: 'flex',
-              alignItems: 'center',
-              cursor: 'pointer',
+              fontSize: "var(--text-body)",
+              color: "var(--color-text)",
+              background: "var(--color-surface-raised)",
+              border: "1px solid var(--color-border)",
+              borderRadius: "var(--radius-input)",
+              padding: "var(--space-2) var(--space-3)",
+              minHeight: "44px",
+              display: "flex",
+              alignItems: "center",
+              cursor: "pointer",
             }}
           >
-            {format(parseISO(date), 'dd.MM.yyyy')}
+            {format(parseISO(date), "dd.MM.yyyy")}
           </div>
         </div>
 
         {/* Numpad */}
         <Numpad
-          value={focusedField === 'secondary' ? secondaryAmount : numpadValue}
-          onChange={focusedField === 'secondary' ? onSecondaryAmountChange : onNumpadChange}
+          value={focusedField === "secondary" ? secondaryAmount : numpadValue}
+          onChange={focusedField === "secondary" ? onSecondaryAmountChange : onNumpadChange}
           onSave={(result) => {
-            if (focusedField === 'secondary') {
+            if (focusedField === "secondary") {
               // Always save using the primary (account-currency) amount
               const primaryResult = evaluateExpression(numpadValue);
               if (primaryResult === null || primaryResult <= 0) return;
@@ -1233,32 +1502,32 @@ function Step3({
         {/* Repeat stub */}
         <div
           style={{
-            paddingInline: 'var(--space-4)',
-            paddingTop: 'var(--space-2)',
-            paddingBottom: 'var(--space-6)',
+            paddingInline: "var(--space-4)",
+            paddingTop: "var(--space-2)",
+            paddingBottom: "var(--space-6)",
           }}
         >
           <ComingSoonStub>
             <div
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--space-2)',
-                padding: 'var(--space-2) var(--space-3)',
-                background: 'var(--color-surface)',
-                borderRadius: 'var(--radius-btn)',
-                border: '1px solid var(--color-border)',
-                minHeight: '44px',
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-2)",
+                padding: "var(--space-2) var(--space-3)",
+                background: "var(--color-surface)",
+                borderRadius: "var(--radius-btn)",
+                border: "1px solid var(--color-border)",
+                minHeight: "44px",
               }}
             >
               <span
                 style={{
                   fontFamily: '"DM Sans", sans-serif',
-                  fontSize: 'var(--text-body)',
-                  color: 'var(--color-text-secondary)',
+                  fontSize: "var(--text-body)",
+                  color: "var(--color-text-secondary)",
                 }}
               >
-                {t('transactions.repeat')}
+                {t("transactions.repeat")}
               </span>
             </div>
           </ComingSoonStub>
@@ -1269,38 +1538,38 @@ function Step3({
       {showDatePicker && (
         <div
           style={{
-            position: 'fixed',
+            position: "fixed",
             inset: 0,
-            background: 'rgba(0,0,0,0.7)',
-            zIndex: 'var(--z-overlay)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            background: "rgba(0,0,0,0.7)",
+            zIndex: "var(--z-overlay)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
           onClick={() => setShowDatePicker(false)}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: 'var(--color-surface-raised)',
-              borderRadius: 'var(--radius-card)',
-              padding: 'var(--space-4)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 'var(--space-3)',
-              width: 'min(360px, calc(100vw - 32px))',
+              background: "var(--color-surface-raised)",
+              borderRadius: "var(--radius-card)",
+              padding: "var(--space-4)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "var(--space-3)",
+              width: "min(360px, calc(100vw - 32px))",
             }}
           >
             <h3
               style={{
-                fontFamily: 'Syne, sans-serif',
+                fontFamily: "Syne, sans-serif",
                 fontWeight: 700,
-                fontSize: 'var(--text-subheading)',
-                color: 'var(--color-text)',
+                fontSize: "var(--text-subheading)",
+                color: "var(--color-text)",
                 margin: 0,
               }}
             >
-              {t('transactions.fields.date')}
+              {t("transactions.fields.date")}
             </h3>
             <CalendarPicker
               value={date}
@@ -1312,53 +1581,51 @@ function Step3({
             <button
               onClick={() => setShowDatePicker(false)}
               style={{
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-btn)',
-                padding: 'var(--space-2) var(--space-3)',
-                color: 'var(--color-text-secondary)',
+                background: "var(--color-surface)",
+                border: "1px solid var(--color-border)",
+                borderRadius: "var(--radius-btn)",
+                padding: "var(--space-2) var(--space-3)",
+                color: "var(--color-text-secondary)",
                 fontFamily: '"DM Sans", sans-serif',
-                fontSize: 'var(--text-body)',
-                cursor: 'pointer',
-                minHeight: '44px',
+                fontSize: "var(--text-body)",
+                cursor: "pointer",
+                minHeight: "44px",
               }}
             >
-              {t('common.close')}
+              {t("common.close")}
             </button>
           </div>
         </div>
       )}
 
       {/* Picker sheets */}
-      {pickerMode === 'account' && (
-        <PickerSheet title={t('transactions.fields.from')} onClose={() => setPickerMode(null)}>
-          {allAccounts
-            .filter((acc) => (isTransfer || acc.type !== 'DEBT') && (!isTransfer || acc.id !== toAccount?.id))
-            .map((acc) => (
-              <AccountRow
-                key={acc.id}
-                account={acc}
-                onPress={() => {
-                  onAccountChange(acc);
-                  setPickerMode(null);
-                }}
-              />
-            ))}
-        </PickerSheet>
-      )}
-
-      {pickerMode === 'toAccount' && (
-        <PickerSheet title={t('transactions.fields.to')} onClose={() => setPickerMode(null)}>
-          {(isDebtPaymentMode
-            ? allAccounts.filter((a) => a.type === 'DEBT' && a.id !== account?.id)
-            : allAccounts.filter((a) => a.id !== account?.id)
-          ).map((acc) => (
+      {pickerMode === "from" && (
+        <PickerSheet title={t("transactions.fields.from")} onClose={() => setPickerMode(null)}>
+          {nonDebtAccounts.map((acc) => (
             <AccountRow
               key={acc.id}
               account={acc}
-              chip={isDebtPaymentMode ? 'DEBT' : undefined}
               onPress={() => {
-                onToAccountChange(acc);
+                onFromPick({ type: "account", account: acc });
+                setPickerMode(null);
+              }}
+            />
+          ))}
+          {nonDebtAccounts.length > 0 && incomeCategories.length > 0 && (
+            <div
+              style={{
+                height: "1px",
+                background: "var(--color-border)",
+                marginBlock: "var(--space-1)",
+              }}
+            />
+          )}
+          {incomeCategories.map((cat) => (
+            <CategoryRow
+              key={cat.id}
+              category={cat}
+              onPress={() => {
+                onFromPick({ type: "incomeCategory", category: cat });
                 setPickerMode(null);
               }}
             />
@@ -1366,22 +1633,75 @@ function Step3({
         </PickerSheet>
       )}
 
-      {pickerMode === 'category' && (
-        <PickerSheet title={t('transactions.fields.category')} onClose={() => setPickerMode(null)}>
-          {allCategories
-            .filter((c) =>
-              txType === 'income' ? c.type === 'INCOME' : c.type === 'EXPENSE',
-            )
-            .map((cat) => (
-              <CategoryRow
-                key={cat.id}
-                category={cat}
+      {pickerMode === "to" && (
+        <PickerSheet title={t("transactions.fields.to")} onClose={() => setPickerMode(null)}>
+          {txType === "income" ? (
+            nonDebtAccounts.map((acc) => (
+              <AccountRow
+                key={acc.id}
+                account={acc}
                 onPress={() => {
-                  onCategoryChange(cat);
+                  onToPick({ type: "incomeDestAccount", account: acc });
                   setPickerMode(null);
                 }}
               />
-            ))}
+            ))
+          ) : (
+            <>
+              {debtAccounts.map((acc) => (
+                <AccountRow
+                  key={acc.id}
+                  account={acc}
+                  chip="DEBT"
+                  onPress={() => {
+                    onToPick({ type: "debtAccount", account: acc });
+                    setPickerMode(null);
+                  }}
+                />
+              ))}
+              {debtAccounts.length > 0 &&
+                (transferAccounts.length > 0 || expenseCategories.length > 0) && (
+                  <div
+                    style={{
+                      height: "1px",
+                      background: "var(--color-border)",
+                      marginBlock: "var(--space-1)",
+                    }}
+                  />
+                )}
+              {transferAccounts.map((acc) => (
+                <AccountRow
+                  key={acc.id}
+                  account={acc}
+                  chip="TRANSFER"
+                  chipColor="var(--color-transfer)"
+                  onPress={() => {
+                    onToPick({ type: "transferAccount", account: acc });
+                    setPickerMode(null);
+                  }}
+                />
+              ))}
+              {transferAccounts.length > 0 && expenseCategories.length > 0 && (
+                <div
+                  style={{
+                    height: "1px",
+                    background: "var(--color-border)",
+                    marginBlock: "var(--space-1)",
+                  }}
+                />
+              )}
+              {expenseCategories.map((cat) => (
+                <CategoryRow
+                  key={cat.id}
+                  category={cat}
+                  onPress={() => {
+                    onToPick({ type: "expenseCategory", category: cat });
+                    setPickerMode(null);
+                  }}
+                />
+              ))}
+            </>
+          )}
         </PickerSheet>
       )}
     </div>
@@ -1415,73 +1735,83 @@ export default function TransactionInput() {
   // Step management
   const [step, setStep] = useState<1 | 2 | 3>(isEdit ? 3 : 1);
   const [txType, setTxType] = useState<TxTab>(() => {
-    const qType = searchParams.get('type');
-    if (qType === 'income' || qType === 'expense') return qType;
-    return 'expense';
+    const qType = searchParams.get("type");
+    if (qType === "income" || qType === "expense") return qType;
+    return "expense";
   });
-  const [paymentType, setPaymentType] = useState<'regular' | 'overpayment'>('regular');
+  const [paymentType, setPaymentType] = useState<"regular" | "overpayment">("regular");
 
   // Detail form state
   const [account, setAccount] = useState<Account | null>(null);
   const [toAccount, setToAccount] = useState<Account | null>(null);
   const [category, setCategory] = useState<Category | null>(null);
-  const [numpadValue, setNumpadValue] = useState('');
-  const [note, setNote] = useState('');
+  const [numpadValue, setNumpadValue] = useState("");
+  const [note, setNote] = useState("");
   const [date, setDate] = useState(getLocalDateString);
-  const [secondaryAmount, setSecondaryAmount] = useState('');
+  const [secondaryAmount, setSecondaryAmount] = useState("");
   const [secondaryManual, setSecondaryManual] = useState(false);
-  const [focusedField, setFocusedField] = useState<'primary' | 'secondary'>('primary');
-  const [toSecondaryAmount, setToSecondaryAmount] = useState('');
+  const [focusedField, setFocusedField] = useState<"primary" | "secondary">("primary");
+  const [toSecondaryAmount, setToSecondaryAmount] = useState("");
+  const [toSecondaryManual, setToSecondaryManual] = useState(false);
   const [noRateWarning, setNoRateWarning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const isDebtPaymentMode =
-    txType === 'expense' && toAccount !== null && toAccount.type === 'DEBT' && category === null;
+    txType === "expense" && toAccount !== null && toAccount.type === "DEBT" && category === null;
   const historyDepthRef = useRef(0);
   const isSavingRef = useRef(false);
 
   // Last note for category suggestion
-  const lastNote = useLiveQuery(async () => {
-    if (!category?.id) return '';
-    const txs = await db.transactions
-      .where('categoryId')
-      .equals(category.id)
-      .reverse()
-      .sortBy('timestamp');
-    for (const tx of txs) {
-      if (tx.note && tx.note.trim()) return tx.note;
-    }
-    return '';
-  }, [category?.id]) ?? '';
+  const lastNote =
+    useLiveQuery(async () => {
+      if (!category?.id) return "";
+      const txs = await db.transactions
+        .where("categoryId")
+        .equals(category.id)
+        .reverse()
+        .sortBy("timestamp");
+      for (const tx of txs) {
+        if (tx.note && tx.note.trim()) return tx.note;
+      }
+      return "";
+    }, [category?.id]) ?? "";
 
   // Determine default account from most recent transaction (skips DEBT accounts)
-  const defaultAccount = useLiveQuery(async () => {
-    const active = await db.accounts.filter((a) => !a.isTrashed).toArray();
-    if (active.length === 0) return null;
-    const txs = await db.transactions.orderBy('date').reverse().limit(50).toArray();
-    for (const tx of txs) {
-      const found = active.find((a) => a.id === tx.accountId && a.type !== 'DEBT');
-      if (found) return found;
-    }
-    return null;
-  }, []) ?? null;
+  const defaultAccount =
+    useLiveQuery(async () => {
+      const active = await db.accounts.filter((a) => !a.isTrashed).toArray();
+      if (active.length === 0) return null;
+      const txs = await db.transactions.orderBy("date").reverse().limit(50).toArray();
+      for (const tx of txs) {
+        const found = active.find((a) => a.id === tx.accountId && a.type !== "DEBT");
+        if (found) return found;
+      }
+      return null;
+    }, []) ?? null;
 
   // Whether transfer source/dest have different currencies
-  const toAccount2ndCurrencyDiffers =
-    Boolean(account && toAccount && account.currency !== toAccount.currency);
+  const toAccount2ndCurrencyDiffers = Boolean(
+    account && toAccount && account.currency !== toAccount.currency,
+  );
 
   // Initialize account when data loads
   useEffect(() => {
     if (account !== null) return;
     // 1. Explicit query param
-    const qAccountId = searchParams.get('accountId');
+    const qAccountId = searchParams.get("accountId");
     if (qAccountId && allAccounts.length > 0) {
       const found = allAccounts.find((a) => a.id === parseInt(qAccountId, 10));
-      if (found) { setAccount(found); return; }
+      if (found) {
+        setAccount(found);
+        return;
+      }
     }
     // 2. Active account filter
     if (transactionAccountFilter !== null && allAccounts.length > 0) {
       const found = allAccounts.find((a) => a.id === transactionAccountFilter);
-      if (found) { setAccount(found); return; }
+      if (found) {
+        setAccount(found);
+        return;
+      }
     }
     // 3. Latest used account (most recent transaction)
     if (defaultAccount) setAccount(defaultAccount);
@@ -1490,12 +1820,12 @@ export default function TransactionInput() {
   // Initialize category from query param
   useEffect(() => {
     if (category !== null) return;
-    const qCategoryId = searchParams.get('categoryId');
+    const qCategoryId = searchParams.get("categoryId");
     if (qCategoryId && allCategories.length > 0) {
       const found = allCategories.find((c) => c.id === parseInt(qCategoryId, 10));
       if (found) {
         setCategory(found);
-        const typeFromCat: TxTab = found.type === 'INCOME' ? 'income' : 'expense';
+        const typeFromCat: TxTab = found.type === "INCOME" ? "income" : "expense";
         setTxType(typeFromCat);
       }
     }
@@ -1504,14 +1834,14 @@ export default function TransactionInput() {
   // Step-skip logic based on query params and active filter
   useEffect(() => {
     if (isEdit) return;
-    const qType = searchParams.get('type');
-    const qCategoryId = searchParams.get('categoryId');
-    const qAccountId = searchParams.get('accountId');
+    const qType = searchParams.get("type");
+    const qCategoryId = searchParams.get("categoryId");
+    const qAccountId = searchParams.get("accountId");
 
     if (qCategoryId) {
       // CategoryList: category pre-set, go straight to amount form
       setStep(3);
-    } else if (qType === 'expense' && qAccountId) {
+    } else if (qType === "expense" && qAccountId) {
       // AccountDetail Expense: FROM account pre-set, user picks TO
       setStep(2);
     } else if (transactionAccountFilter !== null) {
@@ -1531,26 +1861,26 @@ export default function TransactionInput() {
     initialised.current = true;
 
     const typeMap: Record<TransactionType, TxTab> = {
-      INCOME: 'income',
-      EXPENSE: 'expense',
-      TRANSFER: 'transfer',
+      INCOME: "income",
+      EXPENSE: "expense",
+      TRANSFER: "transfer",
     };
     const foundAccount = allAccounts.find((a) => a.id === existingTx.accountId);
     if (foundAccount) setAccount(foundAccount);
 
-    if (existingTx.type === 'TRANSFER' && existingTx.toAccountId != null) {
+    if (existingTx.type === "TRANSFER" && existingTx.toAccountId != null) {
       // Debt payment — restore as expense + debt account mode
-      setTxType('expense');
+      setTxType("expense");
       // Look up dest account directly from DB so trashed accounts are found
       db.accounts.get(existingTx.toAccountId).then((dest) => {
         if (dest) setToAccount(dest);
       });
-      setPaymentType(existingTx.interestAmount != null ? 'regular' : 'overpayment');
-    } else if (existingTx.type === 'TRANSFER' && existingTx.transferGroupId) {
-      setTxType('transfer');
+      setPaymentType(existingTx.interestAmount != null ? "regular" : "overpayment");
+    } else if (existingTx.type === "TRANSFER" && existingTx.transferGroupId) {
+      setTxType("transfer");
       // Load the other half of the transfer
       db.transactions
-        .where('transferGroupId')
+        .where("transferGroupId")
         .equals(existingTx.transferGroupId)
         .toArray()
         .then((records) => {
@@ -1569,7 +1899,7 @@ export default function TransactionInput() {
     }
 
     setNumpadValue(String(existingTx.amount));
-    setNote(existingTx.note ?? '');
+    setNote(existingTx.note ?? "");
     setDate(existingTx.date);
     setStep(3);
   }, [isEdit, existingTx, allAccounts, allCategories]);
@@ -1580,7 +1910,7 @@ export default function TransactionInput() {
     if (!account || account.currency === mainCurrency) return;
     const amount = evaluateExpression(numpadValue);
     if (amount === null || amount <= 0) {
-      setSecondaryAmount('');
+      setSecondaryAmount("");
       return;
     }
     exchangeRateService
@@ -1603,17 +1933,11 @@ export default function TransactionInput() {
   // Reset secondaryManual and focusedField when account changes
   useEffect(() => {
     setSecondaryManual(false);
-    setSecondaryAmount('');
+    setToSecondaryManual(false);
+    setSecondaryAmount("");
     setNoRateWarning(false);
-    setFocusedField('primary');
+    setFocusedField("primary");
   }, [account]);
-
-  // Reset secondaryManual when switching back to primary field
-  useEffect(() => {
-    if (focusedField === 'primary') {
-      setSecondaryManual(false);
-    }
-  }, [focusedField]);
 
   // Handle browser back button: go back one step per history push
   useEffect(() => {
@@ -1623,16 +1947,17 @@ export default function TransactionInput() {
         setStep((s) => Math.max(1, s - 1) as 1 | 2 | 3);
       }
     };
-    window.addEventListener('popstate', h);
-    return () => window.removeEventListener('popstate', h);
+    window.addEventListener("popstate", h);
+    return () => window.removeEventListener("popstate", h);
   }, []);
 
   // Auto-calc transfer dest amount when source changes
   useEffect(() => {
+    if (toSecondaryManual) return;
     if (!toAccount2ndCurrencyDiffers || !account || !toAccount) return;
     const amount = evaluateExpression(numpadValue);
     if (amount === null || amount <= 0) {
-      setToSecondaryAmount('');
+      setToSecondaryAmount("");
       return;
     }
     exchangeRateService
@@ -1643,11 +1968,28 @@ export default function TransactionInput() {
         }
       })
       .catch(() => {});
-  }, [numpadValue, account, toAccount, toAccount2ndCurrencyDiffers]);
+  }, [numpadValue, account, toAccount, toAccount2ndCurrencyDiffers, toSecondaryManual]);
+
+  // Reset toSecondaryManual when toAccount changes
+  useEffect(() => {
+    setToSecondaryManual(false);
+    setToSecondaryAmount("");
+  }, [toAccount]);
 
   const handleSecondaryAmountChange = (v: string) => {
     setSecondaryAmount(v);
     setSecondaryManual(true);
+  };
+
+  const handleNumpadChange = (v: string) => {
+    setNumpadValue(v);
+    setSecondaryManual(false);
+    setToSecondaryManual(false);
+  };
+
+  const handleToSecondaryAmountChange = (v: string) => {
+    setToSecondaryAmount(v);
+    setToSecondaryManual(true);
   };
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -1655,37 +1997,41 @@ export default function TransactionInput() {
   // Step 1 → 2: FROM account selected
   const handleFromAccountSelect = useCallback((acc: Account) => {
     setAccount(acc);
-    setTxType('expense');
+    setTxType("expense");
     setCategory(null);
-    history.pushState(null, '', window.location.href);
+    history.pushState(null, "", window.location.href);
     historyDepthRef.current++;
     setStep(2);
   }, []);
 
   // Step 1 → 2 (or 3 if TO pre-set): FROM income category selected
-  const handleFromIncomeCategorySelect = useCallback((cat: Category) => {
-    setCategory(cat);
-    setTxType('income');
-    history.pushState(null, '', window.location.href);
-    historyDepthRef.current++;
-    // If income destination account is already pre-set (from AccountDetail or filter), skip step 2
-    const qAccountId = searchParams.get('accountId');
-    const hasPresetAccount = account !== null ||
-      (qAccountId !== null && allAccounts.some((a) => a.id === parseInt(qAccountId, 10)));
-    if (hasPresetAccount) {
-      setStep(3);
-    } else {
-      setStep(2);
-    }
-  }, [account, allAccounts, searchParams]);
+  const handleFromIncomeCategorySelect = useCallback(
+    (cat: Category) => {
+      setCategory(cat);
+      setTxType("income");
+      history.pushState(null, "", window.location.href);
+      historyDepthRef.current++;
+      // If income destination account is already pre-set (from AccountDetail or filter), skip step 2
+      const qAccountId = searchParams.get("accountId");
+      const hasPresetAccount =
+        account !== null ||
+        (qAccountId !== null && allAccounts.some((a) => a.id === parseInt(qAccountId, 10)));
+      if (hasPresetAccount) {
+        setStep(3);
+      } else {
+        setStep(2);
+      }
+    },
+    [account, allAccounts, searchParams],
+  );
 
   // Step 2 → 3: TO expense category selected
   const handleCategorySelect = useCallback((cat: Category) => {
     setCategory(cat);
     setToAccount(null);
-    const typeFromCat: TxTab = cat.type === 'INCOME' ? 'income' : 'expense';
+    const typeFromCat: TxTab = cat.type === "INCOME" ? "income" : "expense";
     setTxType(typeFromCat);
-    history.pushState(null, '', window.location.href);
+    history.pushState(null, "", window.location.href);
     historyDepthRef.current++;
     setStep(3);
   }, []);
@@ -1694,35 +2040,103 @@ export default function TransactionInput() {
   const handleDebtAccountSelect = useCallback((acc: Account) => {
     setToAccount(acc);
     setCategory(null);
-    setTxType('expense');
-    setPaymentType('regular');
-    history.pushState(null, '', window.location.href);
+    setTxType("expense");
+    setPaymentType("regular");
+    history.pushState(null, "", window.location.href);
     historyDepthRef.current++;
     setStep(3);
   }, []);
 
   // Step 2 → 3: TO transfer account selected
-  const handleTransferAccountSelect = useCallback((acc: Account) => {
-    if (!account) return;
-    if (account.id === acc.id) {
-      showToast(t('errors.sameAccount'), 'error');
-      return;
-    }
-    setToAccount(acc);
-    setCategory(null);
-    setTxType('transfer');
-    history.pushState(null, '', window.location.href);
-    historyDepthRef.current++;
-    setStep(3);
-  }, [account, showToast, t]);
+  const handleTransferAccountSelect = useCallback(
+    (acc: Account) => {
+      if (!account) return;
+      if (account.id === acc.id) {
+        showToast(t("errors.sameAccount"), "error");
+        return;
+      }
+      setToAccount(acc);
+      setCategory(null);
+      setTxType("transfer");
+      history.pushState(null, "", window.location.href);
+      historyDepthRef.current++;
+      setStep(3);
+    },
+    [account, showToast, t],
+  );
 
   // Step 2 → 3: TO income account selected
   const handleToIncomeAccountSelect = useCallback((acc: Account) => {
     setAccount(acc);
-    history.pushState(null, '', window.location.href);
+    history.pushState(null, "", window.location.href);
     historyDepthRef.current++;
     setStep(3);
   }, []);
+
+  const handleStep3FromPick = useCallback(
+    (
+      pick: { type: "account"; account: Account } | { type: "incomeCategory"; category: Category },
+    ) => {
+      if (pick.type === "account") {
+        setAccount(pick.account);
+        if (txType === "income") {
+          setTxType("expense");
+          setCategory(null);
+          setToAccount(null);
+        } else {
+          if (pick.account.id === toAccount?.id) {
+            setToAccount(null);
+            if (txType === "transfer") {
+              setTxType("expense");
+            }
+          }
+        }
+      } else {
+        setCategory(pick.category);
+        setTxType("income");
+        setToAccount(null);
+        if (account?.type === "DEBT") {
+          setAccount(null);
+        }
+      }
+    },
+    [txType, toAccount, account],
+  );
+
+  const handleStep3ToPick = useCallback(
+    (
+      pick:
+        | { type: "expenseCategory"; category: Category }
+        | { type: "debtAccount"; account: Account }
+        | { type: "transferAccount"; account: Account }
+        | { type: "incomeDestAccount"; account: Account },
+    ) => {
+      switch (pick.type) {
+        case "expenseCategory":
+          setCategory(pick.category);
+          setToAccount(null);
+          setTxType("expense");
+          break;
+        case "debtAccount":
+          setToAccount(pick.account);
+          setCategory(null);
+          setTxType("expense");
+          setPaymentType("regular");
+          break;
+        case "transferAccount":
+          setToAccount(pick.account);
+          setCategory(null);
+          setTxType("transfer");
+          break;
+        case "incomeDestAccount":
+          setAccount(pick.account);
+          setToAccount(null);
+          setTxType("income");
+          break;
+      }
+    },
+    [account],
+  );
 
   const handleBack = useCallback(() => {
     if (step > 1 && !isEdit) {
@@ -1733,10 +2147,10 @@ export default function TransactionInput() {
       }
     } else {
       const idx = window.history.state?.idx;
-      if (typeof idx === 'number' && idx > 0) {
+      if (typeof idx === "number" && idx > 0) {
         navigate(-1);
       } else {
-        navigate('/transactions', { replace: true });
+        navigate("/transactions", { replace: true });
       }
     }
   }, [step, isEdit, navigate]);
@@ -1744,39 +2158,39 @@ export default function TransactionInput() {
   // Escape key: close form (inner overlays handle Escape via capture-phase listeners)
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handleBack();
+      if (e.key === "Escape") handleBack();
     };
-    document.addEventListener('keydown', h);
-    return () => document.removeEventListener('keydown', h);
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
   }, [handleBack]);
 
   const handleSave = useCallback(
     async (amount: number) => {
       if (amount <= 0) {
-        showToast(t('errors.positiveNumber'), 'error');
+        showToast(t("errors.positiveNumber"), "error");
         return;
       }
       if (!account) {
-        showToast(t('errors.accountRequired'), 'error');
+        showToast(t("errors.accountRequired"), "error");
         return;
       }
       const isDebtPmt = isDebtPaymentMode;
-      if (txType !== 'transfer' && !category && !isDebtPmt) {
-        showToast(t('errors.categoryRequired'), 'error');
+      if (txType !== "transfer" && !category && !isDebtPmt) {
+        showToast(t("errors.categoryRequired"), "error");
         return;
       }
-      if (txType === 'transfer') {
+      if (txType === "transfer") {
         if (!toAccount) {
-          showToast(t('errors.toAccountRequired'), 'error');
+          showToast(t("errors.toAccountRequired"), "error");
           return;
         }
         if (account.id === toAccount.id) {
-          showToast(t('errors.sameAccount'), 'error');
+          showToast(t("errors.sameAccount"), "error");
           return;
         }
       }
       if (isDebtPmt && account.id === toAccount!.id) {
-        showToast(t('errors.sameAccount'), 'error');
+        showToast(t("errors.sameAccount"), "error");
         return;
       }
 
@@ -1792,17 +2206,33 @@ export default function TransactionInput() {
             .then((r) => r ?? 1)
             .catch(() => 1);
 
-          const outAmountMain = Math.round(amount * outRate * 100) / 100;
+          let outAmountMain: number;
+          const parsedSecondaryDebt = parseFloat(secondaryAmount);
+          if (
+            secondaryManual &&
+            secondaryAmount &&
+            Number.isFinite(parsedSecondaryDebt) &&
+            parsedSecondaryDebt > 0
+          ) {
+            outAmountMain = parsedSecondaryDebt;
+          } else {
+            outAmountMain = Math.round(amount * outRate * 100) / 100;
+          }
 
           // Same-currency: inAmount = amount; cross-currency: use rate to dest account
           let inAmount = amount;
           let inRate = outRate;
           if (toAccount!.currency !== account.currency) {
-            const crossRate = await exchangeRateService
-              .getRate(account.currency, toAccount!.currency)
-              .then((r) => r ?? 1)
-              .catch(() => 1);
-            inAmount = Math.round(amount * crossRate * 100) / 100;
+            const parsedToSecondary = parseFloat(toSecondaryAmount);
+            if (toSecondaryAmount && Number.isFinite(parsedToSecondary) && parsedToSecondary > 0) {
+              inAmount = parsedToSecondary;
+            } else {
+              const crossRate = await exchangeRateService
+                .getRate(account.currency, toAccount!.currency)
+                .then((r) => r ?? 1)
+                .catch(() => 1);
+              inAmount = Math.round(amount * crossRate * 100) / 100;
+            }
             inRate = await exchangeRateService
               .getRate(toAccount!.currency, mainCurrency)
               .then((r) => r ?? 1)
@@ -1813,7 +2243,7 @@ export default function TransactionInput() {
           const monthlyRate = getMonthlyRate(toAccount!);
           let interestAmt: number | null = null;
           let principalAmt: number | null = null;
-          if (monthlyRate !== null && paymentType === 'regular') {
+          if (monthlyRate !== null && paymentType === "regular") {
             const split = calculatePaymentSplit(Math.abs(toAccount!.balance), monthlyRate, amount);
             interestAmt = split.interestAmount;
             principalAmt = split.principalAmount;
@@ -1822,7 +2252,7 @@ export default function TransactionInput() {
           const groupId = crypto.randomUUID();
 
           const outTx: Transaction = {
-            type: 'TRANSFER',
+            type: "TRANSFER",
             date,
             timestamp: now,
             displayOrder: 0,
@@ -1834,7 +2264,7 @@ export default function TransactionInput() {
             exchangeRate: outRate,
             note: note.trim(),
             transferGroupId: groupId,
-            transferDirection: 'OUT',
+            transferDirection: "OUT",
             toAccountId: toAccount!.id!,
             interestAmount: interestAmt,
             principalAmount: principalAmt,
@@ -1843,7 +2273,7 @@ export default function TransactionInput() {
           };
 
           const inTx: Transaction = {
-            type: 'TRANSFER',
+            type: "TRANSFER",
             date,
             timestamp: now,
             displayOrder: 0,
@@ -1855,7 +2285,7 @@ export default function TransactionInput() {
             exchangeRate: inRate,
             note: note.trim(),
             transferGroupId: groupId,
-            transferDirection: 'IN',
+            transferDirection: "IN",
             createdAt: now,
             updatedAt: now,
           };
@@ -1865,7 +2295,7 @@ export default function TransactionInput() {
           } else {
             await applyTransfer(outTx, inTx);
           }
-        } else if (txType === 'transfer') {
+        } else if (txType === "transfer") {
           // Calculate exchange rates
           const outRate = await exchangeRateService
             .getRate(account.currency, mainCurrency)
@@ -1884,8 +2314,9 @@ export default function TransactionInput() {
               .then((r) => r ?? 1)
               .catch(() => 1);
 
-            if (toSecondaryAmount && parseFloat(toSecondaryAmount) > 0) {
-              inAmount = parseFloat(toSecondaryAmount);
+            const parsedToSecondary = parseFloat(toSecondaryAmount);
+            if (toSecondaryAmount && Number.isFinite(parsedToSecondary) && parsedToSecondary > 0) {
+              inAmount = parsedToSecondary;
             } else {
               inAmount = Math.round(amount * crossRate * 100) / 100;
             }
@@ -1900,7 +2331,7 @@ export default function TransactionInput() {
           const groupId = crypto.randomUUID();
 
           const outTx: Transaction = {
-            type: 'TRANSFER',
+            type: "TRANSFER",
             date,
             timestamp: now,
             displayOrder: 0,
@@ -1912,13 +2343,13 @@ export default function TransactionInput() {
             exchangeRate: outRate,
             note: note.trim(),
             transferGroupId: groupId,
-            transferDirection: 'OUT',
+            transferDirection: "OUT",
             createdAt: now,
             updatedAt: now,
           };
 
           const inTx: Transaction = {
-            type: 'TRANSFER',
+            type: "TRANSFER",
             date,
             timestamp: now,
             displayOrder: 0,
@@ -1930,7 +2361,7 @@ export default function TransactionInput() {
             exchangeRate: inRate,
             note: note.trim(),
             transferGroupId: groupId,
-            transferDirection: 'IN',
+            transferDirection: "IN",
             createdAt: now,
             updatedAt: now,
           };
@@ -1948,14 +2379,20 @@ export default function TransactionInput() {
             .catch(() => 1);
 
           let amountMain: number;
-          if (secondaryManual && secondaryAmount && parseFloat(secondaryAmount) > 0) {
-            amountMain = parseFloat(secondaryAmount);
+          const parsedSecondary = parseFloat(secondaryAmount);
+          if (
+            secondaryManual &&
+            secondaryAmount &&
+            Number.isFinite(parsedSecondary) &&
+            parsedSecondary > 0
+          ) {
+            amountMain = parsedSecondary;
           } else {
             amountMain = Math.round(amount * rate * 100) / 100;
           }
 
           const tx: Transaction = {
-            type: txType === 'income' ? 'INCOME' : 'EXPENSE',
+            type: txType === "income" ? "INCOME" : "EXPENSE",
             date,
             timestamp: now,
             displayOrder: 0,
@@ -1983,7 +2420,7 @@ export default function TransactionInput() {
         // isSavingRef stays true — component unmounts after navigate, no cleanup needed
       } catch (err) {
         console.error(err);
-        showToast(t('errors.generic'), 'error');
+        showToast(t("errors.generic"), "error");
         isSavingRef.current = false;
       } finally {
         setIsSaving(false);
@@ -2001,6 +2438,7 @@ export default function TransactionInput() {
       secondaryAmount,
       secondaryManual,
       toSecondaryAmount,
+      toSecondaryManual,
       toAccount2ndCurrencyDiffers,
       isEdit,
       existingTx,
@@ -2016,11 +2454,11 @@ export default function TransactionInput() {
     return (
       <div
         style={{
-          display: 'flex',
-          height: '100dvh',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'var(--color-bg)',
+          display: "flex",
+          height: "100dvh",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "var(--color-bg)",
         }}
       />
     );
@@ -2057,26 +2495,21 @@ export default function TransactionInput() {
     );
   }
 
-  const filteredCategories: Category[] = allCategories.filter((c) =>
-    txType === 'income' ? c.type === 'INCOME' : (c.type as CategoryType) === 'EXPENSE',
-  );
-
   return (
-    <div style={{ opacity: isSaving ? 0.6 : 1, pointerEvents: isSaving ? 'none' : undefined }}>
+    <div style={{ opacity: isSaving ? 0.6 : 1, pointerEvents: isSaving ? "none" : undefined }}>
       <Step3
         txType={txType}
         account={account}
         toAccount={toAccount}
         category={category}
         allAccounts={allAccounts}
-        allCategories={filteredCategories}
+        allCategoriesUnfiltered={allCategories}
         numpadValue={numpadValue}
-        onNumpadChange={setNumpadValue}
+        onNumpadChange={handleNumpadChange}
         onSave={handleSave}
         onBack={handleBack}
-        onAccountChange={setAccount}
-        onToAccountChange={setToAccount}
-        onCategoryChange={setCategory}
+        onFromPick={handleStep3FromPick}
+        onToPick={handleStep3ToPick}
         note={note}
         onNoteChange={setNote}
         lastNote={lastNote}
@@ -2088,7 +2521,7 @@ export default function TransactionInput() {
         noRateWarning={noRateWarning}
         isEdit={isEdit}
         toSecondaryAmount={toSecondaryAmount}
-        onToSecondaryAmountChange={setToSecondaryAmount}
+        onToSecondaryAmountChange={handleToSecondaryAmountChange}
         toAccount2ndCurrencyDiffers={toAccount2ndCurrencyDiffers}
         focusedField={focusedField}
         onFocusedFieldChange={setFocusedField}

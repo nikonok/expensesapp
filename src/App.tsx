@@ -1,42 +1,49 @@
-import { useEffect, useRef, lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router';
-import { useSettingsStore } from './stores/settings-store';
-import { scheduleDailyReminder, cancelDailyReminder } from './services/notification.service';
-import { registerPeriodicSync, unregisterPeriodicSync } from './sw-register';
-import { ToastProvider } from './components/shared/Toast';
-import TabLayout from './components/layout/TabLayout';
-import AccountsPage from './pages/AccountsPage';
-import CategoriesPage from './pages/CategoriesPage';
-import TransactionsPage from './pages/TransactionsPage';
-import SettingsPage from './pages/SettingsPage';
-import OnboardingPage from './pages/OnboardingPage';
-import TrashedAccounts from './components/accounts/TrashedAccounts';
-const BudgetPage = lazy(() => import('./pages/BudgetPage'));
-const OverviewPage = lazy(() => import('./pages/OverviewPage'));
-const TransactionInput = lazy(() => import('./components/transactions/TransactionInput'));
+import { useEffect, useRef, lazy, Suspense } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router";
+import { useSettingsStore } from "./stores/settings-store";
+import { scheduleDailyReminder, cancelDailyReminder } from "./services/notification.service";
+import { registerPeriodicSync, unregisterPeriodicSync } from "./sw-register";
+import { ToastProvider } from "./components/shared/Toast";
+import TabLayout from "./components/layout/TabLayout";
+import AccountsPage from "./pages/AccountsPage";
+import CategoriesPage from "./pages/CategoriesPage";
+import TransactionsPage from "./pages/TransactionsPage";
+import SettingsPage from "./pages/SettingsPage";
+import OnboardingPage from "./pages/OnboardingPage";
+import TrashedAccounts from "./components/accounts/TrashedAccounts";
+const BudgetPage = lazy(() => import("./pages/BudgetPage"));
+const OverviewPage = lazy(() => import("./pages/OverviewPage"));
+const TransactionInput = lazy(() => import("./components/transactions/TransactionInput"));
 
 function AppRoutes() {
   const navigate = useNavigate();
-  const { load, isLoaded, hasCompletedOnboarding, startupScreen, notificationEnabled, notificationTime } = useSettingsStore();
+  const {
+    load,
+    isLoaded,
+    hasCompletedOnboarding,
+    startupScreen,
+    notificationEnabled,
+    notificationTime,
+  } = useSettingsStore();
   const coldStartPathRef = useRef(window.location.pathname);
 
   useEffect(() => {
     load().catch((err) => {
-      if (import.meta.env.DEV) console.error('Failed to load settings:', err);
+      if (import.meta.env.DEV) console.error("Failed to load settings:", err);
       useSettingsStore.setState({ isLoaded: true });
     });
   }, [load]);
 
   useEffect(() => {
-    const handleBackupRestored = () => navigate('/accounts', { replace: true });
-    window.addEventListener('backup-restored', handleBackupRestored);
-    return () => window.removeEventListener('backup-restored', handleBackupRestored);
+    const handleBackupRestored = () => navigate("/accounts", { replace: true });
+    window.addEventListener("backup-restored", handleBackupRestored);
+    return () => window.removeEventListener("backup-restored", handleBackupRestored);
   }, [navigate]);
 
   useEffect(() => {
     if (!isLoaded) return;
     if (notificationEnabled) {
-      scheduleDailyReminder(notificationTime || '20:00');
+      scheduleDailyReminder(notificationTime || "20:00");
       registerPeriodicSync();
       return () => cancelDailyReminder();
     } else {
@@ -48,15 +55,15 @@ function AppRoutes() {
   useEffect(() => {
     if (!isLoaded) return;
     if (!hasCompletedOnboarding) {
-      navigate('/onboarding', { replace: true });
+      navigate("/onboarding", { replace: true });
       return;
     }
     // PWA cold-start fix: Android restores the last-visited URL from session
     // history. If that URL is a full-screen transaction route, redirect to the
     // user's configured startup tab instead.
     const path = coldStartPathRef.current;
-    if (path === '/transactions/new' || /^\/transactions\/[^/]+\/edit$/.test(path)) {
-      coldStartPathRef.current = '';
+    if (path === "/transactions/new" || /^\/transactions\/[^/]+\/edit$/.test(path)) {
+      coldStartPathRef.current = "";
       navigate(`/${startupScreen}`, { replace: true });
     }
   }, [isLoaded, hasCompletedOnboarding, navigate, startupScreen]);
@@ -65,11 +72,11 @@ function AppRoutes() {
     return (
       <div
         style={{
-          display: 'flex',
-          height: '100dvh',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'var(--color-bg)',
+          display: "flex",
+          height: "100dvh",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "var(--color-bg)",
         }}
       />
     );
@@ -77,7 +84,7 @@ function AppRoutes() {
 
   const startupPath = `/${startupScreen}`;
 
-  const lazySuspenseFallback = <div style={{ background: 'var(--color-bg)', height: '100vh' }} />;
+  const lazySuspenseFallback = <div style={{ background: "var(--color-bg)", height: "100vh" }} />;
 
   return (
     <Suspense fallback={lazySuspenseFallback}>
@@ -85,7 +92,6 @@ function AppRoutes() {
         <Route path="/" element={<Navigate to={startupPath} replace />} />
         <Route element={<TabLayout />}>
           <Route path="accounts" element={<AccountsPage />}>
-            <Route path="trash" element={<AccountsPage />} />
             <Route path="new" element={<AccountsPage />} />
             <Route path=":id" element={<AccountsPage />} />
           </Route>
