@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { flushSync } from 'react-dom';
 import { Wallet, Tag, ArrowLeftRight, Target, LayoutDashboard } from 'lucide-react';
 import type { TabName } from '../../types';
+import { useUIStore } from '../../stores/ui-store';
 
 interface Tab {
   name: TabName;
@@ -33,6 +34,7 @@ export default function BottomNav() {
   const navigate = useNavigate();
 
   const activeTab = TABS.find((t) => location.pathname.startsWith(t.path))?.name ?? 'accounts';
+  const resetTransactionsFilter = useUIStore((s) => s.resetTransactionsFilter);
 
   return (
     <nav
@@ -55,7 +57,10 @@ export default function BottomNav() {
             aria-label={tab.label}
             aria-current={isActive ? 'page' : undefined}
             onClick={() => {
-              if (!isActive) navigateWithTransition(navigate, tab.path);
+              if (!isActive) {
+                if (tab.name === 'transactions') resetTransactionsFilter();
+                navigateWithTransition(navigate, tab.path);
+              }
             }}
             style={{
               flex: 1,

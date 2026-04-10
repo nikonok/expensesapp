@@ -42,6 +42,7 @@ interface UIStore {
   setTransactionCategoryFilter: (id: number | null) => void;
   setTransactionAccountFilter: (id: number | null) => void;
   clearTransactionFilters: () => void;
+  resetTransactionsFilter: () => void;
   toggleTransactionSelection: (id: number) => void;
   clearSelection: () => void;
 }
@@ -87,6 +88,14 @@ export const useUIStore = create<UIStore>((set, get) => ({
 
   clearTransactionFilters: () =>
     set({
+      transactionNoteFilter: '',
+      transactionCategoryFilter: null,
+      transactionAccountFilter: null,
+    }),
+
+  resetTransactionsFilter: () =>
+    set({
+      transactionsFilter: defaultFilter(),
       transactionNoteFilter: '',
       transactionCategoryFilter: null,
       transactionAccountFilter: null,

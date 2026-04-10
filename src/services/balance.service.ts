@@ -32,13 +32,13 @@ function getBalanceDelta(account: Account, tx: Transaction): number {
   return account.type === 'DEBT' ? tx.amount : -tx.amount;
 }
 
-async function getMaxDisplayOrder(date: string): Promise<number> {
+async function getMinDisplayOrder(date: string): Promise<number> {
   const existing = await db.transactions
     .where('date')
     .equals(date)
     .toArray();
-  if (existing.length === 0) return 0;
-  return Math.max(...existing.map((t) => t.displayOrder));
+  if (existing.length === 0) return 1;
+  return Math.min(...existing.map((t) => t.displayOrder));
 }
 
 export async function applyTransaction(tx: Transaction): Promise<void> {
@@ -47,11 +47,11 @@ export async function applyTransaction(tx: Transaction): Promise<void> {
       const account = await db.accounts.get(tx.accountId);
       if (!account) throw new Error(`Account ${tx.accountId} not found`);
 
-      const maxOrder = await getMaxDisplayOrder(tx.date);
+      const minOrder = await getMinDisplayOrder(tx.date);
       const now = new Date().toISOString();
       const newTx: Transaction = {
         ...tx,
-        displayOrder: maxOrder + 1,
+        displayOrder: minOrder - 1,
         createdAt: now,
         updatedAt: now,
       };
@@ -124,8 +124,8 @@ export async function replaceTransaction(
       // Determine displayOrder for the updated record
       let displayOrder = oldTx.displayOrder;
       if (oldTx.date !== newTx.date) {
-        const maxOrder = await getMaxDisplayOrder(newTx.date);
-        displayOrder = maxOrder + 1;
+        const minOrder = await getMinDisplayOrder(newTx.date);
+        displayOrder = minOrder - 1;
       }
 
       const updatedTx: Transaction = {
@@ -180,20 +180,20 @@ export async function applyTransfer(
         });
       }
 
-      // Insert outTx first so that inMaxOrder sees it when dates are the same
-      const outMaxOrder = await getMaxDisplayOrder(outTx.date);
+      // Insert outTx first so that inMinOrder sees it when dates are the same
+      const outMinOrder = await getMinDisplayOrder(outTx.date);
       const outRecord: Transaction = {
         ...outTx,
-        displayOrder: outMaxOrder + 1,
+        displayOrder: outMinOrder - 1,
         createdAt: now,
         updatedAt: now,
       };
       await db.transactions.add(outRecord);
 
-      const inMaxOrder = await getMaxDisplayOrder(inTx.date);
+      const inMinOrder = await getMinDisplayOrder(inTx.date);
       const inRecord: Transaction = {
         ...inTx,
-        displayOrder: inMaxOrder + 1,
+        displayOrder: inMinOrder - 1,
         createdAt: now,
         updatedAt: now,
       };
@@ -293,19 +293,19 @@ export async function replaceTransfer(
         });
       }
 
-      // Insert outTx first so that inMaxOrder sees it when dates are the same
-      const outMaxOrder = await getMaxDisplayOrder(outTx.date);
+      // Insert outTx first so that inMinOrder sees it when dates are the same
+      const outMinOrder = await getMinDisplayOrder(outTx.date);
       await db.transactions.add({
         ...outTx,
-        displayOrder: outMaxOrder + 1,
+        displayOrder: outMinOrder - 1,
         createdAt: now,
         updatedAt: now,
       });
 
-      const inMaxOrder = await getMaxDisplayOrder(inTx.date);
+      const inMinOrder = await getMinDisplayOrder(inTx.date);
       await db.transactions.add({
         ...inTx,
-        displayOrder: inMaxOrder + 1,
+        displayOrder: inMinOrder - 1,
         createdAt: now,
         updatedAt: now,
       });

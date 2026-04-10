@@ -75,15 +75,15 @@ describe('applyTransaction', () => {
     expect(account!.balance).toBe(350);
   });
 
-  it('sets displayOrder to max+1 for the date', async () => {
+  it('sets displayOrder to min-1 for the date', async () => {
     const id = await db.accounts.add(makeAccount({ balance: 1000 }));
     const tx1 = makeTx(id as number, { type: 'EXPENSE', amount: 10, date: '2026-01-01' });
     const tx2 = makeTx(id as number, { type: 'EXPENSE', amount: 10, date: '2026-01-01' });
     await applyTransaction(tx1);
     await applyTransaction(tx2);
     const all = await db.transactions.where('date').equals('2026-01-01').toArray();
-    expect(all[0].displayOrder).toBe(1);
-    expect(all[1].displayOrder).toBe(2);
+    expect(all[0].displayOrder).toBe(0);
+    expect(all[1].displayOrder).toBe(-1);
   });
 });
 
@@ -155,7 +155,7 @@ describe('replaceTransaction', () => {
     const updated = { ...saved!, date: '2026-02-01' };
     await replaceTransaction(saved!, updated);
     const updatedSaved = await db.transactions.toCollection().first();
-    expect(updatedSaved!.displayOrder).toBe(1);
+    expect(updatedSaved!.displayOrder).toBe(0);
     expect(updatedSaved!.date).toBe('2026-02-01');
   });
 });
