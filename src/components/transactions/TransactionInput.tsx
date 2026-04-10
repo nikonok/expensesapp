@@ -1714,7 +1714,12 @@ export default function TransactionInput() {
         setStep((s) => Math.max(1, s - 1) as 1 | 2 | 3);
       }
     } else {
-      navigate(-1);
+      const idx = window.history.state?.idx;
+      if (typeof idx === 'number' && idx > 0) {
+        navigate(-1);
+      } else {
+        navigate('/transactions', { replace: true });
+      }
     }
   }, [step, isEdit, navigate]);
 

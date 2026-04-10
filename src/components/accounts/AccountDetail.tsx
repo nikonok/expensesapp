@@ -290,7 +290,10 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
           {/* Adjust balance */}
           {!showAdjust ? (
             <button
-              onClick={() => setShowAdjust(true)}
+              onClick={() => {
+                setAdjustValue(String(Math.abs(account.balance)));
+                setShowAdjust(true);
+              }}
               style={{
                 minHeight: '44px',
                 background: 'var(--color-surface)',

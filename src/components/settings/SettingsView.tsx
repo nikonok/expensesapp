@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import { ArrowLeft } from 'lucide-react';
+import { useSettingsStore } from '../../stores/settings-store';
 import { LanguageSetting } from './LanguageSetting';
 import { ThemeSetting } from './ThemeSetting';
 import { StartupScreenSetting } from './StartupScreenSetting';
@@ -37,6 +38,7 @@ function SectionHeader({ label }: { label: string }) {
 export function SettingsView() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const startupScreen = useSettingsStore((s) => s.startupScreen);
 
   return (
     <div
@@ -64,7 +66,14 @@ export function SettingsView() {
       >
         <button
           aria-label="Go back"
-          onClick={() => navigate(-1)}
+          onClick={() => {
+            const idx = window.history.state?.idx;
+            if (typeof idx === 'number' && idx > 0) {
+              navigate(-1);
+            } else {
+              navigate(`/${startupScreen}`, { replace: true });
+            }
+          }}
           style={{
             minWidth: '44px',
             minHeight: '44px',

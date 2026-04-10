@@ -10,14 +10,61 @@ import { createPortal } from 'react-dom';
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
+// ── Hardware-back / gesture-back stack ──────────────────────────────────────
+// Each open BottomSheet pushes one history entry and registers a LIFO close
+// callback. A single global popstate listener pops the topmost callback,
+// giving hardware-back LIFO behavior across stacked sheets.
+type CloseEntry = { id: number; close: () => boolean };
+const closeStack: CloseEntry[] = [];
+let nextId = 0;
+// Counter (not boolean) to safely skip the popstate fired by our own
+// history.back() calls — handles rapid simultaneous closes correctly.
+let skipCount = 0;
+
+function handleGlobalPopState() {
+  if (skipCount > 0) {
+    skipCount = Math.max(0, skipCount - 1);
+    return;
+  }
+  const top = closeStack[closeStack.length - 1];
+  if (!top) return;
+  const intercepted = top.close();
+  if (intercepted) {
+    // close() handled an inner layer (e.g. numpad) — re-push so the next
+    // back press still finds this sheet's entry.
+    history.pushState(null, '', window.location.href);
+  } else {
+    closeStack.pop();
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('popstate', handleGlobalPopState);
+}
+
 interface BottomSheetProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Override backdrop tap. When provided, tapping outside the sheet calls
+   *  this instead of onClose. Use to close an inner layer without closing
+   *  the whole sheet. */
+  onBackdropClick?: () => void;
+  /** Called on hardware-back / drag-to-dismiss / Escape before onClose.
+   *  Return true to intercept (inner layer closed); return false/undefined to
+   *  let onClose proceed normally. */
+  onInterceptClose?: () => boolean;
   title?: string;
   children: ReactNode;
 }
 
-export default function BottomSheet({ isOpen, onClose, title, children }: BottomSheetProps) {
+export default function BottomSheet({
+  isOpen,
+  onClose,
+  onBackdropClick,
+  onInterceptClose,
+  title,
+  children,
+}: BottomSheetProps) {
   const sheetRef = useRef<HTMLDivElement>(null);
   const [translateY, setTranslateY] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
@@ -27,6 +74,42 @@ export default function BottomSheet({ isOpen, onClose, title, children }: Bottom
   const dragStartY = useRef(0);
   const currentDragY = useRef(0);
   const isDragging = useRef(false);
+
+  // Refs to latest callbacks — avoids stale closures inside the history stack
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const onInterceptCloseRef = useRef(onInterceptClose);
+  onInterceptCloseRef.current = onInterceptClose;
+  const sheetIdRef = useRef<number | null>(null);
+
+  // Push a history entry when opening; clean it up on close/unmount
+  useEffect(() => {
+    if (!isOpen) return;
+    const id = nextId++;
+    sheetIdRef.current = id;
+    closeStack.push({
+      id,
+      close: () => {
+        if (onInterceptCloseRef.current?.()) return true;
+        onCloseRef.current();
+        return false;
+      },
+    });
+    history.pushState(null, '', window.location.href);
+
+    return () => {
+      const idx = closeStack.findIndex((e) => e.id === id);
+      if (idx !== -1) {
+        // Normal programmatic close (button/save) — pop our stack entry and
+        // neutralise the history entry we pushed in-place (no popstate fired).
+        closeStack.splice(idx, 1);
+        history.replaceState(null, '', window.location.href);
+      }
+      // If idx === -1, hardware back already popped the entry and consumed
+      // the history entry — nothing to do here.
+      sheetIdRef.current = null;
+    };
+  }, [isOpen]);
 
   // Focus trap: save previous focus, move focus into sheet, restore on close
   useEffect(() => {
@@ -70,15 +153,18 @@ export default function BottomSheet({ isOpen, onClose, title, children }: Bottom
     return () => document.removeEventListener('keydown', handleTab);
   }, [isOpen]);
 
-  // Escape key closes the sheet
+  // Escape key closes the sheet (with intercept support)
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        if (onInterceptCloseRef.current?.()) return;
+        onCloseRef.current();
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   // Open/close animation
   useEffect(() => {
@@ -191,7 +277,11 @@ export default function BottomSheet({ isOpen, onClose, title, children }: Bottom
 
     const sheetHeight = sheetRef.current?.offsetHeight ?? 300;
     if (currentDragY.current >= sheetHeight * 0.4) {
-      onClose();
+      if (onInterceptCloseRef.current?.()) {
+        setTranslateY(0);
+      } else {
+        onCloseRef.current();
+      }
     } else {
       setTranslateY(0);
     }
@@ -206,7 +296,7 @@ export default function BottomSheet({ isOpen, onClose, title, children }: Bottom
       {/* Backdrop */}
       <div
         aria-hidden="true"
-        onClick={onClose}
+        onClick={onBackdropClick ?? onClose}
         style={{
           position: 'fixed',
           inset: 0,

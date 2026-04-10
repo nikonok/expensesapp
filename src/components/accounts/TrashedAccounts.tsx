@@ -31,7 +31,14 @@ export default function TrashedAccounts() {
         title="Archived Accounts"
         rightSlot={
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => {
+              const idx = window.history.state?.idx;
+              if (typeof idx === 'number' && idx > 0) {
+                navigate(-1);
+              } else {
+                navigate('/accounts', { replace: true });
+              }
+            }}
             style={{
               minWidth: '44px',
               minHeight: '44px',

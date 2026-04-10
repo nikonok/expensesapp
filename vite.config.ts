@@ -16,13 +16,17 @@ export default defineConfig({
       manifest: {
         name: "Expenses",
         short_name: "Expenses",
-        description: "Personal finance tracker",
+        description: "Track your income, expenses, and budgets. Dark theme, works offline, no account needed.",
         start_url: "/",
         scope: "/",
+        id: "/",
         theme_color: "#0A0B12",
         background_color: "#0A0B12",
         display: "standalone",
+        lang: "en",
+        dir: "ltr",
         orientation: "portrait",
+        categories: ["finance", "productivity"],
         icons: [
           {
             src: "/icons/icon-192.png",
@@ -37,9 +41,33 @@ export default defineConfig({
             purpose: "any maskable",
           },
         ],
+        screenshots: [
+          {
+            src: "/screenshots/screenshot-accounts.png",
+            sizes: "1080x1920",
+            type: "image/png",
+            form_factor: "narrow",
+            label: "Accounts overview with total wealth",
+          },
+          {
+            src: "/screenshots/screenshot-transactions.png",
+            sizes: "1080x1920",
+            type: "image/png",
+            form_factor: "narrow",
+            label: "Transaction history with daily groups",
+          },
+          {
+            src: "/screenshots/screenshot-overview.png",
+            sizes: "1080x1920",
+            type: "image/png",
+            form_factor: "narrow",
+            label: "Spending overview with charts",
+          },
+        ],
       },
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globIgnores: ['**/screenshots/**'],
       },
     }),
   ],

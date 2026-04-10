@@ -313,6 +313,8 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       <BottomSheet
         isOpen={isOpen}
         onClose={onClose}
+        onBackdropClick={showNumpad ? () => setShowNumpad(false) : undefined}
+        onInterceptClose={showNumpad ? () => { setShowNumpad(false); return true; } : undefined}
         title={isEdit ? 'Edit Account' : 'New Account'}
       >
         <div
@@ -417,7 +419,10 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
                 <div style={sectionStyle}>
                   <span style={labelStyle}>{type === 'DEBT' ? 'Current Balance (what you owe today)' : 'Starting Balance'}</span>
                   <button
-                    onClick={() => setShowNumpad(true)}
+                    onClick={() => {
+                      setNumpadValue(startingBalance);
+                      setShowNumpad(true);
+                    }}
                     style={{
                       ...inputStyle,
                       textAlign: 'left',

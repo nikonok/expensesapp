@@ -10,7 +10,8 @@
     "test": "vitest",
     "test:e2e": "playwright test",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "screenshots": "tsx scripts/generate-pwa-screenshots.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "6.3.1",
@@ -47,6 +48,7 @@
     "jsdom": "^29.0.1",
     "prettier": "3.8.1",
     "sharp": "^0.34.5",
+    "tsx": "^4.21.0",
     "vitest": "4.1.2"
   }
 }
