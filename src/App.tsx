@@ -1,4 +1,4 @@
-import { useEffect, lazy, Suspense } from 'react';
+import { useEffect, useRef, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router';
 import { useSettingsStore } from './stores/settings-store';
 import { scheduleDailyReminder, cancelDailyReminder } from './services/notification.service';
@@ -18,6 +18,7 @@ const TransactionInput = lazy(() => import('./components/transactions/Transactio
 function AppRoutes() {
   const navigate = useNavigate();
   const { load, isLoaded, hasCompletedOnboarding, startupScreen, notificationEnabled, notificationTime } = useSettingsStore();
+  const coldStartPathRef = useRef(window.location.pathname);
 
   useEffect(() => {
     load().catch((err) => {
@@ -48,8 +49,17 @@ function AppRoutes() {
     if (!isLoaded) return;
     if (!hasCompletedOnboarding) {
       navigate('/onboarding', { replace: true });
+      return;
     }
-  }, [isLoaded, hasCompletedOnboarding, navigate]);
+    // PWA cold-start fix: Android restores the last-visited URL from session
+    // history. If that URL is a full-screen transaction route, redirect to the
+    // user's configured startup tab instead.
+    const path = coldStartPathRef.current;
+    if (path === '/transactions/new' || /^\/transactions\/[^/]+\/edit$/.test(path)) {
+      coldStartPathRef.current = '';
+      navigate(`/${startupScreen}`, { replace: true });
+    }
+  }, [isLoaded, hasCompletedOnboarding, navigate, startupScreen]);
 
   if (!isLoaded) {
     return (

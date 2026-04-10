@@ -41,10 +41,14 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       map[row.key] = row.value;
     }
 
+    const VALID_STARTUP_SCREENS = new Set(['accounts', 'categories', 'transactions', 'budget', 'overview']);
+
     set({
       mainCurrency: (map['mainCurrency'] as string) ?? DEFAULTS.mainCurrency,
       language: (map['language'] as string) ?? DEFAULTS.language,
-      startupScreen: (map['startupScreen'] as string) ?? DEFAULTS.startupScreen,
+      startupScreen: VALID_STARTUP_SCREENS.has(map['startupScreen'] as string)
+        ? (map['startupScreen'] as string)
+        : DEFAULTS.startupScreen,
       notificationEnabled:
         (map['notificationEnabled'] as boolean) ?? DEFAULTS.notificationEnabled,
       notificationTime: (map['notificationTime'] as string) ?? DEFAULTS.notificationTime,
