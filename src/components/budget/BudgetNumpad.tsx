@@ -6,6 +6,7 @@ import { db } from '../../db/database';
 import { getUTCISOString } from '../../utils/date-utils';
 import { budgetSchema } from '../../utils/validation';
 import { useToast } from '../shared/Toast';
+import { formatNumpadDisplay } from '../../utils/numpad-utils';
 
 interface BudgetNumpadProps {
   categoryId?: number;
@@ -114,7 +115,7 @@ export function BudgetNumpad({
             padding: 'var(--space-2) 0',
           }}
         >
-          {value || '0'}
+          {formatNumpadDisplay(value)}
         </div>
       </div>
 

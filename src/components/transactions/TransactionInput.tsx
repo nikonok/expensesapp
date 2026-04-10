@@ -21,6 +21,7 @@ import { Numpad } from '@/components/shared/Numpad';
 import { ComingSoonStub } from '@/components/shared/ComingSoonStub';
 import { useToast } from '@/components/shared/Toast';
 import { useTranslation } from '@/hooks/use-translation';
+import { formatNumpadDisplay } from '@/utils/numpad-utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -837,7 +838,7 @@ function Step3({
                     : undefined,
             }}
           >
-            {numpadValue || '0'}
+            {formatNumpadDisplay(numpadValue)}
             {numpadValue && evaluatedAmount !== null && numpadValue.match(/[+\-×÷]/) && (
               <span
                 style={{
@@ -846,7 +847,7 @@ function Step3({
                   marginLeft: 'var(--space-2)',
                 }}
               >
-                = {evaluatedAmount}
+                = {formatNumpadDisplay(String(evaluatedAmount ?? ''))}
               </span>
             )}
           </span>

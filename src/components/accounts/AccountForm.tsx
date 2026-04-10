@@ -11,6 +11,7 @@ import { Numpad } from '../shared/Numpad';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { COLOR_PALETTE } from '../../utils/constants';
 import { useSettingsStore } from '../../stores/settings-store';
+import { formatNumpadDisplay } from '../../utils/numpad-utils';
 
 interface AccountFormProps {
   isOpen: boolean;
@@ -44,9 +45,19 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
   const [alreadyPaid, setAlreadyPaid] = useState('');
 
   const [debtSubtype, setDebtSubtype] = useState<'regular' | 'mortgage'>('regular');
+  const [debtInputMode, setDebtInputMode] = useState<'original' | 'alreadyPaid'>('original');
 
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [showNumpad, setShowNumpad] = useState(false);
+  const [activeNumpadField, setActiveNumpadField] = useState<
+    | 'startingBalance'
+    | 'debtOriginalAmount'
+    | 'alreadyPaid'
+    | 'interestRateYearly'
+    | 'interestRateMonthly'
+    | 'mortgageTermYears'
+    | 'mortgageInterestRate'
+    | null
+  >(null);
   const [numpadValue, setNumpadValue] = useState('');
   const [showCurrencyWarn, setShowCurrencyWarn] = useState(false);
   const [pendingCurrency, setPendingCurrency] = useState<string | null>(null);
@@ -61,7 +72,7 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       return;
     }
     setErrors({});
-    setShowNumpad(false);
+    setActiveNumpadField(null);
     setNumpadValue('');
     if (editAccount) {
       setName(editAccount.name);
@@ -81,6 +92,7 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       setMortgageInterestRate(editAccount.mortgageInterestRate != null ? String(editAccount.mortgageInterestRate * 100) : '');
       setDebtOriginalAmount(editAccount.debtOriginalAmount != null ? String(editAccount.debtOriginalAmount) : '');
       setAlreadyPaid('');
+      setDebtInputMode('original');
       const isMortgage =
         editAccount.mortgageLoanAmount != null ||
         editAccount.mortgageStartDate != null ||
@@ -106,6 +118,7 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       setDebtOriginalAmount('');
       setAlreadyPaid('');
       setDebtSubtype('regular');
+      setDebtInputMode('original');
     }
   }, [isOpen, editAccount, mainCurrency]);
 
@@ -162,7 +175,52 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
     recalcStartingBalance(debtOriginalAmount, value);
   };
 
+  const numpadFieldConfig: Partial<Record<NonNullable<typeof activeNumpadField>, { label: string; suffix?: string }>> = {
+    startingBalance: { label: type === 'DEBT' ? `Current Balance (${currency})` : `Starting Balance (${currency})` },
+    debtOriginalAmount: { label: `Original Amount (${currency})` },
+    alreadyPaid: { label: `Already Paid (${currency})` },
+    interestRateYearly: { label: 'Yearly Interest Rate', suffix: '%' },
+    interestRateMonthly: { label: 'Monthly Interest Rate', suffix: '%' },
+    mortgageTermYears: { label: 'Term (years)' },
+    mortgageInterestRate: { label: 'Annual Interest Rate', suffix: '%' },
+  };
+  const activeConfig = activeNumpadField ? numpadFieldConfig[activeNumpadField] : null;
+
+  const handleNumpadSave = (result: number) => {
+    const strVal = String(result);
+    switch (activeNumpadField) {
+      case 'startingBalance':
+        setStartingBalance(strVal);
+        break;
+      case 'debtOriginalAmount':
+        setDebtOriginalAmount(strVal);
+        recalcStartingBalance(strVal, alreadyPaid);
+        break;
+      case 'alreadyPaid':
+        setAlreadyPaid(strVal);
+        recalcStartingBalance(debtOriginalAmount, strVal);
+        break;
+      case 'interestRateYearly':
+        setInterestRateYearly(strVal);
+        break;
+      case 'interestRateMonthly':
+        setInterestRateMonthly(strVal);
+        break;
+      case 'mortgageTermYears':
+        setMortgageTermYears(strVal);
+        break;
+      case 'mortgageInterestRate':
+        setMortgageInterestRate(strVal);
+        break;
+    }
+    setNumpadValue('');
+    setActiveNumpadField(null);
+  };
+
   const validate = () => {
+    const effectiveDebtOriginalAmount = debtInputMode === 'alreadyPaid'
+      ? String(parseFloat(alreadyPaid || '0') + parseFloat(startingBalance || '0'))
+      : debtOriginalAmount;
     const raw = {
       name: name.trim(),
       type,
@@ -175,11 +233,11 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       savingsGoal: type === 'SAVINGS' && savingsGoal ? parseFloat(savingsGoal) : null,
       interestRateMonthly: type === 'DEBT' && debtSubtype === 'regular' && interestRateMonthly ? parseFloat(interestRateMonthly) / 100 : null,
       interestRateYearly: type === 'DEBT' && debtSubtype === 'regular' && interestRateYearly ? parseFloat(interestRateYearly) / 100 : null,
-      mortgageLoanAmount: type === 'DEBT' && debtSubtype === 'mortgage' && debtOriginalAmount ? parseFloat(debtOriginalAmount) : null,
+      mortgageLoanAmount: type === 'DEBT' && debtSubtype === 'mortgage' && effectiveDebtOriginalAmount ? parseFloat(effectiveDebtOriginalAmount) : null,
       mortgageStartDate: type === 'DEBT' && debtSubtype === 'mortgage' ? (mortgageStartDate || null) : null,
       mortgageTermYears: type === 'DEBT' && debtSubtype === 'mortgage' && mortgageTermYears ? parseInt(mortgageTermYears) : null,
       mortgageInterestRate: type === 'DEBT' && debtSubtype === 'mortgage' && mortgageInterestRate ? parseFloat(mortgageInterestRate) / 100 : null,
-      debtOriginalAmount: type === 'DEBT' && debtOriginalAmount ? parseFloat(debtOriginalAmount) : null,
+      debtOriginalAmount: type === 'DEBT' && effectiveDebtOriginalAmount ? parseFloat(effectiveDebtOriginalAmount) : null,
     };
     const result = accountSchema.safeParse(raw);
     if (!result.success) {
@@ -313,8 +371,8 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       <BottomSheet
         isOpen={isOpen}
         onClose={onClose}
-        onBackdropClick={showNumpad ? () => setShowNumpad(false) : undefined}
-        onInterceptClose={showNumpad ? () => { setShowNumpad(false); return true; } : undefined}
+        onBackdropClick={activeNumpadField !== null ? () => setActiveNumpadField(null) : undefined}
+        onInterceptClose={activeNumpadField !== null ? () => { setActiveNumpadField(null); return true; } : undefined}
         title={isEdit ? 'Edit Account' : 'New Account'}
       >
         <div
@@ -421,7 +479,7 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
                   <button
                     onClick={() => {
                       setNumpadValue(startingBalance);
-                      setShowNumpad(true);
+                      setActiveNumpadField('startingBalance');
                     }}
                     style={{
                       ...inputStyle,
@@ -505,38 +563,100 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
               {/* Debt-specific */}
               {type === 'DEBT' && (
                 <>
-                  {/* Original amount for progress bar */}
-                  <div style={sectionStyle}>
-                    <label htmlFor="debt-original" style={labelStyle}>Original Amount (optional)</label>
-                    <input
-                      id="debt-original"
-                      type="number"
-                      value={debtOriginalAmount}
-                      min="0"
-                      onChange={(e) => handleOriginalAmountChange(e.target.value)}
-                      placeholder="e.g. 50000"
-                      style={inputStyle}
-                    />
-                    <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--text-caption)', color: 'var(--color-text-disabled)' }}>
-                      {debtSubtype === 'mortgage' ? 'Original loan principal — used for payoff progress bar' : 'Set to show a payoff progress bar'}
-                    </span>
-                  </div>
-
-                  {/* Already Paid helper — create only, shown when original amount is set */}
-                  {!isEdit && debtOriginalAmount && (
+                  {/* Original amount / Already paid — create mode: toggle + input; edit mode: input + read-only */}
+                  {!isEdit && (
                     <div style={sectionStyle}>
-                      <label htmlFor="debt-already-paid" style={labelStyle}>Already Paid</label>
-                      <input
-                        id="debt-already-paid"
-                        type="number"
-                        value={alreadyPaid}
-                        min="0"
-                        onChange={(e) => handleAlreadyPaidChange(e.target.value)}
-                        placeholder="0"
-                        style={inputStyle}
-                      />
-                      <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--text-caption)', color: 'var(--color-text-disabled)' }}>
-                        Auto-fills starting balance as: original − already paid
+                      {/* Segmented toggle */}
+                      <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                        {(['original', 'alreadyPaid'] as const).map((mode) => (
+                          <button
+                            key={mode}
+                            onClick={() => setDebtInputMode(mode)}
+                            style={{
+                              flex: 1,
+                              minHeight: '44px',
+                              borderRadius: 'var(--radius-btn)',
+                              background: debtInputMode === mode ? 'var(--color-primary-dim)' : 'var(--color-surface-raised)',
+                              color: debtInputMode === mode ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                              border: debtInputMode === mode ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                              cursor: 'pointer',
+                              fontFamily: '"DM Sans", sans-serif',
+                              fontWeight: 500,
+                              fontSize: 'var(--text-caption)',
+                              transition: 'all 100ms ease-out',
+                            }}
+                          >
+                            {mode === 'original' ? 'Original amount' : 'Already paid'}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Single tappable input — switches based on mode */}
+                      <button
+                        onClick={() => {
+                          const fieldKey = debtInputMode === 'original' ? 'debtOriginalAmount' : 'alreadyPaid';
+                          const currentVal = debtInputMode === 'original' ? debtOriginalAmount : alreadyPaid;
+                          setNumpadValue(currentVal);
+                          setActiveNumpadField(fieldKey);
+                        }}
+                        style={{
+                          ...inputStyle,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          background: 'var(--color-surface-raised)',
+                          fontFamily: '"JetBrains Mono", monospace',
+                          fontWeight: 500,
+                        }}
+                      >
+                        {(debtInputMode === 'original' ? debtOriginalAmount : alreadyPaid) || '0.00'}
+                      </button>
+
+                      {/* Derived read-only display of the other value */}
+                      {(() => {
+                        const sb = parseFloat(startingBalance || '0');
+                        if (debtInputMode === 'original') {
+                          const orig = parseFloat(debtOriginalAmount || '0');
+                          const derivedPaid = Math.max(0, orig - sb);
+                          return (
+                            <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--font-sm)', color: 'var(--color-text-secondary)' }}>
+                              Already paid: {formatNumpadDisplay(String(derivedPaid))}
+                            </span>
+                          );
+                        } else {
+                          const paid = parseFloat(alreadyPaid || '0');
+                          const derivedOriginal = paid + sb;
+                          return (
+                            <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--font-sm)', color: 'var(--color-text-secondary)' }}>
+                              Original amount: {formatNumpadDisplay(String(derivedOriginal))}
+                            </span>
+                          );
+                        }
+                      })()}
+                    </div>
+                  )}
+
+                  {isEdit && (
+                    <div style={sectionStyle}>
+                      <span style={labelStyle}>Original Amount (optional)</span>
+                      <button
+                        onClick={() => {
+                          setNumpadValue(debtOriginalAmount);
+                          setActiveNumpadField('debtOriginalAmount');
+                        }}
+                        style={{
+                          ...inputStyle,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          background: 'var(--color-surface-raised)',
+                          fontFamily: '"JetBrains Mono", monospace',
+                          fontWeight: 500,
+                        }}
+                      >
+                        {debtOriginalAmount || '0.00'}
+                      </button>
+                      {/* Read-only already-paid derived from original - current balance */}
+                      <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--font-sm)', color: 'var(--color-text-secondary)' }}>
+                        Already paid: {formatNumpadDisplay(String(Math.max(0, parseFloat(debtOriginalAmount || '0') - Math.abs(editAccount?.balance ?? 0))))}
                       </span>
                     </div>
                   )}
@@ -582,21 +702,24 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
                         Enter yearly OR monthly interest rate — at least one is required, not both
                       </span>
                       <div style={sectionStyle}>
-                        <label htmlFor="interest-yearly" style={labelStyle}>Yearly Interest Rate (%)</label>
-                        <input
-                          id="interest-yearly"
-                          type="number"
-                          value={interestRateYearly}
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          onChange={(e) => setInterestRateYearly(e.target.value)}
-                          placeholder="e.g. 5.5"
+                        <span style={labelStyle}>Yearly Interest Rate (%)</span>
+                        <button
+                          onClick={() => {
+                            setNumpadValue(interestRateYearly);
+                            setActiveNumpadField('interestRateYearly');
+                          }}
                           style={{
                             ...inputStyle,
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            background: 'var(--color-surface-raised)',
+                            fontFamily: '"JetBrains Mono", monospace',
+                            fontWeight: 500,
                             borderColor: errors.interestRateYearly ? 'var(--color-expense)' : 'var(--color-border)',
                           }}
-                        />
+                        >
+                          {interestRateYearly ? `${interestRateYearly}%` : '0%'}
+                        </button>
                         {errors.interestRateYearly && <span style={errorStyle}>{errors.interestRateYearly}</span>}
                       </div>
                       <div
@@ -622,18 +745,23 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
                         <div style={{ flex: 1, height: '1px', background: 'var(--color-border)' }} />
                       </div>
                       <div style={sectionStyle}>
-                        <label htmlFor="interest-monthly" style={labelStyle}>Monthly Interest Rate (%)</label>
-                        <input
-                          id="interest-monthly"
-                          type="number"
-                          value={interestRateMonthly}
-                          min="0"
-                          max="100"
-                          step="0.001"
-                          onChange={(e) => setInterestRateMonthly(e.target.value)}
-                          placeholder="e.g. 0.45"
-                          style={inputStyle}
-                        />
+                        <span style={labelStyle}>Monthly Interest Rate (%)</span>
+                        <button
+                          onClick={() => {
+                            setNumpadValue(interestRateMonthly);
+                            setActiveNumpadField('interestRateMonthly');
+                          }}
+                          style={{
+                            ...inputStyle,
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            background: 'var(--color-surface-raised)',
+                            fontFamily: '"JetBrains Mono", monospace',
+                            fontWeight: 500,
+                          }}
+                        >
+                          {interestRateMonthly ? `${interestRateMonthly}%` : '0%'}
+                        </button>
                       </div>
                     </>
                   )}
@@ -652,32 +780,42 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
                         />
                       </div>
                       <div style={sectionStyle}>
-                        <label htmlFor="mortgage-term" style={labelStyle}>Term (years)</label>
-                        <input
-                          id="mortgage-term"
-                          type="number"
-                          value={mortgageTermYears}
-                          min="1"
-                          max="50"
-                          step="1"
-                          onChange={(e) => setMortgageTermYears(e.target.value)}
-                          placeholder="e.g. 25"
-                          style={inputStyle}
-                        />
+                        <span style={labelStyle}>Term (years)</span>
+                        <button
+                          onClick={() => {
+                            setNumpadValue(mortgageTermYears);
+                            setActiveNumpadField('mortgageTermYears');
+                          }}
+                          style={{
+                            ...inputStyle,
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            background: 'var(--color-surface-raised)',
+                            fontFamily: '"JetBrains Mono", monospace',
+                            fontWeight: 500,
+                          }}
+                        >
+                          {mortgageTermYears ? `${mortgageTermYears} yrs` : '0 yrs'}
+                        </button>
                       </div>
                       <div style={sectionStyle}>
-                        <label htmlFor="mortgage-rate" style={labelStyle}>Annual Interest Rate (%)</label>
-                        <input
-                          id="mortgage-rate"
-                          type="number"
-                          value={mortgageInterestRate}
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          onChange={(e) => setMortgageInterestRate(e.target.value)}
-                          placeholder="e.g. 3.25"
-                          style={inputStyle}
-                        />
+                        <span style={labelStyle}>Annual Interest Rate (%)</span>
+                        <button
+                          onClick={() => {
+                            setNumpadValue(mortgageInterestRate);
+                            setActiveNumpadField('mortgageInterestRate');
+                          }}
+                          style={{
+                            ...inputStyle,
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            background: 'var(--color-surface-raised)',
+                            fontFamily: '"JetBrains Mono", monospace',
+                            fontWeight: 500,
+                          }}
+                        >
+                          {mortgageInterestRate ? `${mortgageInterestRate}%` : '0%'}
+                        </button>
                       </div>
                     </>
                   )}
@@ -731,8 +869,8 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
           )}
         </div>
 
-        {/* Numpad overlay for starting balance */}
-        {showNumpad && (
+        {/* Numpad overlay */}
+        {activeNumpadField !== null && (
           <div
             style={{
               position: 'absolute',
@@ -755,7 +893,7 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
                 gap: 'var(--space-2)',
               }}
             >
-              <span style={labelStyle}>Starting Balance ({currency})</span>
+              <span style={labelStyle}>{activeConfig?.label}</span>
               <span
                 style={{
                   fontFamily: '"JetBrains Mono", monospace',
@@ -764,17 +902,13 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
                   color: 'var(--color-text)',
                 }}
               >
-                {numpadValue || '0'}
+                {formatNumpadDisplay(numpadValue)}{activeConfig?.suffix ?? ''}
               </span>
             </div>
             <Numpad
               value={numpadValue}
               onChange={setNumpadValue}
-              onSave={(v) => {
-                setStartingBalance(String(v));
-                setNumpadValue('');
-                setShowNumpad(false);
-              }}
+              onSave={handleNumpadSave}
               variant="budget"
             />
           </div>

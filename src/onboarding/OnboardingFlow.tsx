@@ -10,6 +10,7 @@ import { db } from '../db/database';
 import { DEFAULT_CATEGORY_PRESETS } from '../db/seed';
 import type { CategoryPreset } from '../db/seed';
 import { evaluateExpression } from '../services/math-parser';
+import { formatNumpadDisplay } from '../utils/numpad-utils';
 import { getCanInstall, triggerInstall, dismissInstall } from '../sw-register';
 
 const TOTAL_STEPS = 5;
@@ -313,7 +314,7 @@ function StepAccount({
           minHeight: '3rem',
         }}
       >
-        {numpadValue || '0'}
+        {formatNumpadDisplay(numpadValue)}
       </div>
       <div style={{ flex: 1 }}>
         <Numpad

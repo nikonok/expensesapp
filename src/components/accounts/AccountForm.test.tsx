@@ -1,9 +1,9 @@
 /* @vitest-environment jsdom */
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent, act, within } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import AccountForm from "./AccountForm";
 
-// ── Dependency mocks ────────────────────────────────────────────────────────
+// ── Mocks ──────────────────────────────────────────────────────────────────────
+
 vi.mock("../../db/database", () => ({
   db: {
     accounts: {
@@ -12,19 +12,34 @@ vi.mock("../../db/database", () => ({
     },
   },
 }));
+
 vi.mock("../../stores/settings-store", () => ({
   useSettingsStore: (sel: (s: { mainCurrency: string }) => unknown) =>
     sel({ mainCurrency: "USD" }),
 }));
-// Stub sub-components not under test
-vi.mock("../shared/ColorPicker", () => ({ ColorPicker: () => null }));
-vi.mock("../shared/IconPicker", () => ({ IconPicker: () => null }));
-vi.mock("../shared/CurrencyPicker", () => ({ CurrencyPicker: () => null }));
-vi.mock("../shared/ConfirmDialog", () => ({ ConfirmDialog: () => null }));
-// Numpad mock: renders the value prop and exposes a save trigger
+
+vi.mock("../shared/ColorPicker", () => ({
+  ColorPicker: ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
+    <div data-testid="color-picker" onClick={() => onChange(value)} />
+  ),
+}));
+
+vi.mock("../shared/IconPicker", () => ({
+  IconPicker: ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
+    <div data-testid="icon-picker" onClick={() => onChange(value)} />
+  ),
+}));
+
+vi.mock("../shared/CurrencyPicker", () => ({
+  CurrencyPicker: ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
+    <button data-testid="currency-picker" onClick={() => onChange(value)}>{value}</button>
+  ),
+}));
+
 vi.mock("../shared/Numpad", () => ({
   Numpad: ({
     value,
+    onChange,
     onSave,
   }: {
     value: string;
@@ -32,37 +47,64 @@ vi.mock("../shared/Numpad", () => ({
     onSave: (v: number) => void;
     variant: string;
   }) => (
-    <div>
+    <div data-testid="numpad-mock">
       <span data-testid="numpad-value">{value}</span>
-      <button data-testid="numpad-save" onClick={() => onSave(250)}>
-        Save
-      </button>
+      <button aria-label="numpad-type-5000" onClick={() => onChange("5000")}>Type 5000</button>
+      <button aria-label="numpad-type-2000" onClick={() => onChange("2000")}>Type 2000</button>
+      <button aria-label="numpad-save-5000" onClick={() => onSave(5000)}>Save 5000</button>
+      <button aria-label="numpad-save-2000" onClick={() => onSave(2000)}>Save 2000</button>
+      <button aria-label="numpad-save-3000" onClick={() => onSave(3000)}>Save 3000</button>
+      <button data-testid="numpad-save" onClick={() => onSave(250)}>Save 250</button>
     </div>
   ),
 }));
 
+vi.mock("../shared/ConfirmDialog", () => ({ ConfirmDialog: () => null }));
+
 // ── History mocks for BottomSheet ───────────────────────────────────────────
 vi.spyOn(window.history, "pushState").mockImplementation(() => {});
 vi.spyOn(window.history, "replaceState").mockImplementation(() => {});
+
+import AccountForm from "./AccountForm";
+import type { Account } from "../../db/models";
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function renderForm(editAccount?: Account) {
+  return render(
+    <AccountForm isOpen={true} onClose={vi.fn()} editAccount={editAccount} />
+  );
+}
+
+function selectDebtType() {
+  fireEvent.click(screen.getByRole("button", { name: "Debt" }));
+}
+
+function getDialog() {
+  return screen.getByRole("dialog");
+}
+
+// ── Numpad seeding and backdrop ────────────────────────────────────────────────
 
 describe("AccountForm — numpad seeding and backdrop", () => {
   let onClose: () => void;
 
   beforeEach(() => {
     onClose = vi.fn();
+    vi.clearAllMocks();
   });
 
-  function renderForm() {
+  function renderFormWithClose() {
     return render(<AccountForm isOpen onClose={onClose} />);
   }
 
   it("starting balance button shows 0.00 before any input", () => {
-    renderForm();
+    renderFormWithClose();
     expect(screen.getByText("0.00")).toBeTruthy();
   });
 
   it("clicking the balance button opens the numpad overlay", () => {
-    renderForm();
+    renderFormWithClose();
     act(() => {
       fireEvent.click(screen.getByText("0.00"));
     });
@@ -70,7 +112,7 @@ describe("AccountForm — numpad seeding and backdrop", () => {
   });
 
   it("numpad receives empty string on first open (no existing value)", () => {
-    renderForm();
+    renderFormWithClose();
     act(() => {
       fireEvent.click(screen.getByText("0.00"));
     });
@@ -78,7 +120,7 @@ describe("AccountForm — numpad seeding and backdrop", () => {
   });
 
   it("numpad is seeded with previous value when reopened after saving", () => {
-    renderForm();
+    renderFormWithClose();
 
     // Open and save 250 via the mock numpad
     act(() => {
@@ -98,35 +140,113 @@ describe("AccountForm — numpad seeding and backdrop", () => {
   });
 
   it("backdrop click when numpad is open closes only the numpad, not the form", () => {
-    renderForm();
+    renderFormWithClose();
     act(() => {
       fireEvent.click(screen.getByText("0.00"));
     });
 
-    // The BottomSheet backdrop is rendered in a portal
     const backdrop = document.body.querySelector(
-      '[aria-hidden="true"]',
+      "[aria-hidden=\"true\"]",
     ) as HTMLElement;
     act(() => {
       fireEvent.click(backdrop);
     });
 
-    // Numpad overlay should be gone
     expect(screen.queryByText("Starting Balance (USD)")).toBeNull();
-    // Form's onClose was NOT called
     expect(onClose).not.toHaveBeenCalled();
   });
 
   it("backdrop click when numpad is closed closes the whole form", () => {
-    renderForm();
+    renderFormWithClose();
 
     const backdrop = document.body.querySelector(
-      '[aria-hidden="true"]',
+      "[aria-hidden=\"true\"]",
     ) as HTMLElement;
     act(() => {
       fireEvent.click(backdrop);
     });
 
     expect(onClose).toHaveBeenCalledOnce();
+  });
+});
+
+// ── Debt input mode toggle ─────────────────────────────────────────────────────
+
+describe("AccountForm — debt input mode toggle", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("defaults to 'original' mode — shows Original Amount input, shows derived Already Paid", () => {
+    renderForm();
+    selectDebtType();
+
+    const dialog = getDialog();
+
+    const originalBtn = within(dialog).getByRole("button", { name: "Original amount" });
+    const alreadyPaidBtn = within(dialog).getByRole("button", { name: "Already paid" });
+    expect(originalBtn).toBeTruthy();
+    expect(alreadyPaidBtn).toBeTruthy();
+
+    expect(originalBtn.style.background).toBe("var(--color-primary-dim)");
+    expect(alreadyPaidBtn.style.background).toBe("var(--color-surface-raised)");
+
+    expect(dialog.textContent).toContain("Already paid:");
+    expect(dialog.textContent).toContain("0");
+  });
+
+  it("switching to 'alreadyPaid' mode — shows Already Paid input, shows derived Original Amount", () => {
+    renderForm();
+    selectDebtType();
+
+    const dialog = getDialog();
+
+    const alreadyPaidBtn = within(dialog).getByRole("button", { name: "Already paid" });
+    fireEvent.click(alreadyPaidBtn);
+
+    expect(alreadyPaidBtn.style.background).toBe("var(--color-primary-dim)");
+
+    const originalBtn = within(dialog).getByRole("button", { name: "Original amount" });
+    expect(originalBtn.style.background).toBe("var(--color-surface-raised)");
+
+    expect(dialog.textContent).toContain("Original amount:");
+  });
+
+  it("edit mode shows read-only already-paid derived value and no toggle", () => {
+    const mockAccount: Account = {
+      id: 1,
+      name: "Car Loan",
+      type: "DEBT",
+      color: "oklch(72% 0.22 210)",
+      icon: "car",
+      currency: "USD",
+      description: "",
+      balance: 3000,
+      startingBalance: 5000,
+      includeInTotal: true,
+      isTrashed: false,
+      debtOriginalAmount: 5000,
+      interestRateYearly: 0.05,
+      interestRateMonthly: null,
+      createdAt: "2025-01-01T00:00:00Z",
+      updatedAt: "2025-01-01T00:00:00Z",
+    };
+
+    renderForm(mockAccount);
+
+    const dialog = getDialog();
+
+    const segmentButtons = within(dialog)
+      .queryAllByRole("button", { name: /^(Original amount|Already paid)$/ })
+      .filter(
+        (btn) =>
+          btn.textContent === "Original amount" ||
+          btn.textContent === "Already paid",
+      );
+    expect(segmentButtons.length).toBe(0);
+
+    // debtOriginalAmount (5000) - |balance| (3000) = 2000 → formatted as "2 000"
+    expect(dialog.textContent).toContain("Already paid:");
+    expect(dialog.textContent).toContain("2 000");
   });
 });

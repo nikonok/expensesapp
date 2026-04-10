@@ -79,4 +79,16 @@ describe("Numpad", () => {
     fireEvent.click(screen.getByRole("button", { name: "save" }));
     expect(onSave).toHaveBeenCalledWith(0);
   });
+
+  it("backspace button looks dim when value is empty", () => {
+    renderNumpad("");
+    const btn = screen.getByRole("button", { name: "backspace" });
+    expect(btn.style.color).toBe("var(--color-text-secondary)");
+  });
+
+  it("backspace button looks active when value has content", () => {
+    renderNumpad("123");
+    const btn = screen.getByRole("button", { name: "backspace" });
+    expect(btn.style.color).toBe("var(--color-text)");
+  });
 });

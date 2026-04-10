@@ -180,7 +180,11 @@ export function Numpad({
       return (
         <button
           key="backspace"
-          style={{ ...actionStyle, ...style }}
+          style={{
+            ...actionStyle,
+            color: value.length > 0 ? 'var(--color-text)' : 'var(--color-text-secondary)',
+            ...style,
+          }}
           onClick={handleBackspace}
           aria-label="backspace"
           {...pressHandlers}

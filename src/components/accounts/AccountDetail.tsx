@@ -10,6 +10,7 @@ import { Numpad } from '../shared/Numpad';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { getLucideIcon } from '../shared/IconPicker';
 import { useToast } from '../shared/Toast';
+import { formatNumpadDisplay } from '../../utils/numpad-utils';
 
 interface AccountDetailProps {
   account: Account;
@@ -332,7 +333,7 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
                   padding: 'var(--space-3)',
                 }}
               >
-                {adjustValue || '0'}
+                {formatNumpadDisplay(adjustValue)}
               </span>
               <Numpad
                 value={adjustValue}
