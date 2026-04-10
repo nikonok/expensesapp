@@ -623,6 +623,10 @@ function Step3({
   // Debt payment split preview
   const monthlyRate = isDebtPaymentMode && toAccount ? getMonthlyRate(toAccount) : null;
   const hasInterestRate = monthlyRate !== null;
+  const isMortgage =
+    isDebtPaymentMode &&
+    toAccount != null &&
+    (toAccount.mortgageTermYears != null || toAccount.mortgageLoanAmount != null);
   const currentAmount = evaluateExpression(numpadValue) ?? 0;
   const paymentSplit =
     isDebtPaymentMode && hasInterestRate && paymentType === 'regular' && currentAmount > 0 && toAccount
@@ -1026,6 +1030,19 @@ function Step3({
                 );
               })}
             </div>
+
+            {isMortgage && hasInterestRate && (
+              <div
+                style={{
+                  fontSize: 'var(--text-caption)',
+                  color: 'var(--color-text-secondary)',
+                  fontFamily: '"DM Sans", sans-serif',
+                  lineHeight: 1.4,
+                }}
+              >
+                {t('transactions.debtPayment.mortgageInfo')}
+              </div>
+            )}
 
             {/* Split preview */}
             {paymentSplit && (

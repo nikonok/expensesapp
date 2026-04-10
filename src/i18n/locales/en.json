@@ -140,7 +140,8 @@
       "overpayment": "Overpayment",
       "interest": "Interest",
       "principal": "Principal",
-      "noInterestCover": "Payment doesn't cover interest — full amount reduces balance"
+      "noInterestCover": "Payment doesn't cover interest — full amount reduces balance",
+      "mortgageInfo": "ⓘ Regular Payment covers interest + principal. Overpayment goes entirely to principal and shortens your mortgage term."
     }
   },
   "budget": {

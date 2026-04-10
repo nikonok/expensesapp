@@ -102,3 +102,104 @@ describe("AccountDetail — adjust balance numpad seeding", () => {
     expect(screen.getByTestId("numpad-value").textContent).toBe("0");
   });
 });
+
+describe("mortgage time remaining", () => {
+  let onClose: () => void;
+
+  beforeEach(() => {
+    onClose = vi.fn();
+  });
+
+  function renderDetail(account: Account) {
+    return render(
+      <MemoryRouter>
+        <AccountDetail
+          account={account}
+          isOpen
+          onClose={onClose}
+          onEdit={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+  }
+
+  it("shows Xy Zm pattern for a standard mortgage with remaining balance", () => {
+    renderDetail(
+      makeAccount({
+        type: "DEBT",
+        mortgageLoanAmount: 200000,
+        mortgageTermYears: 25,
+        mortgageInterestRate: 0.05,
+        balance: -150000,
+      }),
+    );
+    expect(screen.getByText(/^\d+y \d+m$/)).toBeTruthy();
+  });
+
+  it("shows 'Paid off' when balance is zero", () => {
+    renderDetail(
+      makeAccount({
+        type: "DEBT",
+        mortgageLoanAmount: 200000,
+        mortgageTermYears: 25,
+        mortgageInterestRate: 0.05,
+        balance: 0,
+      }),
+    );
+    expect(screen.getByText("Paid off")).toBeTruthy();
+  });
+
+  it("shows '5y 0m' for a zero-interest mortgage with exactly half the balance remaining", () => {
+    renderDetail(
+      makeAccount({
+        type: "DEBT",
+        mortgageLoanAmount: 120000,
+        mortgageTermYears: 10,
+        mortgageInterestRate: 0,
+        balance: -60000,
+      }),
+    );
+    expect(screen.getByText("5y 0m")).toBeTruthy();
+  });
+
+  it("shows nothing when balance exceeds serviceable threshold (x <= 0)", () => {
+    // A 25y 5% mortgage with a balance far above the original loan amount
+    // triggers x <= 0 and should show neither "Paid off" nor a time string
+    const { container } = renderDetail(
+      makeAccount({
+        type: "DEBT",
+        mortgageLoanAmount: 200000,
+        mortgageTermYears: 25,
+        mortgageInterestRate: 0.05,
+        balance: -999999999, // absurdly large — interest alone exceeds monthly payment
+      }),
+    );
+    expect(screen.queryByText("Paid off")).toBeNull();
+    expect(screen.queryByText(/\d+y \d+m/)).toBeNull();
+    // timeLeft stays null so the "Time remaining" label is also absent
+    expect(container.querySelector('[data-testid="time-remaining"]')).toBeNull();
+    expect(screen.queryByText("Time remaining")).toBeNull();
+  });
+
+  it("shows a shorter time remaining for a lower balance (overpayment effect)", () => {
+    const mortgageParams = {
+      type: "DEBT" as const,
+      mortgageLoanAmount: 200000,
+      mortgageTermYears: 25,
+      mortgageInterestRate: 0.05,
+    };
+
+    const { unmount } = renderDetail(makeAccount({ ...mortgageParams, balance: -100000 }));
+    const textA = screen.getByText(/^\d+y \d+m$/).textContent!;
+    const [yearsA, monthsA] = textA.match(/\d+/g)!.map(Number);
+    const totalMonthsA = yearsA * 12 + monthsA;
+    unmount();
+
+    renderDetail(makeAccount({ ...mortgageParams, balance: -50000 }));
+    const textB = screen.getByText(/^\d+y \d+m$/).textContent!;
+    const [yearsB, monthsB] = textB.match(/\d+/g)!.map(Number);
+    const totalMonthsB = yearsB * 12 + monthsB;
+
+    expect(totalMonthsB).toBeLessThan(totalMonthsA);
+  });
+});

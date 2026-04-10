@@ -257,10 +257,6 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
         setErrors({ interestRateYearly: 'Enter yearly or monthly rate — not both' });
         return null;
       }
-      if (!hasYearly && !hasMonthly) {
-        setErrors({ interestRateYearly: 'Enter a yearly or monthly interest rate' });
-        return null;
-      }
     }
 
     setErrors({});

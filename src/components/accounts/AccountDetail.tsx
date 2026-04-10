@@ -53,18 +53,47 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
 
   // Mortgage time left
   let timeLeft: string | null = null;
-  if (account.mortgageStartDate && account.mortgageTermYears) {
-    const start = new Date(account.mortgageStartDate);
-    const endMs = start.getTime() + account.mortgageTermYears * 365.25 * 24 * 3600 * 1000;
-    const nowMs = Date.now();
-    const remainingMs = endMs - nowMs;
-    if (remainingMs > 0) {
-      const months = Math.ceil(remainingMs / (30.44 * 24 * 3600 * 1000));
-      const years = Math.floor(months / 12);
-      const remMonths = months % 12;
-      timeLeft = years > 0 ? `${years}y ${remMonths}m` : `${remMonths}m`;
+  if (
+    account.mortgageLoanAmount != null &&
+    account.mortgageLoanAmount > 0 &&
+    account.mortgageTermYears != null &&
+    account.mortgageTermYears > 0
+  ) {
+    const balance = Math.abs(account.balance);
+    if (balance <= 0) {
+      timeLeft = 'Paid off';
     } else {
-      timeLeft = 'Overdue';
+      const r =
+        account.mortgageInterestRate != null ? account.mortgageInterestRate / 12 : 0;
+      const totalMonths = account.mortgageTermYears * 12;
+      let monthlyPayment: number;
+      if (r > 0) {
+        monthlyPayment =
+          (account.mortgageLoanAmount * r) / (1 - Math.pow(1 + r, -totalMonths));
+      } else {
+        monthlyPayment = account.mortgageLoanAmount / totalMonths;
+      }
+      if (monthlyPayment > 0) {
+        let remainingMonths: number | null = null;
+        if (r > 0) {
+          const x = 1 - (balance * r) / monthlyPayment;
+          if (x > 0) {
+            remainingMonths = Math.ceil(-Math.log(x) / Math.log(1 + r));
+          }
+          // x <= 0: unserviceable — leave remainingMonths as null, timeLeft stays null
+        } else {
+          remainingMonths = Math.ceil(balance / monthlyPayment);
+        }
+        if (remainingMonths !== null) {
+          if (remainingMonths <= 0) {
+            timeLeft = 'Paid off';
+          } else {
+            const years = Math.floor(remainingMonths / 12);
+            const remMonths = remainingMonths % 12;
+            timeLeft = years > 0 ? `${years}y ${remMonths}m` : `${remMonths}m`;
+          }
+        }
+      }
     }
   }
 
@@ -265,7 +294,7 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
                 gap: 'var(--space-2)',
               }}
             >
-              {accruedInterest != null && (
+              {accruedInterest != null && accruedInterest > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--text-body)', color: 'var(--color-text-secondary)' }}>
                     Monthly interest

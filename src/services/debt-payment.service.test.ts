@@ -50,6 +50,10 @@ describe('getMonthlyRate', () => {
       getMonthlyRate(makeAccount({ interestRateMonthly: 0.003, interestRateYearly: 0.06 })),
     ).toBe(0.003);
   });
+
+  it('returns 0 when interestRateYearly is explicitly 0', () => {
+    expect(getMonthlyRate(makeAccount({ type: 'DEBT', interestRateYearly: 0 }))).toBe(0);
+  });
 });
 
 describe('calculatePaymentSplit', () => {
