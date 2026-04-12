@@ -34,8 +34,8 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
   const isSavings = account.type === 'SAVINGS';
   const hasGoal = isSavings && account.savingsGoal != null && account.savingsGoal > 0;
   const progress = hasGoal ? Math.min(1, account.balance / account.savingsGoal!) : 0;
-  const hasDebtProgress = isDebt && account.debtOriginalAmount != null && account.debtOriginalAmount > 0;
-  const debtProgress = hasDebtProgress
+  const hasDebtOriginalAmount = isDebt && account.debtOriginalAmount != null && account.debtOriginalAmount > 0;
+  const debtProgress = hasDebtOriginalAmount
     ? Math.min(1, Math.max(0, (account.debtOriginalAmount! - account.balance) / account.debtOriginalAmount!))
     : 0;
 
@@ -255,16 +255,18 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
           )}
 
           {/* Debt payoff progress */}
-          {hasDebtProgress && (
+          {isDebt && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--text-caption)', color: 'var(--color-text-secondary)' }}>
-                  Paid off
-                </span>
-                <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 'var(--text-caption)', color: 'var(--color-text-secondary)' }}>
-                  {formatAmount(account.debtOriginalAmount! - account.balance)} / {formatAmount(account.debtOriginalAmount!)}
-                </span>
-              </div>
+              {hasDebtOriginalAmount && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--text-caption)', color: 'var(--color-text-secondary)' }}>
+                    Paid off
+                  </span>
+                  <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 'var(--text-caption)', color: 'var(--color-text-secondary)' }}>
+                    {formatAmount(account.debtOriginalAmount! - account.balance)} / {formatAmount(account.debtOriginalAmount!)}
+                  </span>
+                </div>
+              )}
               <div style={{ height: '6px', borderRadius: '9999px', background: 'var(--color-border)', overflow: 'hidden' }}>
                 <div
                   style={{
@@ -276,9 +278,11 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
                   }}
                 />
               </div>
-              <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--text-caption)', color: 'var(--color-text-secondary)' }}>
-                {Math.round(debtProgress * 100)}% paid off
-              </span>
+              {hasDebtOriginalAmount && (
+                <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--text-caption)', color: 'var(--color-text-secondary)' }}>
+                  {Math.round(debtProgress * 100)}% paid off
+                </span>
+              )}
             </div>
           )}
 
