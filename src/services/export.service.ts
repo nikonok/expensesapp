@@ -1,5 +1,4 @@
 import { db } from '../db/database';
-import { notificationService } from './notification.service';
 
 function sanitizeCell(val: unknown): unknown {
   if (typeof val === 'string' && /^[=+@-]/.test(val)) {
@@ -14,10 +13,11 @@ async function exportTransactions(
   mainCurrency: string,
 ): Promise<void> {
   try {
-  const transactions = await db.transactions
+  const allTxs = await db.transactions
     .where('date')
     .between(startDate, endDate, true, true)
     .sortBy('date');
+  const transactions = allTxs.filter(tx => tx.isTrashed !== true);
 
   const [accounts, categories] = await Promise.all([
     db.accounts.toArray(),
@@ -117,10 +117,7 @@ async function exportTransactions(
   a.href = url;
   a.download = `expenses_${startDate}_to_${endDate}.xlsx`;
   a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
-
-  // TODO: pass translated strings as parameters from the calling component
-  notificationService.sendNotification('Export complete', 'Your file has been downloaded.');
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (err) {
     if (import.meta.env.DEV) console.error('Export failed:', err);
     throw err;

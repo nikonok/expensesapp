@@ -73,6 +73,7 @@ export interface Transaction {
   exchangeRate: number;            // rate used: 1 unit of account currency = X main currency
 
   note: string;                    // max 255 chars
+  isTrashed?: boolean;             // soft delete (default false)
 
   // Transfer-specific
   transferGroupId: string | null;  // shared UUID linking the two halves of a transfer
