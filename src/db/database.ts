@@ -19,32 +19,17 @@ const db = new Dexie("expenses-app-db") as Dexie & {
   backups: EntityTable<Backup, "id">;
 };
 
+// v1 — initial release schema (all development migrations collapsed)
+// Future schema changes: add db.version(2).stores({...}) here
 db.version(1).stores({
   accounts: "++id, type, name, isTrashed, currency",
   categories: "++id, type, name, isTrashed, displayOrder",
   transactions:
-    "++id, date, accountId, categoryId, type, isTrashed, [date+displayOrder], [accountId+date], transferGroupId",
+    "++id, date, accountId, categoryId, type, isTrashed, [date+displayOrder], [accountId+date], transferGroupId, toAccountId",
   budgets: "++id, categoryId, accountId, month, [categoryId+month], [accountId+month]",
   exchangeRates: "++id, baseCurrency, &[baseCurrency+date]",
   settings: "key",
   backups: "++id, createdAt",
 });
-
-db.version(2).stores({
-  transactions:
-    "++id, date, accountId, categoryId, type, isTrashed, [date+displayOrder], [accountId+date], transferGroupId, toAccountId",
-});
-
-db.version(3).stores({}); // added debtOriginalAmount to Account (non-indexed field, no schema change needed)
-
-db.version(4)
-  .stores({})
-  .upgrade(async (trans) => {
-    await trans.table("accounts").clear();
-    await trans.table("transactions").clear();
-    await trans.table("budgets").clear();
-  });
-
-db.version(5).stores({}); // added isOverpayment to Transaction (non-indexed field)
 
 export { db };

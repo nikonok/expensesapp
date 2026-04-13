@@ -21,7 +21,7 @@ class NotificationService {
   }
 
   cancelDailyReminder(): void {
-    clearTimeout(this.timeoutId);
+    clearTimeout(this.timeoutId ?? undefined);
     this.timeoutId = null;
   }
 

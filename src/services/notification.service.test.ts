@@ -90,9 +90,10 @@ describe('notification.service', () => {
 
   describe('sendNotification', () => {
     it('is a no-op when Notification.permission is "denied"', async () => {
-      const NotificationMock = vi.fn();
-      NotificationMock.permission = 'denied';
-      NotificationMock.requestPermission = vi.fn();
+      const NotificationMock = Object.assign(vi.fn(), {
+        permission: 'denied' as NotificationPermission,
+        requestPermission: vi.fn(),
+      });
       vi.stubGlobal('Notification', NotificationMock);
 
       const { notificationService } = await import('./notification.service');
@@ -102,9 +103,10 @@ describe('notification.service', () => {
     });
 
     it('is a no-op when Notification.permission is "default"', async () => {
-      const NotificationMock = vi.fn();
-      NotificationMock.permission = 'default';
-      NotificationMock.requestPermission = vi.fn();
+      const NotificationMock = Object.assign(vi.fn(), {
+        permission: 'default' as NotificationPermission,
+        requestPermission: vi.fn(),
+      });
       vi.stubGlobal('Notification', NotificationMock);
 
       const { notificationService } = await import('./notification.service');
@@ -114,9 +116,10 @@ describe('notification.service', () => {
     });
 
     it('calls new Notification() when permission is "granted"', async () => {
-      const NotificationMock = vi.fn();
-      NotificationMock.permission = 'granted';
-      NotificationMock.requestPermission = vi.fn();
+      const NotificationMock = Object.assign(vi.fn(), {
+        permission: 'granted' as NotificationPermission,
+        requestPermission: vi.fn(),
+      });
       vi.stubGlobal('Notification', NotificationMock);
 
       const { notificationService } = await import('./notification.service');
@@ -130,9 +133,10 @@ describe('notification.service', () => {
     });
 
     it('passes undefined body when no body argument is provided', async () => {
-      const NotificationMock = vi.fn();
-      NotificationMock.permission = 'granted';
-      NotificationMock.requestPermission = vi.fn();
+      const NotificationMock = Object.assign(vi.fn(), {
+        permission: 'granted' as NotificationPermission,
+        requestPermission: vi.fn(),
+      });
       vi.stubGlobal('Notification', NotificationMock);
 
       const { notificationService } = await import('./notification.service');
@@ -147,9 +151,10 @@ describe('notification.service', () => {
 
   describe('requestPermission', () => {
     it('resolves to true when the user grants permission', async () => {
-      const NotificationMock = vi.fn();
-      NotificationMock.permission = 'default';
-      NotificationMock.requestPermission = vi.fn().mockResolvedValue('granted');
+      const NotificationMock = Object.assign(vi.fn(), {
+        permission: 'default' as NotificationPermission,
+        requestPermission: vi.fn().mockResolvedValue('granted'),
+      });
       vi.stubGlobal('Notification', NotificationMock);
 
       const { notificationService } = await import('./notification.service');
@@ -159,9 +164,10 @@ describe('notification.service', () => {
     });
 
     it('resolves to false when the user denies permission', async () => {
-      const NotificationMock = vi.fn();
-      NotificationMock.permission = 'default';
-      NotificationMock.requestPermission = vi.fn().mockResolvedValue('denied');
+      const NotificationMock = Object.assign(vi.fn(), {
+        permission: 'default' as NotificationPermission,
+        requestPermission: vi.fn().mockResolvedValue('denied'),
+      });
       vi.stubGlobal('Notification', NotificationMock);
 
       const { notificationService } = await import('./notification.service');
@@ -171,9 +177,10 @@ describe('notification.service', () => {
     });
 
     it('resolves to false when the result is "default"', async () => {
-      const NotificationMock = vi.fn();
-      NotificationMock.permission = 'default';
-      NotificationMock.requestPermission = vi.fn().mockResolvedValue('default');
+      const NotificationMock = Object.assign(vi.fn(), {
+        permission: 'default' as NotificationPermission,
+        requestPermission: vi.fn().mockResolvedValue('default'),
+      });
       vi.stubGlobal('Notification', NotificationMock);
 
       const { notificationService } = await import('./notification.service');

@@ -42,7 +42,7 @@ vitest@4.1.2          prettier@3.8.1         eslint@10.1.0
 
 ```
 db/
-  database.ts       Dexie DB definition, schema versions (currently v5), indexes
+  database.ts       Dexie DB definition, schema (v1 — all dev migrations collapsed for release), indexes
   models.ts         TypeScript interfaces: Account, Category, Transaction, Budget, etc.
   seed.ts           Default category presets, currency list used during onboarding
   sync-stub.ts      No-op server sync stub (future feature)
@@ -183,7 +183,7 @@ vite-env.d.ts           Vite env type declarations
 - `exchangeRate` on a transaction = 1 unit of account currency = X units of main currency.
 - All balance mutations inside `db.transaction('rw', ...)` for atomicity.
 - `QuotaError` (from balance.service) is thrown when IndexedDB storage is full — callers should handle it.
-- DB is at schema version 5. Migrations are defined in `src/db/database.ts`.
+- DB is at schema version 1 (all development migrations collapsed for first release). Future schema changes add `db.version(2).stores({...})` in `src/db/database.ts`.
 
 ## State management
 
