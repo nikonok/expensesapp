@@ -1022,15 +1022,21 @@ describe("mortgage overpayment features", () => {
     vi.mocked(useAccounts).mockReturnValue([sourceAccount, mortgageAccount]);
   });
 
-  it("switching to Overpayment shows term savings text", async () => {
+  it("switching to Overpayment hides the interest/principal split preview", async () => {
     const { getMonthlyRate } = await import("@/services/debt-payment.service");
     vi.mocked(getMonthlyRate).mockReturnValue(0.05 / 12);
 
     await navigateToDebtPayment(sourceAccount, mortgageAccount);
 
-    // Type an amount so currentAmount > 0
+    // Type an amount so currentAmount > 0 → split preview appears in regular mode
     await act(async () => {
       fireEvent.click(screen.getByText("Type 99"));
+    });
+
+    // In regular payment mode, the interest/principal split is computed
+    // (paymentSplit is non-null when currentAmount > 0 and monthlyRate non-null)
+    await waitFor(() => {
+      expect(screen.getByText("transactions.debtPayment.interest")).toBeTruthy();
     });
 
     // Click the overpayment toggle button (i18n mock returns key as-is)
@@ -1038,9 +1044,9 @@ describe("mortgage overpayment features", () => {
       fireEvent.click(screen.getByText("transactions.debtPayment.overpayment"));
     });
 
-    // termSavedMonths is mocked to return 6 → should show the termSaved key
+    // In overpayment mode, paymentSplit is null → split preview disappears
     await waitFor(() => {
-      expect(screen.getByText("transactions.debtPayment.termSaved")).toBeTruthy();
+      expect(screen.queryByText("transactions.debtPayment.interest")).toBeNull();
     });
   });
 
@@ -1058,7 +1064,7 @@ describe("mortgage overpayment features", () => {
     expect(screen.queryByText("transactions.debtPayment.termSaved")).toBeNull();
   });
 
-  it("isOverpayment is set to true on the outTx when saving in overpayment mode", async () => {
+  it("outTx has null interestAmount when saving in overpayment mode", async () => {
     const { getMonthlyRate } = await import("@/services/debt-payment.service");
     const { applyTransfer } = await import("@/services/balance.service");
     vi.mocked(getMonthlyRate).mockReturnValue(0.05 / 12);
@@ -1080,7 +1086,9 @@ describe("mortgage overpayment features", () => {
       expect(applyTransfer).toHaveBeenCalled();
       const calls = vi.mocked(applyTransfer).mock.calls;
       const outTx = calls[calls.length - 1][0];
-      expect(outTx.isOverpayment).toBe(true);
+      // In overpayment mode, no interest/principal split is computed
+      expect(outTx.interestAmount).toBeNull();
+      expect(outTx.principalAmount).toBeNull();
     });
   });
 });

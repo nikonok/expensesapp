@@ -269,7 +269,7 @@ describe("AccountForm — mortgage payment preview", () => {
     vi.clearAllMocks();
   });
 
-  it("shows 'Monthly payment:' preview on create when all mortgage fields are filled", () => {
+  it("shows mortgage-specific fields after selecting Mortgage subtype and filling values", () => {
     renderForm();
 
     // Select Debt type
@@ -307,13 +307,15 @@ describe("AccountForm — mortgage payment preview", () => {
       fireEvent.click(screen.getByTestId("numpad-save")); // "250" %
     });
 
-    // Preview should now be visible (calculateMortgagePayment mocked to return 233837)
+    // Mortgage fields are filled and visible in the form
     const dialog = getDialog();
-    expect(dialog.textContent).toContain("Monthly payment:");
-    expect(dialog.textContent).toContain("2 338 USD");
+    expect(dialog.textContent).toContain("250 yrs");
+    expect(dialog.textContent).toContain("250%");
+    expect(dialog.textContent).toContain("Term (years)");
+    expect(dialog.textContent).toContain("Annual Interest Rate (%)");
   });
 
-  it("shows 'New monthly payment:' label when editing an existing mortgage account", () => {
+  it("shows mortgage subtype fields when editing an existing mortgage account", () => {
     const mortgageAccount: Account = {
       id: 5,
       name: "Home Loan",
@@ -341,10 +343,11 @@ describe("AccountForm — mortgage payment preview", () => {
 
     renderForm(mortgageAccount);
 
-    // With existing mortgage data, previewPayment should be non-zero immediately
-    // (mocked calculateMortgagePayment returns 233837)
+    // With existing mortgage data, form loads into Mortgage subtype with pre-filled fields
     const dialog = getDialog();
-    expect(dialog.textContent).toContain("New monthly payment:");
-    expect(dialog.textContent).toContain("2 338 USD");
+    expect(dialog.textContent).toContain("25 yrs");
+    expect(dialog.textContent).toContain("5%");
+    expect(dialog.textContent).toContain("Term (years)");
+    expect(dialog.textContent).toContain("Annual Interest Rate (%)");
   });
 });
