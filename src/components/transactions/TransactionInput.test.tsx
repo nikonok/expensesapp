@@ -85,6 +85,8 @@ vi.mock("@/utils/numpad-utils", () => ({
 vi.mock("@/services/debt-payment.service", () => ({
   getMonthlyRate: vi.fn(() => null),
   calculatePaymentSplit: vi.fn(() => ({ interestAmount: 0, principalAmount: 0 })),
+  calculateMortgagePayment: vi.fn(() => 233837),
+  calculateTermSaved: vi.fn(() => 6),
 }));
 
 import TransactionInput from "@/components/transactions/TransactionInput";
@@ -995,6 +997,90 @@ describe("secondaryManual reset fix (Bug #1)", () => {
       // secondaryManual reset → uses exchange rate: 100 × 1.1 = 110
       // (Save mock always calls onSave(100), so amount=100)
       expect(tx.amountMainCurrency).toBe(110);
+    });
+  });
+});
+
+// ── Mortgage overpayment features ─────────────────────────────────────────────
+
+describe("mortgage overpayment features", () => {
+  const sourceAccount = makeAccount({ id: 1, name: "Wallet", type: "REGULAR", currency: "USD" });
+  const mortgageAccount = makeAccount({
+    id: 2,
+    name: "Mortgage",
+    type: "DEBT",
+    currency: "USD",
+    balance: -38000000,
+    mortgageLoanAmount: 40000000,
+    mortgageTermYears: 25,
+    mortgageInterestRate: 0.05,
+    debtOriginalAmount: 40000000,
+  });
+
+  beforeEach(() => {
+    vi.mocked(useCategories).mockReturnValue([]);
+    vi.mocked(useAccounts).mockReturnValue([sourceAccount, mortgageAccount]);
+  });
+
+  it("switching to Overpayment shows term savings text", async () => {
+    const { getMonthlyRate } = await import("@/services/debt-payment.service");
+    vi.mocked(getMonthlyRate).mockReturnValue(0.05 / 12);
+
+    await navigateToDebtPayment(sourceAccount, mortgageAccount);
+
+    // Type an amount so currentAmount > 0
+    await act(async () => {
+      fireEvent.click(screen.getByText("Type 99"));
+    });
+
+    // Click the overpayment toggle button (i18n mock returns key as-is)
+    await act(async () => {
+      fireEvent.click(screen.getByText("transactions.debtPayment.overpayment"));
+    });
+
+    // termSavedMonths is mocked to return 6 → should show the termSaved key
+    await waitFor(() => {
+      expect(screen.getByText("transactions.debtPayment.termSaved")).toBeTruthy();
+    });
+  });
+
+  it("staying on Regular Payment does not show term savings text", async () => {
+    const { getMonthlyRate } = await import("@/services/debt-payment.service");
+    vi.mocked(getMonthlyRate).mockReturnValue(0.05 / 12);
+
+    await navigateToDebtPayment(sourceAccount, mortgageAccount);
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Type 99"));
+    });
+
+    // Do NOT click overpayment — stay on regular payment
+    expect(screen.queryByText("transactions.debtPayment.termSaved")).toBeNull();
+  });
+
+  it("isOverpayment is set to true on the outTx when saving in overpayment mode", async () => {
+    const { getMonthlyRate } = await import("@/services/debt-payment.service");
+    const { applyTransfer } = await import("@/services/balance.service");
+    vi.mocked(getMonthlyRate).mockReturnValue(0.05 / 12);
+    vi.mocked(applyTransfer).mockClear();
+
+    await navigateToDebtPayment(sourceAccount, mortgageAccount);
+
+    // Switch to overpayment mode
+    await act(async () => {
+      fireEvent.click(screen.getByText("transactions.debtPayment.overpayment"));
+    });
+
+    // Save (Numpad mock calls onSave(100))
+    await act(async () => {
+      fireEvent.click(screen.getByText("Save"));
+    });
+
+    await waitFor(() => {
+      expect(applyTransfer).toHaveBeenCalled();
+      const calls = vi.mocked(applyTransfer).mock.calls;
+      const outTx = calls[calls.length - 1][0];
+      expect(outTx.isOverpayment).toBe(true);
     });
   });
 });

@@ -14,8 +14,7 @@ vi.mock("../../db/database", () => ({
 }));
 
 vi.mock("../../stores/settings-store", () => ({
-  useSettingsStore: (sel: (s: { mainCurrency: string }) => unknown) =>
-    sel({ mainCurrency: "USD" }),
+  useSettingsStore: (sel: (s: { mainCurrency: string }) => unknown) => sel({ mainCurrency: "USD" }),
 }));
 
 vi.mock("../shared/ColorPicker", () => ({
@@ -32,7 +31,9 @@ vi.mock("../shared/IconPicker", () => ({
 
 vi.mock("../shared/CurrencyPicker", () => ({
   CurrencyPicker: ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
-    <button data-testid="currency-picker" onClick={() => onChange(value)}>{value}</button>
+    <button data-testid="currency-picker" onClick={() => onChange(value)}>
+      {value}
+    </button>
   ),
 }));
 
@@ -49,17 +50,37 @@ vi.mock("../shared/Numpad", () => ({
   }) => (
     <div data-testid="numpad-mock">
       <span data-testid="numpad-value">{value}</span>
-      <button aria-label="numpad-type-5000" onClick={() => onChange("5000")}>Type 5000</button>
-      <button aria-label="numpad-type-2000" onClick={() => onChange("2000")}>Type 2000</button>
-      <button aria-label="numpad-save-5000" onClick={() => onSave(5000)}>Save 5000</button>
-      <button aria-label="numpad-save-2000" onClick={() => onSave(2000)}>Save 2000</button>
-      <button aria-label="numpad-save-3000" onClick={() => onSave(3000)}>Save 3000</button>
-      <button data-testid="numpad-save" onClick={() => onSave(25000)}>Save 250</button>
+      <button aria-label="numpad-type-5000" onClick={() => onChange("5000")}>
+        Type 5000
+      </button>
+      <button aria-label="numpad-type-2000" onClick={() => onChange("2000")}>
+        Type 2000
+      </button>
+      <button aria-label="numpad-save-5000" onClick={() => onSave(5000)}>
+        Save 5000
+      </button>
+      <button aria-label="numpad-save-2000" onClick={() => onSave(2000)}>
+        Save 2000
+      </button>
+      <button aria-label="numpad-save-3000" onClick={() => onSave(3000)}>
+        Save 3000
+      </button>
+      <button data-testid="numpad-save" onClick={() => onSave(25000)}>
+        Save 250
+      </button>
     </div>
   ),
 }));
 
 vi.mock("../shared/ConfirmDialog", () => ({ ConfirmDialog: () => null }));
+
+vi.mock("../../services/debt-payment.service", () => ({
+  calculateMortgagePayment: vi.fn(() => 233837),
+}));
+
+vi.mock("../../utils/currency-utils", () => ({
+  formatAmount: vi.fn(() => "2 338 USD"),
+}));
 
 // ── History mocks for BottomSheet ───────────────────────────────────────────
 vi.spyOn(window.history, "pushState").mockImplementation(() => {});
@@ -71,9 +92,7 @@ import type { Account } from "../../db/models";
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function renderForm(editAccount?: Account) {
-  return render(
-    <AccountForm isOpen={true} onClose={vi.fn()} editAccount={editAccount} />
-  );
+  return render(<AccountForm isOpen={true} onClose={vi.fn()} editAccount={editAccount} />);
 }
 
 function selectDebtType() {
@@ -145,9 +164,7 @@ describe("AccountForm — numpad seeding and backdrop", () => {
       fireEvent.click(screen.getByText("0.00"));
     });
 
-    const backdrop = document.body.querySelector(
-      "[aria-hidden=\"true\"]",
-    ) as HTMLElement;
+    const backdrop = document.body.querySelector('[aria-hidden="true"]') as HTMLElement;
     act(() => {
       fireEvent.click(backdrop);
     });
@@ -159,9 +176,7 @@ describe("AccountForm — numpad seeding and backdrop", () => {
   it("backdrop click when numpad is closed closes the whole form", () => {
     renderFormWithClose();
 
-    const backdrop = document.body.querySelector(
-      "[aria-hidden=\"true\"]",
-    ) as HTMLElement;
+    const backdrop = document.body.querySelector('[aria-hidden="true"]') as HTMLElement;
     act(() => {
       fireEvent.click(backdrop);
     });
@@ -238,15 +253,98 @@ describe("AccountForm — debt input mode toggle", () => {
 
     const segmentButtons = within(dialog)
       .queryAllByRole("button", { name: /^(Original amount|Already paid)$/ })
-      .filter(
-        (btn) =>
-          btn.textContent === "Original amount" ||
-          btn.textContent === "Already paid",
-      );
+      .filter((btn) => btn.textContent === "Original amount" || btn.textContent === "Already paid");
     expect(segmentButtons.length).toBe(0);
 
     // debtOriginalAmount (5000) - |balance| (3000) = 2000 → formatted as "2 000"
     expect(dialog.textContent).toContain("Already paid:");
     expect(dialog.textContent).toContain("2 000");
+  });
+});
+
+// ── Mortgage payment preview ──────────────────────────────────────────────────
+
+describe("AccountForm — mortgage payment preview", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows 'Monthly payment:' preview on create when all mortgage fields are filled", () => {
+    renderForm();
+
+    // Select Debt type
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "Debt" }));
+    });
+
+    // Open debtOriginalAmount numpad and save
+    // After selecting Debt, there are 2 "0.00" buttons: starting balance [0] and debtOriginalAmount [1]
+    act(() => {
+      fireEvent.click(screen.getAllByText("0.00")[1]);
+    });
+    act(() => {
+      fireEvent.click(screen.getByTestId("numpad-save")); // onSave(25000) → "250"
+    });
+
+    // Select Mortgage subtype
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "Mortgage" }));
+    });
+
+    // Open mortgageTermYears numpad and save
+    act(() => {
+      fireEvent.click(screen.getByText("0 yrs"));
+    });
+    act(() => {
+      fireEvent.click(screen.getByTestId("numpad-save")); // "250" yrs
+    });
+
+    // Open mortgageInterestRate numpad and save
+    act(() => {
+      fireEvent.click(screen.getByText("0%"));
+    });
+    act(() => {
+      fireEvent.click(screen.getByTestId("numpad-save")); // "250" %
+    });
+
+    // Preview should now be visible (calculateMortgagePayment mocked to return 233837)
+    const dialog = getDialog();
+    expect(dialog.textContent).toContain("Monthly payment:");
+    expect(dialog.textContent).toContain("2 338 USD");
+  });
+
+  it("shows 'New monthly payment:' label when editing an existing mortgage account", () => {
+    const mortgageAccount: Account = {
+      id: 5,
+      name: "Home Loan",
+      type: "DEBT",
+      color: "oklch(72% 0.22 210)",
+      icon: "home",
+      currency: "USD",
+      description: "",
+      balance: -38000000,
+      startingBalance: 40000000,
+      includeInTotal: true,
+      isTrashed: false,
+      savingsGoal: null,
+      savingsInterestRate: null,
+      interestRateMonthly: null,
+      interestRateYearly: null,
+      debtOriginalAmount: 40000000,
+      mortgageLoanAmount: 40000000,
+      mortgageStartDate: "2020-01-01",
+      mortgageTermYears: 25,
+      mortgageInterestRate: 0.05,
+      createdAt: "2020-01-01T00:00:00Z",
+      updatedAt: "2024-01-01T00:00:00Z",
+    };
+
+    renderForm(mortgageAccount);
+
+    // With existing mortgage data, previewPayment should be non-zero immediately
+    // (mocked calculateMortgagePayment returns 233837)
+    const dialog = getDialog();
+    expect(dialog.textContent).toContain("New monthly payment:");
+    expect(dialog.textContent).toContain("2 338 USD");
   });
 });
