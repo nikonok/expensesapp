@@ -136,7 +136,7 @@ class BackupService {
           void (async () => {
             await this.createBackup(true);
             await db.settings.put({ key: 'lastAutoBackupAt', value: new Date().toISOString() });
-          })(),
+          })().catch(err => console.error('[AutoBackup] periodic check failed:', err)),
         intervalHours * 3_600_000,
       );
     }

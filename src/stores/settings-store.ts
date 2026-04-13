@@ -17,6 +17,18 @@ interface SettingsStore {
   update: (key: string, value: unknown) => Promise<void>;
 }
 
+const VALID_SETTING_KEYS = new Set([
+  'mainCurrency',
+  'language',
+  'startupScreen',
+  'notificationEnabled',
+  'notificationTime',
+  'lastUsedAccountId',
+  'autoBackupIntervalHours',
+  'lastAutoBackupAt',
+  'hasCompletedOnboarding',
+]);
+
 const DEFAULTS: Omit<SettingsStore, 'load' | 'update' | 'isLoaded'> = {
   mainCurrency: 'USD',
   language: 'en',
@@ -65,6 +77,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   },
 
   update: async (key: string, value: unknown) => {
+    if (!VALID_SETTING_KEYS.has(key)) {
+      console.error('Unknown setting key:', key);
+      return;
+    }
     const prev = (get() as unknown as Record<string, unknown>)[key];
     if (prev === value) return;
     set({ [key]: value } as Partial<SettingsStore>);

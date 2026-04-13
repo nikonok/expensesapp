@@ -46,6 +46,7 @@ export async function applyTransaction(tx: Transaction): Promise<void> {
     db.transaction('rw', [db.accounts, db.transactions], async () => {
       const account = await db.accounts.get(tx.accountId);
       if (!account) throw new Error(`Account ${tx.accountId} not found`);
+      if (account.isTrashed) throw new Error('Account is archived and cannot be modified');
 
       const minOrder = await getMinDisplayOrder(tx.date);
       const now = new Date().toISOString();
@@ -71,6 +72,7 @@ export async function revertTransaction(tx: Transaction): Promise<void> {
     db.transaction('rw', [db.accounts, db.transactions], async () => {
       const account = await db.accounts.get(tx.accountId);
       if (!account) throw new Error(`Account ${tx.accountId} not found`);
+      if (account.isTrashed) throw new Error('Account is archived and cannot be modified');
 
       const now = new Date().toISOString();
       const delta = getBalanceDelta(account, tx);
@@ -96,6 +98,7 @@ export async function replaceTransaction(
       // Revert old balance effect
       const oldAccount = await db.accounts.get(oldTx.accountId);
       if (!oldAccount) throw new Error(`Account ${oldTx.accountId} not found`);
+      if (oldAccount.isTrashed) throw new Error('Account is archived and cannot be modified');
       const oldDelta = getBalanceDelta(oldAccount, oldTx);
 
       // If account changed, update both accounts
@@ -106,6 +109,7 @@ export async function replaceTransaction(
         });
         const newAccount = await db.accounts.get(newTx.accountId);
         if (!newAccount) throw new Error(`Account ${newTx.accountId} not found`);
+        if (newAccount.isTrashed) throw new Error('Account is archived and cannot be modified');
         const newDelta = getBalanceDelta(newAccount, newTx);
         await db.accounts.update(newTx.accountId, {
           balance: newAccount.balance + newDelta,
@@ -153,9 +157,11 @@ export async function applyTransfer(
 
       const outAccount = await db.accounts.get(outTx.accountId);
       if (!outAccount) throw new Error(`Account ${outTx.accountId} not found`);
+      if (outAccount.isTrashed) throw new Error('Account is archived and cannot be modified');
 
       const inAccount = await db.accounts.get(inTx.accountId);
       if (!inAccount) throw new Error(`Account ${inTx.accountId} not found`);
+      if (inAccount.isTrashed) throw new Error('Account is archived and cannot be modified');
 
       const outDelta = getBalanceDelta(outAccount, outTx);
       const inDelta = getBalanceDelta(inAccount, inTx);
@@ -220,6 +226,7 @@ export async function revertTransfer(transferGroupId: string): Promise<void> {
       for (const record of records) {
         const account = await db.accounts.get(record.accountId);
         if (!account) throw new Error(`Account ${record.accountId} not found`);
+        if (account.isTrashed) throw new Error('Account is archived and cannot be modified');
         const delta = getBalanceDelta(account, record);
         await db.accounts.update(record.accountId, {
           balance: account.balance - delta,
@@ -256,6 +263,7 @@ export async function replaceTransfer(
       for (const record of records) {
         const account = await db.accounts.get(record.accountId);
         if (!account) throw new Error(`Account ${record.accountId} not found`);
+        if (account.isTrashed) throw new Error('Account is archived and cannot be modified');
         const delta = getBalanceDelta(account, record);
         await db.accounts.update(record.accountId, {
           balance: account.balance - delta,
@@ -268,8 +276,10 @@ export async function replaceTransfer(
       // Apply new records
       const outAccount = await db.accounts.get(outTx.accountId);
       if (!outAccount) throw new Error(`Account ${outTx.accountId} not found`);
+      if (outAccount.isTrashed) throw new Error('Account is archived and cannot be modified');
       const inAccount = await db.accounts.get(inTx.accountId);
       if (!inAccount) throw new Error(`Account ${inTx.accountId} not found`);
+      if (inAccount.isTrashed) throw new Error('Account is archived and cannot be modified');
 
       const outDelta = getBalanceDelta(outAccount, outTx);
       const inDelta = getBalanceDelta(inAccount, inTx);
@@ -321,6 +331,7 @@ export async function adjustBalance(
     db.transaction('rw', [db.accounts], async () => {
       const account = await db.accounts.get(accountId);
       if (!account) throw new Error(`Account ${accountId} not found`);
+      if (account.isTrashed) throw new Error('Account is archived and cannot be modified');
       await db.accounts.update(accountId, {
         balance: newBalance,
         updatedAt: new Date().toISOString(),

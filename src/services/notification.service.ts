@@ -3,6 +3,10 @@ class NotificationService {
 
   scheduleDailyReminder(time: string): void {
     const [h, m] = time.split(':').map(Number);
+    if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+      console.error('Invalid notification time:', time);
+      return;
+    }
     const now = new Date();
     const target = new Date(now);
     target.setHours(h, m, 0, 0);
@@ -17,11 +21,12 @@ class NotificationService {
   }
 
   cancelDailyReminder(): void {
-    clearTimeout(this.timeoutId ?? undefined);
+    clearTimeout(this.timeoutId);
     this.timeoutId = null;
   }
 
   sendNotification(title: string, body?: string): void {
+    if (typeof Notification === 'undefined') return;
     if (Notification.permission !== 'granted') return;
     new Notification(title, { body, icon: '/icons/icon-192.png' });
   }

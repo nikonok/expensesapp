@@ -1996,7 +1996,9 @@ export default function TransactionInput() {
           setToSecondaryAmount(String(Math.round(amount * rate) / 100));
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (import.meta.env.DEV) console.error('[TransactionInput] exchange rate fetch failed:', err);
+      });
   }, [numpadValue, account, toAccount, toAccount2ndCurrencyDiffers, toSecondaryManual]);
 
   // Reset toSecondaryManual when toAccount changes
