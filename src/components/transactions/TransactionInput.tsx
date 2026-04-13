@@ -20,7 +20,12 @@ import { evaluateExpression } from "@/services/math-parser";
 import { format, parseISO } from "date-fns";
 import { getLocalDateString } from "@/utils/date-utils";
 import { getLucideIcon } from "@/components/shared/IconPicker";
-import { getMonthlyRate, calculatePaymentSplit } from "@/services/debt-payment.service";
+import {
+  getMonthlyRate,
+  calculatePaymentSplit,
+  calculateMortgagePayment,
+  calculateTermSaved,
+} from "@/services/debt-payment.service";
 import { CalendarPicker } from "@/components/shared/CalendarPicker";
 import { Numpad } from "@/components/shared/Numpad";
 import { ComingSoonStub } from "@/components/shared/ComingSoonStub";
@@ -710,6 +715,32 @@ function Step3({
       ? calculatePaymentSplit(Math.abs(toAccount.balance), monthlyRate!, currentAmount)
       : null;
 
+  const termSavedMonths =
+    isDebtPaymentMode &&
+    paymentType === "overpayment" &&
+    isMortgage &&
+    toAccount != null &&
+    toAccount.mortgageLoanAmount != null &&
+    toAccount.mortgageLoanAmount > 0 &&
+    toAccount.mortgageTermYears != null &&
+    toAccount.mortgageTermYears > 0 &&
+    toAccount.mortgageInterestRate != null &&
+    toAccount.mortgageInterestRate > 0 &&
+    monthlyRate != null &&
+    monthlyRate > 0 &&
+    currentAmount > 0
+      ? calculateTermSaved(
+          Math.abs(toAccount.balance),
+          currentAmount,
+          monthlyRate,
+          calculateMortgagePayment(
+            toAccount.mortgageLoanAmount,
+            toAccount.mortgageInterestRate,
+            toAccount.mortgageTermYears,
+          ),
+        )
+      : null;
+
   const evaluatedAmount = evaluateExpression(numpadValue);
 
   const handleUseLastNote = () => {
@@ -1310,6 +1341,25 @@ function Step3({
                   {t("transactions.debtPayment.noInterestCover")}
                 </div>
               )}
+
+            {/* Term savings hint for overpayments */}
+            {paymentType === "overpayment" &&
+              isMortgage &&
+              termSavedMonths != null &&
+              termSavedMonths > 0 && (
+                <div
+                  style={{
+                    background: "var(--color-surface)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: "var(--radius-card)",
+                    padding: "var(--space-2) var(--space-3)",
+                    fontSize: "var(--text-caption)",
+                    color: "var(--color-income)",
+                  }}
+                >
+                  {t("transactions.debtPayment.termSaved", { count: termSavedMonths })}
+                </div>
+              )}
           </div>
         )}
 
@@ -1442,14 +1492,18 @@ function Step3({
         {/* Numpad */}
         <Numpad
           value={
-            focusedField === "secondary" ? secondaryAmount
-            : focusedField === "destination" ? toSecondaryAmount
-            : numpadValue
+            focusedField === "secondary"
+              ? secondaryAmount
+              : focusedField === "destination"
+                ? toSecondaryAmount
+                : numpadValue
           }
           onChange={
-            focusedField === "secondary" ? onSecondaryAmountChange
-            : focusedField === "destination" ? onToSecondaryAmountChange
-            : onNumpadChange
+            focusedField === "secondary"
+              ? onSecondaryAmountChange
+              : focusedField === "destination"
+                ? onToSecondaryAmountChange
+                : onNumpadChange
           }
           onSave={(result) => {
             if (focusedField === "secondary" || focusedField === "destination") {
@@ -1717,7 +1771,9 @@ export default function TransactionInput() {
   const [date, setDate] = useState(getLocalDateString);
   const [secondaryAmount, setSecondaryAmount] = useState("");
   const [secondaryManual, setSecondaryManual] = useState(false);
-  const [focusedField, setFocusedField] = useState<"primary" | "secondary" | "destination">("primary");
+  const [focusedField, setFocusedField] = useState<"primary" | "secondary" | "destination">(
+    "primary",
+  );
   const [toSecondaryAmount, setToSecondaryAmount] = useState("");
   const [toSecondaryManual, setToSecondaryManual] = useState(false);
   const [noRateWarning, setNoRateWarning] = useState(false);
@@ -1842,7 +1898,13 @@ export default function TransactionInput() {
       db.accounts.get(existingTx.toAccountId).then((dest) => {
         if (dest) setToAccount(dest);
       });
-      setPaymentType(existingTx.interestAmount != null ? "regular" : "overpayment");
+      setPaymentType(
+        existingTx.isOverpayment === true
+          ? "overpayment"
+          : existingTx.interestAmount != null
+            ? "regular"
+            : "overpayment",
+      );
     } else if (existingTx.type === "TRANSFER" && existingTx.transferGroupId) {
       setTxType("transfer");
       // Load the other half of the transfer
@@ -2236,6 +2298,7 @@ export default function TransactionInput() {
             toAccountId: toAccount!.id!,
             interestAmount: interestAmt,
             principalAmount: principalAmt,
+            isOverpayment: paymentType === "overpayment" ? true : null,
             createdAt: now,
             updatedAt: now,
           };
