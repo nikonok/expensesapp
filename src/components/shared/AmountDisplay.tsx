@@ -52,7 +52,7 @@ export function AmountDisplay({ amount, currency, type, size }: AmountDisplayPro
     currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(Math.abs(amount));
+  }).format(Math.abs(amount) / 100);
 
   const typeLabel = type === 'income' ? 'income' : type === 'expense' ? 'expense' : type === 'transfer' ? 'transfer' : isNegativeNeutral ? 'negative' : undefined;
   const accessibleLabel = typeLabel ? `${typeLabel} ${formatted}` : formatted;

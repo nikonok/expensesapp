@@ -36,7 +36,7 @@ export function BudgetCard({ item, type, month }: BudgetCardProps) {
     return new Intl.NumberFormat('en-US', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(n);
+    }).format(n / 100);
   };
 
   return (

@@ -74,7 +74,7 @@ vi.mock("@/components/shared/ComingSoonStub", () => ({
   ComingSoonStub: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 vi.mock("@/services/math-parser", () => ({
-  evaluateExpression: vi.fn((v: string) => (v ? parseFloat(v) : null)),
+  evaluateExpression: vi.fn((v: string) => (v ? Math.round(parseFloat(v) * 100) : null)),
 }));
 vi.mock("@/utils/date-utils", () => ({
   getLocalDateString: () => "2024-01-15",
@@ -833,8 +833,8 @@ describe("cross-currency debt payment (Bug #2)", () => {
       expect(applyTransfer).toHaveBeenCalled();
       const calls = vi.mocked(applyTransfer).mock.calls;
       const [, inTx] = calls[calls.length - 1];
-      // IN leg (debt account) must use the user-entered 99, not the exchange-rate auto-calc
-      expect(inTx.amount).toBe(99);
+      // IN leg (debt account) must use the user-entered 99 → Math.round(99 * 100) = 9900
+      expect(inTx.amount).toBe(9900);
     });
   });
 
@@ -931,9 +931,9 @@ describe("secondaryManual reset fix (Bug #1)", () => {
       expect(applyTransaction).toHaveBeenCalled();
       const calls = vi.mocked(applyTransaction).mock.calls;
       const tx = calls[calls.length - 1][0];
-      // secondaryManual stayed true → amountMainCurrency = 99 (manual override)
+      // secondaryManual stayed true → amountMainCurrency = Math.round(99 * 100) = 9900 (manual override)
       // If Bug #1 still present: secondaryManual reset → amountMainCurrency = 110 (exchange rate)
-      expect(tx.amountMainCurrency).toBe(99);
+      expect(tx.amountMainCurrency).toBe(9900);
     });
   });
 

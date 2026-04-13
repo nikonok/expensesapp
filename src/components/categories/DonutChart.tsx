@@ -23,9 +23,10 @@ const STROKE_WIDTH = 8;
 const GAP_PX = 2;
 
 export function formatAmount(amount: number): string {
-  if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(1)}M`;
-  if (amount >= 1_000) return `${(amount / 1_000).toFixed(1)}k`;
-  return amount.toFixed(0);
+  const major = amount / 100;
+  if (major >= 1_000_000) return `${(major / 1_000_000).toFixed(1)}M`;
+  if (major >= 1_000) return `${(major / 1_000).toFixed(1)}k`;
+  return major.toFixed(0);
 }
 
 export function dynamicFontSize(str: string, maxSize: number, minSize: number): number {

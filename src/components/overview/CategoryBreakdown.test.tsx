@@ -53,8 +53,8 @@ function makeTransaction(overrides: Partial<Transaction> = {}): Transaction {
     accountId: 1,
     categoryId: 1,
     currency: 'USD',
-    amount: 100,
-    amountMainCurrency: 100,
+    amount: 10000,
+    amountMainCurrency: 10000,
     exchangeRate: 1,
     note: '',
     isTrashed: false,
@@ -79,8 +79,8 @@ function makeAccount(overrides: Partial<Account> = {}): Account {
     icon: 'car',
     currency: 'USD',
     description: '',
-    balance: -5000,
-    startingBalance: -10000,
+    balance: -500000,
+    startingBalance: -1000000,
     includeInTotal: true,
     isTrashed: false,
     savingsGoal: null,
@@ -120,9 +120,9 @@ describe('CategoryBreakdown', () => {
     mockUseAccounts.mockReturnValue([]);
 
     const transactions = [
-      makeTransaction({ id: 1, categoryId: 1, amountMainCurrency: 50 }),
-      makeTransaction({ id: 2, categoryId: 1, amountMainCurrency: 30 }),
-      makeTransaction({ id: 3, categoryId: 2, amountMainCurrency: 20 }),
+      makeTransaction({ id: 1, categoryId: 1, amountMainCurrency: 5000 }),
+      makeTransaction({ id: 2, categoryId: 1, amountMainCurrency: 3000 }),
+      makeTransaction({ id: 3, categoryId: 2, amountMainCurrency: 2000 }),
     ];
 
     render(<CategoryBreakdown transactions={transactions} currency="USD" />);
@@ -142,8 +142,8 @@ describe('CategoryBreakdown', () => {
     mockUseAccounts.mockReturnValue([]);
 
     const transactions = [
-      makeTransaction({ id: 1, categoryId: 1, amountMainCurrency: 50 }),
-      makeTransaction({ id: 2, categoryId: 2, amountMainCurrency: 75 }),
+      makeTransaction({ id: 1, categoryId: 1, amountMainCurrency: 5000 }),
+      makeTransaction({ id: 2, categoryId: 2, amountMainCurrency: 7500 }),
     ];
 
     render(<CategoryBreakdown transactions={transactions} currency="USD" />);
@@ -164,7 +164,7 @@ describe('CategoryBreakdown', () => {
     mockUseAccounts.mockReturnValue([]);
 
     const transactions = [
-      makeTransaction({ id: 1, categoryId: 1, amountMainCurrency: 100 }),
+      makeTransaction({ id: 1, categoryId: 1, amountMainCurrency: 10000 }),
     ];
 
     render(<CategoryBreakdown transactions={transactions} currency="USD" />);
@@ -183,7 +183,7 @@ describe('CategoryBreakdown', () => {
     mockUseAccounts.mockReturnValue([]);
 
     const transactions = [
-      makeTransaction({ id: 1, categoryId: 1, amountMainCurrency: 100 }),
+      makeTransaction({ id: 1, categoryId: 1, amountMainCurrency: 10000 }),
       // Entertainment has zero spend this period
     ];
 
@@ -204,8 +204,8 @@ describe('CategoryBreakdown', () => {
     mockUseAccounts.mockReturnValue([]);
 
     const transactions = [
-      makeTransaction({ id: 1, categoryId: 2, amountMainCurrency: 200 }),
-      makeTransaction({ id: 2, categoryId: 3, amountMainCurrency: 100 }),
+      makeTransaction({ id: 1, categoryId: 2, amountMainCurrency: 20000 }),
+      makeTransaction({ id: 2, categoryId: 3, amountMainCurrency: 10000 }),
       // Aaa has zero spend
     ];
 
@@ -229,14 +229,14 @@ describe('CategoryBreakdown', () => {
     ]);
 
     const transactions = [
-      makeTransaction({ id: 1, type: 'EXPENSE', categoryId: 1, amountMainCurrency: 50 }),
+      makeTransaction({ id: 1, type: 'EXPENSE', categoryId: 1, amountMainCurrency: 5000 }),
       makeTransaction({
         id: 2,
         type: 'TRANSFER',
         categoryId: null,
         transferDirection: 'OUT',
         toAccountId: 10,
-        amountMainCurrency: 200,
+        amountMainCurrency: 20000,
         transferGroupId: 'abc-123',
       }),
     ];
@@ -258,7 +258,7 @@ describe('CategoryBreakdown', () => {
         categoryId: null,
         transferDirection: 'OUT',
         toAccountId: 10,
-        amountMainCurrency: 200,
+        amountMainCurrency: 20000,
         transferGroupId: 'abc-123',
       }),
     ];
@@ -279,8 +279,8 @@ describe('CategoryBreakdown', () => {
     mockUseAccounts.mockReturnValue([]);
 
     const transactions = [
-      makeTransaction({ id: 1, categoryId: 1, amountMainCurrency: 50 }),
-      makeTransaction({ id: 2, categoryId: 999, amountMainCurrency: 300 }),
+      makeTransaction({ id: 1, categoryId: 1, amountMainCurrency: 5000 }),
+      makeTransaction({ id: 2, categoryId: 999, amountMainCurrency: 30000 }),
     ];
 
     render(<CategoryBreakdown transactions={transactions} currency="USD" />);
@@ -302,8 +302,8 @@ describe('CategoryBreakdown', () => {
     mockUseAccounts.mockReturnValue([]);
 
     const transactions = [
-      makeTransaction({ id: 1, categoryId: 1, amountMainCurrency: 75 }),
-      makeTransaction({ id: 2, categoryId: 2, amountMainCurrency: 25 }),
+      makeTransaction({ id: 1, categoryId: 1, amountMainCurrency: 7500 }),
+      makeTransaction({ id: 2, categoryId: 2, amountMainCurrency: 2500 }),
     ];
 
     render(<CategoryBreakdown transactions={transactions} currency="USD" />);

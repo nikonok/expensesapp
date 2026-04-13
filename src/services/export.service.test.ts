@@ -1,115 +1,57 @@
-/* @vitest-environment jsdom */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Transaction, Account, Category } from '@/db/models';
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// ── Mock xlsx (dynamic import inside the service) ──────────────────────────
+// ── Mocks (hoisted before imports) ───────────────────────────────────────────
+
+vi.mock('../db/database', () => ({
+  db: {
+    transactions: {
+      where: vi.fn(),
+    },
+    accounts: { toArray: vi.fn() },
+    categories: { toArray: vi.fn() },
+  },
+}));
 
 vi.mock('xlsx', () => ({
   utils: {
-    aoa_to_sheet: vi.fn(() => ({})),
-    book_new: vi.fn(() => ({})),
+    aoa_to_sheet: vi.fn(() => ({ mock: 'sheet' })),
+    book_new: vi.fn(() => ({ mock: 'workbook' })),
     book_append_sheet: vi.fn(),
   },
-  write: vi.fn(() => new Uint8Array()),
+  write: vi.fn(() => new Uint8Array([1, 2, 3])),
 }));
 
-// ── Shared mutable state for DB mock ──────────────────────────────────────
+// ── Imports ───────────────────────────────────────────────────────────────────
 
-const dbState = {
-  transactions: [] as Transaction[],
-  accounts: [] as Account[],
-  categories: [] as Category[],
-};
-
-// Hoist mock functions so they are available inside vi.mock() factory closures
-const { mockBetween, mockWhere } = vi.hoisted(() => {
-  const mockBetween = vi.fn();
-  const mockWhere = vi.fn();
-  return { mockBetween, mockWhere };
-});
-
-vi.mock('@/db/database', () => ({
-  db: {
-    transactions: {
-      where: mockWhere,
-    },
-    accounts: {
-      toArray: vi.fn(() => Promise.resolve(dbState.accounts)),
-    },
-    categories: {
-      toArray: vi.fn(() => Promise.resolve(dbState.categories)),
-    },
-  },
-}));
-
-// ── Import the module under test (after all vi.mock calls) ─────────────────
-
+import { db } from '../db/database';
 import { exportService } from './export.service';
-import * as xlsxModule from 'xlsx';
+import type { Transaction } from '../db/models';
 
-// ── Factory helpers ────────────────────────────────────────────────────────
-
-let nextId = 1;
-let nextAccountId = 100;
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function makeTx(overrides: Partial<Transaction> = {}): Transaction {
   return {
-    id: nextId++,
     type: 'EXPENSE',
-    date: '2026-04-10',
+    date: '2026-01-15',
     timestamp: new Date().toISOString(),
     displayOrder: 0,
     accountId: 1,
     categoryId: 1,
     currency: 'USD',
-    amount: 100,
-    amountMainCurrency: 100,
+    amount: 1000,
+    amountMainCurrency: 1000,
     exchangeRate: 1,
     note: '',
     transferGroupId: null,
     transferDirection: null,
-    isTrashed: false,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    ...overrides,
-  } as Transaction;
-}
-
-function makeAccount(overrides: Partial<Account> = {}): Account {
-  return {
-    id: nextAccountId++,
-    name: 'Test Account',
-    type: 'REGULAR',
-    color: 'oklch(0.7 0.2 180)',
-    icon: 'wallet',
-    currency: 'USD',
-    description: '',
-    balance: 1000,
-    startingBalance: 1000,
-    includeInTotal: true,
-    isTrashed: false,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     ...overrides,
   };
 }
 
-function makeCategory(overrides: Partial<Category> = {}): Category {
-  return {
-    id: 1,
-    name: 'Food',
-    type: 'EXPENSE',
-    color: 'oklch(0.6 0.15 30)',
-    icon: 'utensils',
-    displayOrder: 0,
-    isTrashed: false,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    ...overrides,
-  };
-}
-
-// ── DOM helpers ────────────────────────────────────────────────────────────
+// ── DOM helpers ───────────────────────────────────────────────────────────────
 
 function setupDomMocks() {
   const clickMock = vi.fn();
@@ -120,217 +62,217 @@ function setupDomMocks() {
   return { anchor, clickMock };
 }
 
-// ── Test setup ─────────────────────────────────────────────────────────────
+// ── Test setup ────────────────────────────────────────────────────────────────
+
+let mockTxQuery: { between: ReturnType<typeof vi.fn>; sortBy: ReturnType<typeof vi.fn> };
 
 beforeEach(() => {
-  dbState.transactions = [];
-  dbState.accounts = [];
-  dbState.categories = [];
-  nextId = 1;
-  nextAccountId = 100;
   vi.clearAllMocks();
-  // Wire (or re-wire after clearAllMocks) the mock chain
-  mockBetween.mockReturnValue({
-    sortBy: vi.fn(() => Promise.resolve(dbState.transactions)),
-  });
-  mockWhere.mockReturnValue({ between: mockBetween });
+
+  mockTxQuery = {
+    between: vi.fn().mockReturnThis(),
+    sortBy: vi.fn().mockResolvedValue([]),
+  };
+  vi.mocked(db.transactions.where).mockReturnValue(mockTxQuery as any);
+
+  vi.mocked(db.accounts.toArray).mockResolvedValue([
+    { id: 1, name: 'Checking', type: 'REGULAR', color: '', icon: '', currency: 'USD',
+      description: '', balance: 0, startingBalance: 0, includeInTotal: true, isTrashed: false,
+      createdAt: '', updatedAt: '' },
+    { id: 2, name: 'Savings', type: 'REGULAR', color: '', icon: '', currency: 'USD',
+      description: '', balance: 0, startingBalance: 0, includeInTotal: true, isTrashed: false,
+      createdAt: '', updatedAt: '' },
+  ]);
+
+  vi.mocked(db.categories.toArray).mockResolvedValue([
+    { id: 1, name: 'Food', type: 'EXPENSE', color: '', icon: '', displayOrder: 0,
+      isTrashed: false, createdAt: '', updatedAt: '' },
+  ]);
+
+  setupDomMocks();
 });
 
-// ── Tests ──────────────────────────────────────────────────────────────────
+// ── Helper to get aoa_to_sheet call data ──────────────────────────────────────
+
+async function getSheetData(): Promise<(string | number)[][]> {
+  const XLSX = await import('xlsx');
+  return vi.mocked(XLSX.utils.aoa_to_sheet).mock.calls[0][0] as (string | number)[][];
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('exportService.exportTransactions', () => {
-  describe('trashed transaction filtering', () => {
-    it('excludes isTrashed transactions from XLSX output', async () => {
-      setupDomMocks();
-      dbState.transactions = [
-        makeTx({ id: 1, amountMainCurrency: 50, isTrashed: false }),
-        makeTx({ id: 2, amountMainCurrency: 200, isTrashed: true }),
-      ];
-      dbState.accounts = [makeAccount({ id: 1 })];
-      dbState.categories = [makeCategory({ id: 1 })];
+  describe('amount conversion (integer minor units)', () => {
+    it('writes income amount as amountMainCurrency / 100', async () => {
+      mockTxQuery.sortBy.mockResolvedValue([
+        makeTx({ type: 'INCOME', amountMainCurrency: 1050, accountId: 1, categoryId: 1 }),
+      ]);
 
-      await exportService.exportTransactions('2026-04-01', '2026-04-30', 'USD');
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
 
-      const aoaArg = vi.mocked(xlsxModule.utils.aoa_to_sheet).mock.calls[0][0] as unknown[][];
-      const dataRows = aoaArg.slice(1);
-      expect(dataRows).toHaveLength(1);
-      expect(dataRows[0]).toContain(50);
-      expect(dataRows[0]).not.toContain(200);
+      const sheetData = await getSheetData();
+      // row index 1 (after header), col index 2 = income, col index 3 = expense
+      expect(sheetData[1][2]).toBe(10.5);  // 1050 / 100
+      expect(sheetData[1][3]).toBe('');    // expense col is empty for INCOME
     });
 
-    it('produces zero data rows when all transactions are trashed', async () => {
-      setupDomMocks();
-      dbState.transactions = [
-        makeTx({ id: 1, isTrashed: true }),
-        makeTx({ id: 2, isTrashed: true }),
-      ];
-      dbState.accounts = [makeAccount()];
-      dbState.categories = [makeCategory()];
+    it('writes expense amount as amountMainCurrency / 100', async () => {
+      mockTxQuery.sortBy.mockResolvedValue([
+        makeTx({ type: 'EXPENSE', amountMainCurrency: 2000, accountId: 1, categoryId: 1 }),
+      ]);
 
-      await exportService.exportTransactions('2026-04-01', '2026-04-30', 'USD');
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
 
-      const aoaArg = vi.mocked(xlsxModule.utils.aoa_to_sheet).mock.calls[0][0] as unknown[][];
-      expect(aoaArg.slice(1)).toHaveLength(0);
-    });
-  });
-
-  describe('transaction type coverage', () => {
-    it('includes both EXPENSE and INCOME rows', async () => {
-      setupDomMocks();
-      dbState.transactions = [
-        makeTx({ id: 1, type: 'EXPENSE', amountMainCurrency: 100 }),
-        makeTx({ id: 2, type: 'INCOME', amountMainCurrency: 200 }),
-      ];
-      dbState.accounts = [makeAccount({ id: 1 })];
-      dbState.categories = [makeCategory({ id: 1 })];
-
-      await exportService.exportTransactions('2026-04-01', '2026-04-30', 'USD');
-
-      const aoaArg = vi.mocked(xlsxModule.utils.aoa_to_sheet).mock.calls[0][0] as unknown[][];
-      expect(aoaArg.slice(1)).toHaveLength(2);
+      const sheetData = await getSheetData();
+      expect(sheetData[1][3]).toBe(20);   // 2000 / 100
+      expect(sheetData[1][2]).toBe('');   // income col is empty for EXPENSE
     });
 
-    it('places EXPENSE amount in column index 3 and leaves income column (index 2) empty', async () => {
-      setupDomMocks();
-      dbState.transactions = [makeTx({ id: 1, type: 'EXPENSE', amountMainCurrency: 75 })];
-      dbState.accounts = [makeAccount({ id: 1 })];
-      dbState.categories = [makeCategory({ id: 1 })];
-
-      await exportService.exportTransactions('2026-04-01', '2026-04-30', 'USD');
-
-      const aoaArg = vi.mocked(xlsxModule.utils.aoa_to_sheet).mock.calls[0][0] as unknown[][];
-      const row = aoaArg[1] as unknown[];
-      expect(row[2]).toBe('');
-      expect(row[3]).toBe(75);
-    });
-
-    it('places INCOME amount in column index 2 and leaves expense column (index 3) empty', async () => {
-      setupDomMocks();
-      dbState.transactions = [makeTx({ id: 1, type: 'INCOME', amountMainCurrency: 300 })];
-      dbState.accounts = [makeAccount({ id: 1 })];
-      dbState.categories = [makeCategory({ id: 1 })];
-
-      await exportService.exportTransactions('2026-04-01', '2026-04-30', 'USD');
-
-      const aoaArg = vi.mocked(xlsxModule.utils.aoa_to_sheet).mock.calls[0][0] as unknown[][];
-      const row = aoaArg[1] as unknown[];
-      expect(row[2]).toBe(300);
-      expect(row[3]).toBe('');
-    });
-  });
-
-  describe('transfer deduplication', () => {
-    it('emits exactly two rows for a transfer pair (not four)', async () => {
-      setupDomMocks();
-      const groupId = 'transfer-group-uuid-001';
-      dbState.transactions = [
+    it('writes transfer OUT/IN amounts as amountMainCurrency / 100', async () => {
+      const groupId = 'transfer-group-uuid';
+      mockTxQuery.sortBy.mockResolvedValue([
         makeTx({
           id: 10,
           type: 'TRANSFER',
           transferGroupId: groupId,
           transferDirection: 'OUT',
+          amountMainCurrency: 5000,
           accountId: 1,
-          amountMainCurrency: 500,
+          categoryId: null,
         }),
         makeTx({
           id: 11,
           type: 'TRANSFER',
           transferGroupId: groupId,
           transferDirection: 'IN',
+          amountMainCurrency: 7500,
           accountId: 2,
-          amountMainCurrency: 500,
+          categoryId: null,
         }),
-      ];
-      dbState.accounts = [
-        makeAccount({ id: 1, name: 'Wallet' }),
-        makeAccount({ id: 2, name: 'Savings' }),
-      ];
+      ]);
+
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
+
+      const sheetData = await getSheetData();
+      // Row 1: OUT leg → expense col = 5000 / 100 = 50
+      // Row 2: IN leg  → income col = 7500 / 100 = 75
+      expect(sheetData[1][3]).toBe(50);   // OUT: expense col
+      expect(sheetData[1][2]).toBe('');   // OUT: income col empty
+      expect(sheetData[2][2]).toBe(75);   // IN: 7500 / 100
+      expect(sheetData[2][3]).toBe('');   // IN: expense col empty
+    });
+
+    it('amountMainCurrency=1 → spreadsheet value 0.01 (integer minor unit boundary)', async () => {
+      mockTxQuery.sortBy.mockResolvedValue([
+        makeTx({ type: 'INCOME', amountMainCurrency: 1 }),
+      ]);
+
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
+
+      const sheetData = await getSheetData();
+      expect(sheetData[1][2]).toBe(0.01);
+    });
+
+    it('amountMainCurrency=100000 → spreadsheet value 1000 (large integer)', async () => {
+      mockTxQuery.sortBy.mockResolvedValue([
+        makeTx({ type: 'EXPENSE', amountMainCurrency: 100000 }),
+      ]);
+
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
+
+      const sheetData = await getSheetData();
+      expect(sheetData[1][3]).toBe(1000);
+    });
+  });
+
+  describe('trashed transaction filtering', () => {
+    it('excludes isTrashed transactions from XLSX output', async () => {
+      mockTxQuery.sortBy.mockResolvedValue([
+        makeTx({ id: 1, amountMainCurrency: 5000, isTrashed: false }),
+        makeTx({ id: 2, amountMainCurrency: 20000, isTrashed: true }),
+      ]);
 
       await exportService.exportTransactions('2026-04-01', '2026-04-30', 'USD');
 
-      const aoaArg = vi.mocked(xlsxModule.utils.aoa_to_sheet).mock.calls[0][0] as unknown[][];
-      expect(aoaArg.slice(1)).toHaveLength(2);
+      const sheetData = await getSheetData();
+      const dataRows = sheetData.slice(1);
+      expect(dataRows).toHaveLength(1);
+      expect(dataRows[0]).toContain(50);    // 5000 / 100
+      expect(dataRows[0]).not.toContain(200); // 20000 / 100 should not appear
     });
 
-    it('OUT row uses expense column; IN row uses income column', async () => {
-      setupDomMocks();
-      const groupId = 'transfer-group-uuid-002';
-      dbState.transactions = [
+    it('produces zero data rows when all transactions are trashed', async () => {
+      mockTxQuery.sortBy.mockResolvedValue([
+        makeTx({ id: 1, isTrashed: true }),
+        makeTx({ id: 2, isTrashed: true }),
+      ]);
+
+      await exportService.exportTransactions('2026-04-01', '2026-04-30', 'USD');
+
+      const sheetData = await getSheetData();
+      expect(sheetData.slice(1)).toHaveLength(0);
+    });
+  });
+
+  describe('transfer deduplication', () => {
+    it('emits exactly two rows for a transfer pair (not four)', async () => {
+      const groupId = 'dedup-group-uuid';
+      mockTxQuery.sortBy.mockResolvedValue([
         makeTx({
           id: 20,
           type: 'TRANSFER',
           transferGroupId: groupId,
           transferDirection: 'OUT',
+          amountMainCurrency: 3000,
           accountId: 1,
-          amountMainCurrency: 250,
+          categoryId: null,
         }),
         makeTx({
           id: 21,
           type: 'TRANSFER',
           transferGroupId: groupId,
           transferDirection: 'IN',
+          amountMainCurrency: 3000,
           accountId: 2,
-          amountMainCurrency: 250,
+          categoryId: null,
         }),
-      ];
-      dbState.accounts = [
-        makeAccount({ id: 1, name: 'Wallet' }),
-        makeAccount({ id: 2, name: 'Savings' }),
-      ];
+      ]);
 
-      await exportService.exportTransactions('2026-04-01', '2026-04-30', 'USD');
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
 
-      const aoaArg = vi.mocked(xlsxModule.utils.aoa_to_sheet).mock.calls[0][0] as unknown[][];
-      const rows = aoaArg.slice(1) as unknown[][];
-      // Find OUT row: has debit amount (index 3), income column (index 2) empty
-      const outRow = rows.find(r => typeof r[3] === 'number' && r[3] > 0 && (!r[2] || r[2] === ''));
-      // Find IN row: has credit amount (index 2), expense column (index 3) empty
-      const inRow = rows.find(r => typeof r[2] === 'number' && r[2] > 0 && (!r[3] || r[3] === ''));
-      expect(outRow).toBeDefined();
-      expect(inRow).toBeDefined();
-      // OUT leg: income empty, expense has amount
-      expect(outRow![2]).toBe('');
-      expect(outRow![3]).toBe(250);
-      // IN leg: income has amount, expense empty
-      expect(inRow![2]).toBe(250);
-      expect(inRow![3]).toBe('');
+      const sheetData = await getSheetData();
+      // header + 2 data rows (OUT + IN), not 4
+      expect(sheetData).toHaveLength(3);
     });
   });
 
   describe('date range filtering', () => {
     it('queries Dexie with the provided start and end date strings (inclusive)', async () => {
-      setupDomMocks();
       await exportService.exportTransactions('2026-03-01', '2026-03-31', 'EUR');
 
-      expect(mockWhere).toHaveBeenCalledWith('date');
-      expect(mockBetween).toHaveBeenCalledWith('2026-03-01', '2026-03-31', true, true);
+      expect(vi.mocked(db.transactions.where)).toHaveBeenCalledWith('date');
+      expect(mockTxQuery.between).toHaveBeenCalledWith('2026-03-01', '2026-03-31', true, true);
     });
   });
 
   describe('browser download trigger', () => {
     it('creates an anchor element and calls click() to initiate download', async () => {
-      const { clickMock } = setupDomMocks();
-      dbState.transactions = [makeTx({ id: 1 })];
-      dbState.accounts = [makeAccount({ id: 1 })];
-      dbState.categories = [makeCategory({ id: 1 })];
+      mockTxQuery.sortBy.mockResolvedValue([makeTx({ id: 1 })]);
 
       await exportService.exportTransactions('2026-04-01', '2026-04-30', 'USD');
 
       expect(document.createElement).toHaveBeenCalledWith('a');
       expect(URL.createObjectURL).toHaveBeenCalled();
-      expect(clickMock).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(document.createElement as any).mock.results[0].value.click)
+        .toHaveBeenCalledTimes(1);
     });
 
     it('sets the correct download filename', async () => {
       const clickMock = vi.fn();
       const anchor = { href: '', download: '', click: clickMock } as unknown as HTMLAnchorElement;
       vi.spyOn(document, 'createElement').mockReturnValue(anchor);
-      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake');
-      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
 
-      dbState.transactions = [makeTx({ id: 1 })];
-      dbState.accounts = [makeAccount({ id: 1 })];
-      dbState.categories = [makeCategory({ id: 1 })];
+      mockTxQuery.sortBy.mockResolvedValue([makeTx({ id: 1 })]);
 
       await exportService.exportTransactions('2026-04-01', '2026-04-30', 'USD');
 
@@ -338,27 +280,114 @@ describe('exportService.exportTransactions', () => {
     });
   });
 
-  describe('error handling', () => {
-    it('re-throws errors so callers can handle them', async () => {
-      mockWhere.mockImplementationOnce(() => {
-        throw new Error('DB connection lost');
-      });
+  describe('formula injection sanitization', () => {
+    it('sanitizes = prefix injection strings in note field', async () => {
+      mockTxQuery.sortBy.mockResolvedValue([
+        makeTx({ type: 'EXPENSE', note: '=SUM(A1)', amountMainCurrency: 1000 }),
+      ]);
 
-      await expect(
-        exportService.exportTransactions('2026-04-01', '2026-04-30', 'USD'),
-      ).rejects.toThrow('DB connection lost');
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
+
+      const sheetData = await getSheetData();
+      // col index 1 = note
+      expect(sheetData[1][1]).toBe("'=SUM(A1)");
+    });
+
+    it('sanitizes + prefix injection strings', async () => {
+      mockTxQuery.sortBy.mockResolvedValue([
+        makeTx({ type: 'EXPENSE', note: '+CMD', amountMainCurrency: 500 }),
+      ]);
+
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
+
+      const sheetData = await getSheetData();
+      expect(sheetData[1][1]).toBe("'+CMD");
+    });
+
+    it('sanitizes - prefix injection strings', async () => {
+      mockTxQuery.sortBy.mockResolvedValue([
+        makeTx({ type: 'EXPENSE', note: '-1+2', amountMainCurrency: 500 }),
+      ]);
+
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
+
+      const sheetData = await getSheetData();
+      expect(sheetData[1][1]).toBe("'-1+2");
+    });
+  });
+
+  describe('date formatting', () => {
+    it('formats dates as DD.MM.YYYY', async () => {
+      mockTxQuery.sortBy.mockResolvedValue([
+        makeTx({ type: 'EXPENSE', date: '2026-01-15', amountMainCurrency: 1000 }),
+      ]);
+
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
+
+      const sheetData = await getSheetData();
+      // col index 0 = date
+      expect(sheetData[1][0]).toBe('15.01.2026');
     });
   });
 
   describe('header row', () => {
     it('includes the main currency in income and expense column headers', async () => {
-      setupDomMocks();
       await exportService.exportTransactions('2026-04-01', '2026-04-30', 'JPY');
 
-      const aoaArg = vi.mocked(xlsxModule.utils.aoa_to_sheet).mock.calls[0][0] as unknown[][];
-      const header = aoaArg[0] as string[];
+      const sheetData = await getSheetData();
+      const header = sheetData[0] as string[];
       expect(header).toContain('Income (JPY)');
       expect(header).toContain('Expense (JPY)');
+    });
+
+    it('includes all six columns in the correct order', async () => {
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'EUR');
+
+      const sheetData = await getSheetData();
+      expect(sheetData[0]).toEqual([
+        'Date (dd.mm.yyyy)',
+        'Note',
+        'Income (EUR)',
+        'Expense (EUR)',
+        'Category',
+        'Account',
+      ]);
+    });
+  });
+
+  describe('name resolution', () => {
+    it('resolves account name in the account column', async () => {
+      mockTxQuery.sortBy.mockResolvedValue([
+        makeTx({ type: 'EXPENSE', accountId: 2, amountMainCurrency: 500 }),
+      ]);
+
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
+
+      const sheetData = await getSheetData();
+      // col index 5 = account
+      expect(sheetData[1][5]).toBe('Savings');
+    });
+
+    it('resolves category name in the category column', async () => {
+      mockTxQuery.sortBy.mockResolvedValue([
+        makeTx({ type: 'EXPENSE', categoryId: 1, amountMainCurrency: 500 }),
+      ]);
+
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
+
+      const sheetData = await getSheetData();
+      // col index 4 = category
+      expect(sheetData[1][4]).toBe('Food');
+    });
+  });
+
+  describe('error handling', () => {
+    it('re-throws on DB error', async () => {
+      mockTxQuery.sortBy.mockRejectedValue(new Error('DB read failed'));
+
+      await expect(
+        exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD'),
+      ).rejects.toThrow('DB read failed');
     });
   });
 });

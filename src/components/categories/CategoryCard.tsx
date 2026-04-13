@@ -140,14 +140,14 @@ export default function CategoryCard({
           }}
         >
           <span style={{ color: 'var(--color-text-secondary)' }}>
-            Budget: {budget !== null ? budget.toFixed(2) : '—'}
+            Budget: {budget !== null ? (budget / 100).toFixed(2) : '—'}
           </span>
           <span
             style={{
               color: isOverBudget ? 'var(--color-expense)' : 'var(--color-text)',
             }}
           >
-            Spent: {spent.toFixed(2)}
+            Spent: {(spent / 100).toFixed(2)}
           </span>
         </div>
       </div>

@@ -50,22 +50,22 @@ describe("Numpad", () => {
     expect(onChange).toHaveBeenCalledWith("10");
   });
 
-  it("pressing save with value '100' calls onSave(100)", () => {
+  it("pressing save with value '100' calls onSave(10000)", () => {
     renderNumpad("100");
     fireEvent.click(screen.getByRole("button", { name: "save" }));
-    expect(onSave).toHaveBeenCalledWith(100);
+    expect(onSave).toHaveBeenCalledWith(10000);
   });
 
-  it("trailing operator is stripped: value '100+' → onSave(100)", () => {
+  it("trailing operator is stripped: value '100+' → onSave(10000)", () => {
     renderNumpad("100+");
     fireEvent.click(screen.getByRole("button", { name: "save" }));
-    expect(onSave).toHaveBeenCalledWith(100);
+    expect(onSave).toHaveBeenCalledWith(10000);
   });
 
-  it("PEMDAS: value '10×5+2' → onSave(52)", () => {
+  it("PEMDAS: value '10×5+2' → onSave(5200)", () => {
     renderNumpad("10×5+2");
     fireEvent.click(screen.getByRole("button", { name: "save" }));
-    expect(onSave).toHaveBeenCalledWith(52);
+    expect(onSave).toHaveBeenCalledWith(5200);
   });
 
   it("pressing save with empty value calls onSave(0) to allow zero-balance accounts", () => {

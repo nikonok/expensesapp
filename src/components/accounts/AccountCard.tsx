@@ -186,7 +186,7 @@ export default function AccountCard({ account, onPress }: AccountCardProps) {
               currency: account.currency,
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
-            }).format(Math.abs(account.balance))}
+            }).format(Math.abs(account.balance) / 100)}
           </span>
         ) : (
           <AmountDisplay

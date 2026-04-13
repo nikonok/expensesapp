@@ -242,7 +242,7 @@ export const exchangeRateService = {
 
           await db.transactions.update(tx.id!, {
             exchangeRate: newRate,
-            amountMainCurrency: tx.amount * newRate,
+            amountMainCurrency: Math.round(tx.amount * newRate),
           });
 
           done++;

@@ -35,4 +35,10 @@ db.version(2).stores({
 
 db.version(3).stores({}); // added debtOriginalAmount to Account (non-indexed field, no schema change needed)
 
+db.version(4).stores({}).upgrade(async (trans) => {
+  await trans.table('accounts').clear();
+  await trans.table('transactions').clear();
+  await trans.table('budgets').clear();
+});
+
 export { db };

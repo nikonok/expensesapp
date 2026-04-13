@@ -79,7 +79,7 @@ describe("AccountDetail — adjust balance numpad seeding", () => {
   }
 
   it("seeds numpad with current account balance when Adjust Balance is clicked", () => {
-    renderDetail(makeAccount({ balance: 1500 }));
+    renderDetail(makeAccount({ balance: 150000 }));
     act(() => {
       fireEvent.click(screen.getByText("Adjust Balance"));
     });
@@ -87,7 +87,7 @@ describe("AccountDetail — adjust balance numpad seeding", () => {
   });
 
   it("uses the absolute value for a negative balance (debt account)", () => {
-    renderDetail(makeAccount({ type: "DEBT", balance: -3000 }));
+    renderDetail(makeAccount({ type: "DEBT", balance: -300000 }));
     act(() => {
       fireEvent.click(screen.getByText("Adjust Balance"));
     });
