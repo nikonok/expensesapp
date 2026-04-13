@@ -10,7 +10,7 @@ interface CurrencyGroup {
   debts: number;
 }
 
-function cellFontSize(str: string): string {
+export function cellFontSize(str: string): string {
   if (str.length > 13) return 'var(--text-caption)';
   if (str.length > 10) return 'var(--text-amount-sm)';
   return 'var(--text-body)';

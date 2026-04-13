@@ -37,6 +37,16 @@ export function dynamicFontSize(str: string, maxSize: number, minSize: number): 
   return Math.max(minSize, Math.min(maxSize, computed));
 }
 
+export function computeTextPositions(primaryFontSize: number, secondaryFontSize: number): { primaryY: number; secondaryY: number } {
+  const lineHeightRatio = 1.2;
+  const primaryLineHeight = primaryFontSize * lineHeightRatio;
+  const secondaryLineHeight = secondaryFontSize * lineHeightRatio;
+  const gap = 4;
+  const primaryY = CY - gap / 2 - primaryLineHeight / 2;
+  const secondaryY = CY + gap / 2 + secondaryLineHeight / 2;
+  return { primaryY, secondaryY };
+}
+
 export default function DonutChart({ slices, totalExpense, totalIncome, categoriesViewType }: DonutChartProps) {
   const toggleCategoriesViewType = useUIStore((s) => s.toggleCategoriesViewType);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);

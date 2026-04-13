@@ -23,7 +23,7 @@ import { useUIStore } from '../../stores/ui-store';
 import { useSettingsStore } from '../../stores/settings-store';
 import { useToast } from '../shared/Toast';
 import type { Transaction, Account, Category } from '../../db/models';
-import { isExpenseForReporting } from '../../utils/transaction-utils';
+import { getDayTotals } from '../../utils/transaction-utils';
 import { revertTransaction, revertTransfer } from '../../services/balance.service';
 import { db } from '../../db/database';
 import PeriodFilter from '../shared/PeriodFilter';
@@ -143,17 +143,6 @@ export default function TransactionList() {
       txById,
     };
   }, [transactions, transactionNoteFilter, transactionCategoryFilter, transactionAccountFilter]);
-
-  // Compute day totals (income/expense) per day
-  function getDayTotals(txs: Transaction[]): { income: number; expense: number } {
-    let income = 0;
-    let expense = 0;
-    for (const t of txs) {
-      if (t.type === 'INCOME') income += t.amountMainCurrency;
-      else if (isExpenseForReporting(t)) expense += t.amountMainCurrency;
-    }
-    return { income, expense };
-  }
 
   // Find the partner side of a transfer
   function getTransferToAccount(tx: Transaction): Account | undefined {
