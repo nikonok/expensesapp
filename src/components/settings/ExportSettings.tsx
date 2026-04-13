@@ -1,12 +1,17 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getLocalDateString } from '../../utils/date-utils';
+import { format } from 'date-fns';
+import { getLocalDateString, parsePeriodFilter } from '../../utils/date-utils';
 import PeriodFilterComponent from '../shared/PeriodFilter';
-import { ComingSoonStub } from '../shared/ComingSoonStub';
+import { useSettingsStore } from '../../stores/settings-store';
+import { exportService } from '../../services/export.service';
+import { useToast } from '../shared/Toast';
 import type { PeriodFilter } from '../../types';
 
 export function ExportSettings() {
   const { t } = useTranslation();
+  const { show } = useToast();
+  const mainCurrency = useSettingsStore((s) => s.mainCurrency);
   const today = getLocalDateString();
 
   const [period, setPeriod] = useState<PeriodFilter>({
@@ -14,6 +19,22 @@ export function ExportSettings() {
     startDate: today,
     endDate: today,
   });
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const { start, end } = parsePeriodFilter(period);
+      const startDate = format(start, 'yyyy-MM-dd');
+      const endDate = format(end, 'yyyy-MM-dd');
+      await exportService.exportTransactions(startDate, endDate, mainCurrency);
+      show(t('settings.export.complete'), 'success');
+    } catch {
+      show(t('errors.generic'), 'error');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <div
@@ -38,24 +59,25 @@ export function ExportSettings() {
 
       <PeriodFilterComponent value={period} onChange={setPeriod} variant="full" />
 
-      <ComingSoonStub>
-        <button
-          style={{
-            minHeight: '44px',
-            width: '100%',
-            background: 'var(--color-primary)',
-            border: 'none',
-            borderRadius: 'var(--radius-btn)',
-            color: 'var(--color-bg)',
-            fontFamily: '"DM Sans", sans-serif',
-            fontWeight: 500,
-            fontSize: 'var(--text-body)',
-            cursor: 'pointer',
-          }}
-        >
-          {t('settings.export.button')}
-        </button>
-      </ComingSoonStub>
+      <button
+        onClick={handleExport}
+        disabled={isExporting}
+        style={{
+          minHeight: '44px',
+          width: '100%',
+          background: 'var(--color-primary)',
+          border: 'none',
+          borderRadius: 'var(--radius-btn)',
+          color: 'var(--color-bg)',
+          fontFamily: '"DM Sans", sans-serif',
+          fontWeight: 500,
+          fontSize: 'var(--text-body)',
+          cursor: isExporting ? 'not-allowed' : 'pointer',
+          opacity: isExporting ? 0.6 : 1,
+        }}
+      >
+        {t('settings.export.button')}
+      </button>
     </div>
   );
 }

@@ -15,7 +15,7 @@ vi.mock("../../services/backup.service", () => ({
   importBackup: vi.fn(),
   createBackup: vi.fn(),
 }));
-vi.mock("../../services/export.service", () => ({ exportToXlsx: vi.fn() }));
+vi.mock("../../services/export.service", () => ({ exportService: { exportTransactions: vi.fn() } }));
 vi.mock("../../services/exchange-rate.service", () => ({
   exchangeRateService: { fetchRate: vi.fn() },
 }));

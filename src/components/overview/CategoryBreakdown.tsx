@@ -20,7 +20,7 @@ interface BreakdownRow {
 }
 
 export default function CategoryBreakdown({ transactions, currency }: CategoryBreakdownProps) {
-  const categories = useCategories('EXPENSE');
+  const categories = useCategories('EXPENSE', true); // include trashed so archived categories still show in breakdown
   const accounts = useAccounts(true); // include trashed so old debt payments still resolve
 
   const { rows, totalsMap, totalSpend } = useMemo(() => {
@@ -80,7 +80,11 @@ export default function CategoryBreakdown({ transactions, currency }: CategoryBr
       .filter((r) => r.amount > 0)
       .sort((a, b) => b.amount - a.amount);
     const withoutSpend = categoryRows // zero-spend account rows are not shown
-      .filter((r) => r.amount === 0)
+      .filter((r) => {
+        if (r.amount > 0) return false;
+        const cat = categories.find((c) => `cat-${c.id}` === r.id);
+        return !cat?.isTrashed; // hide zero-spend trashed categories
+      })
       .sort((a, b) => a.name.localeCompare(b.name));
 
     const rows = [...withSpend, ...withoutSpend];
