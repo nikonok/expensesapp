@@ -35,8 +35,17 @@ const STYLE_MAP: Record<
 };
 
 export function AmountDisplay({ amount, currency, type, size }: AmountDisplayProps) {
-  const { color, textShadow, prefix, opacity } = STYLE_MAP[type];
+  const style = STYLE_MAP[type];
   const fontSize = SIZE_MAP[size];
+
+  const isNegativeNeutral = type === 'neutral' && amount < 0;
+
+  const displayColor = isNegativeNeutral ? 'var(--color-expense)' : style.color;
+  const displayTextShadow = isNegativeNeutral
+    ? STYLE_MAP.expense.textShadow
+    : style.textShadow;
+  const displayPrefix = isNegativeNeutral ? '\u2212' : style.prefix;
+  const displayOpacity = style.opacity;
 
   const formatted = new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -45,7 +54,7 @@ export function AmountDisplay({ amount, currency, type, size }: AmountDisplayPro
     maximumFractionDigits: 2,
   }).format(Math.abs(amount));
 
-  const typeLabel = type === 'income' ? 'income' : type === 'expense' ? 'expense' : type === 'transfer' ? 'transfer' : undefined;
+  const typeLabel = type === 'income' ? 'income' : type === 'expense' ? 'expense' : type === 'transfer' ? 'transfer' : isNegativeNeutral ? 'negative' : undefined;
   const accessibleLabel = typeLabel ? `${typeLabel} ${formatted}` : formatted;
 
   return (
@@ -55,17 +64,17 @@ export function AmountDisplay({ amount, currency, type, size }: AmountDisplayPro
         fontFamily: '"JetBrains Mono", monospace',
         fontWeight: 600,
         fontSize,
-        color,
-        textShadow,
-        opacity,
+        color: displayColor,
+        textShadow: displayTextShadow,
+        opacity: displayOpacity,
         display: 'inline-flex',
         alignItems: 'baseline',
         gap: '0.1em',
       }}
     >
-      {prefix && (
+      {displayPrefix && (
         <span aria-hidden="true" style={{ fontWeight: 500 }}>
-          {prefix}
+          {displayPrefix}
         </span>
       )}
       <span aria-hidden="true">{formatted}</span>

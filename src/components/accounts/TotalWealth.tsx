@@ -162,11 +162,11 @@ export default function TotalWealth() {
               fontFamily: '"JetBrains Mono", monospace',
               fontWeight: 500,
               fontSize: 'var(--text-body)',
-              color: g.assets > 0 ? 'var(--color-income)' : 'var(--color-text-secondary)',
+              color: g.assets < 0 ? 'var(--color-expense)' : g.assets > 0 ? 'var(--color-income)' : 'var(--color-text-secondary)',
               textAlign: 'right',
             }}
           >
-            {formatAmount(g.assets, g.currency)}
+            {g.assets < 0 ? '\u2212' : ''}{formatAmount(g.assets, g.currency)}
           </span>
           <span
             style={{
@@ -208,11 +208,11 @@ export default function TotalWealth() {
               fontFamily: '"JetBrains Mono", monospace',
               fontWeight: 600,
               fontSize: 'var(--text-body)',
-              color: 'var(--color-income)',
+              color: grandAssets < 0 ? 'var(--color-expense)' : grandAssets > 0 ? 'var(--color-income)' : 'var(--color-text-secondary)',
               textAlign: 'right',
             }}
           >
-            {formatAmount(grandAssets, mainCurrency)}
+            {grandAssets < 0 ? '\u2212' : ''}{formatAmount(grandAssets, mainCurrency)}
           </span>
           <span
             style={{
@@ -223,7 +223,7 @@ export default function TotalWealth() {
               textAlign: 'right',
             }}
           >
-            {netWorth != null ? formatAmount(netWorth, mainCurrency) : '…'}
+            {netWorth != null ? (netWorth < 0 ? '\u2212' : '') + formatAmount(netWorth, mainCurrency) : '…'}
           </span>
         </div>
       )}

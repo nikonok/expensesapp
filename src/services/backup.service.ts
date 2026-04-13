@@ -1,5 +1,6 @@
 import { db } from '../db/database';
 import type { Backup } from '../db/models';
+import { accountSchema, categorySchema, transactionSchema, budgetSchema } from '../utils/validation';
 
 interface BackupJSON {
   version: number;
@@ -28,7 +29,7 @@ class BackupService {
     return required.every(k => Array.isArray(tables[k]));
   }
 
-  async createBackup(isAutomatic = false): Promise<void> {
+  private async _buildSnapshot(): Promise<BackupJSON> {
     const [accounts, categories, transactions, budgets, exchangeRates, settings] =
       await Promise.all([
         db.accounts.toArray(),
@@ -38,20 +39,16 @@ class BackupService {
         db.exchangeRates.toArray(),
         db.settings.toArray(),
       ]);
-
-    const snapshot: BackupJSON = {
+    return {
       version: 1,
       exportedAt: new Date().toISOString(),
       appVersion: '1.0.0',
-      tables: {
-        accounts,
-        categories,
-        transactions,
-        budgets,
-        exchangeRates,
-        settings,
-      },
+      tables: { accounts, categories, transactions, budgets, exchangeRates, settings },
     };
+  }
+
+  async createBackup(isAutomatic = false): Promise<void> {
+    const snapshot = await this._buildSnapshot();
 
     const record: Omit<Backup, 'id'> = {
       data: JSON.stringify(snapshot),
@@ -59,7 +56,16 @@ class BackupService {
       isAutomatic,
     };
 
-    await db.backups.add(record as Backup);
+    await db.transaction('rw', db.backups, async () => {
+      await db.backups.add(record as Backup);
+
+      // Prune: keep only the most recent backup
+      const allBackups = await db.backups.orderBy('createdAt').toArray();
+      if (allBackups.length > 1) {
+        const idsToDelete = allBackups.slice(0, allBackups.length - 1).map(b => b.id!);
+        await db.backups.bulkDelete(idsToDelete);
+      }
+    });
   }
 
   async listBackups(): Promise<Backup[]> {
@@ -83,30 +89,7 @@ class BackupService {
   }
 
   async exportToFile(): Promise<void> {
-    const [accounts, categories, transactions, budgets, exchangeRates, settings] =
-      await Promise.all([
-        db.accounts.toArray(),
-        db.categories.toArray(),
-        db.transactions.toArray(),
-        db.budgets.toArray(),
-        db.exchangeRates.toArray(),
-        db.settings.toArray(),
-      ]);
-
-    const snapshot: BackupJSON = {
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      appVersion: '1.0.0',
-      tables: {
-        accounts,
-        categories,
-        transactions,
-        budgets,
-        exchangeRates,
-        settings,
-      },
-    };
-
+    const snapshot = await this._buildSnapshot();
     const jsonStr = JSON.stringify(snapshot, null, 2);
     const blob = new Blob([jsonStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -149,14 +132,13 @@ class BackupService {
 
     if (intervalHours !== null) {
       this._autoBackupIntervalId = setInterval(
-        () => void this.createBackup(true),
+        () =>
+          void (async () => {
+            await this.createBackup(true);
+            await db.settings.put({ key: 'lastAutoBackupAt', value: new Date().toISOString() });
+          })(),
         intervalHours * 3_600_000,
       );
-      window.addEventListener('beforeunload', () => {
-        if (this._autoBackupIntervalId !== null) {
-          clearInterval(this._autoBackupIntervalId);
-        }
-      }, { once: true });
     }
   }
 
@@ -190,6 +172,52 @@ class BackupService {
   }
 
   async _restoreData(data: BackupJSON): Promise<void> {
+    const validAccounts = (data.tables.accounts as unknown[]).filter(
+      row => accountSchema.safeParse(row).success,
+    );
+    if (data.tables.accounts.length > 0 && validAccounts.length === 0) {
+      throw new Error('Invalid backup file: accounts table failed validation');
+    }
+
+    const validCategories = (data.tables.categories as unknown[]).filter(
+      row => categorySchema.safeParse(row).success,
+    );
+    if (data.tables.categories.length > 0 && validCategories.length === 0) {
+      throw new Error('Invalid backup file: categories table failed validation');
+    }
+
+    const validTransactions = (data.tables.transactions as unknown[]).filter(
+      row => transactionSchema.safeParse(row).success,
+    );
+    if (data.tables.transactions.length > 0 && validTransactions.length === 0) {
+      throw new Error('Invalid backup file: transactions table failed validation');
+    }
+
+    const validBudgets = (data.tables.budgets as unknown[]).filter(
+      row => budgetSchema.safeParse(row).success,
+    );
+    if (data.tables.budgets.length > 0 && validBudgets.length === 0) {
+      throw new Error('Invalid backup file: budgets table failed validation');
+    }
+
+    const validExchangeRates = (data.tables.exchangeRates as unknown[]).filter(row => {
+      if (typeof row !== 'object' || row === null) return false;
+      const r = row as Record<string, unknown>;
+      return r.baseCurrency != null && r.rates != null;
+    });
+    if (data.tables.exchangeRates.length > 0 && validExchangeRates.length === 0) {
+      throw new Error('Invalid backup file: exchangeRates table failed validation');
+    }
+
+    const validSettings = (data.tables.settings as unknown[]).filter(row => {
+      if (typeof row !== 'object' || row === null) return false;
+      const r = row as Record<string, unknown>;
+      return r.key != null && r.value != null;
+    });
+    if (data.tables.settings.length > 0 && validSettings.length === 0) {
+      throw new Error('Invalid backup file: settings table failed validation');
+    }
+
     await db.transaction(
       'rw',
       [
@@ -208,18 +236,18 @@ class BackupService {
         await db.exchangeRates.clear();
         await db.settings.clear();
 
-        if (data.tables.accounts?.length)
-          await db.accounts.bulkAdd(data.tables.accounts as Parameters<typeof db.accounts.bulkAdd>[0]);
-        if (data.tables.categories?.length)
-          await db.categories.bulkAdd(data.tables.categories as Parameters<typeof db.categories.bulkAdd>[0]);
-        if (data.tables.transactions?.length)
-          await db.transactions.bulkAdd(data.tables.transactions as Parameters<typeof db.transactions.bulkAdd>[0]);
-        if (data.tables.budgets?.length)
-          await db.budgets.bulkAdd(data.tables.budgets as Parameters<typeof db.budgets.bulkAdd>[0]);
-        if (data.tables.exchangeRates?.length)
-          await db.exchangeRates.bulkAdd(data.tables.exchangeRates as Parameters<typeof db.exchangeRates.bulkAdd>[0]);
-        if (data.tables.settings?.length)
-          await db.settings.bulkAdd(data.tables.settings as Parameters<typeof db.settings.bulkAdd>[0]);
+        if (validAccounts.length)
+          await db.accounts.bulkAdd(validAccounts as Parameters<typeof db.accounts.bulkAdd>[0]);
+        if (validCategories.length)
+          await db.categories.bulkAdd(validCategories as Parameters<typeof db.categories.bulkAdd>[0]);
+        if (validTransactions.length)
+          await db.transactions.bulkAdd(validTransactions as Parameters<typeof db.transactions.bulkAdd>[0]);
+        if (validBudgets.length)
+          await db.budgets.bulkAdd(validBudgets as Parameters<typeof db.budgets.bulkAdd>[0]);
+        if (validExchangeRates.length)
+          await db.exchangeRates.bulkAdd(validExchangeRates as Parameters<typeof db.exchangeRates.bulkAdd>[0]);
+        if (validSettings.length)
+          await db.settings.bulkAdd(validSettings as Parameters<typeof db.settings.bulkAdd>[0]);
       },
     );
 

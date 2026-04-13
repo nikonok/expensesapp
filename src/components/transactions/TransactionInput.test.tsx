@@ -756,9 +756,10 @@ describe("cross-currency debt payment (Bug #2)", () => {
 
     await navigateToDebtPayment(eurAccount, gbpDebt);
 
-    // The destination amount input and GBP label should be visible
-    expect(screen.getAllByRole("spinbutton").length).toBeGreaterThan(0);
+    // The destination block is shown (now a tappable div, not a native input)
     expect(screen.getByText("GBP")).toBeTruthy();
+    // no native spinbutton input (it's now a tappable div)
+    expect(screen.queryAllByRole("spinbutton")).toHaveLength(0);
   });
 
   it("showDebtMainCurrency: renders ≈ main-currency field when all 3 currencies differ", async () => {
@@ -795,9 +796,9 @@ describe("cross-currency debt payment (Bug #2)", () => {
 
     await navigateToDebtPayment(usdAccount, gbpDebt);
 
-    // Destination input shown (showDebtDestForeign=true: USD≠GBP)
-    expect(screen.getAllByRole("spinbutton").length).toBeGreaterThan(0);
+    // Destination block shown (showDebtDestForeign=true: USD≠GBP)
     expect(screen.getByText("GBP")).toBeTruthy();
+    expect(screen.queryAllByRole("spinbutton")).toHaveLength(0);
     // No ≈ field (showDebtMainCurrency=false: fromCurrency=USD=mainCurrency)
     expect(screen.queryByText("≈")).toBeNull();
   });
@@ -812,10 +813,15 @@ describe("cross-currency debt payment (Bug #2)", () => {
 
     await navigateToDebtPayment(eurAccount, gbpDebt);
 
-    // User types 75 into the destination (GBP) input
-    const destInput = screen.getAllByRole("spinbutton")[0];
+    // Tap the destination amount div to focus it (shows "0" when empty)
+    const destDiv = screen.getAllByText("0")[0];
     await act(async () => {
-      fireEvent.change(destInput, { target: { value: "75" } });
+      fireEvent.click(destDiv);
+    });
+
+    // Type 99 via the mocked Numpad (onChange → onToSecondaryAmountChange)
+    await act(async () => {
+      fireEvent.click(screen.getByText("Type 99"));
     });
 
     // Save: Numpad mock calls onSave(100) → primary amount = 100 EUR
@@ -827,8 +833,8 @@ describe("cross-currency debt payment (Bug #2)", () => {
       expect(applyTransfer).toHaveBeenCalled();
       const calls = vi.mocked(applyTransfer).mock.calls;
       const [, inTx] = calls[calls.length - 1];
-      // IN leg (debt account) must use the user-entered 75, not the exchange-rate auto-calc
-      expect(inTx.amount).toBe(75);
+      // IN leg (debt account) must use the user-entered 99, not the exchange-rate auto-calc
+      expect(inTx.amount).toBe(99);
     });
   });
 

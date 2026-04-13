@@ -32,6 +32,7 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
   const Icon = getLucideIcon(account.icon);
   const isDebt = account.type === 'DEBT';
   const isSavings = account.type === 'SAVINGS';
+  const isNegativeBalance = !isDebt && account.balance < 0;
   const hasGoal = isSavings && account.savingsGoal != null && account.savingsGoal > 0;
   const progress = hasGoal ? Math.min(1, account.balance / account.savingsGoal!) : 0;
   const hasDebtOriginalAmount = isDebt && account.debtOriginalAmount != null && account.debtOriginalAmount > 0;
@@ -200,11 +201,11 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
                   fontFamily: '"JetBrains Mono", monospace',
                   fontWeight: 600,
                   fontSize: 'var(--text-amount-md)',
-                  color: isDebt ? 'var(--color-expense)' : 'var(--color-text)',
-                  textShadow: isDebt ? '0 0 12px oklch(62% 0.28 18 / 40%)' : 'none',
+                  color: isDebt || isNegativeBalance ? 'var(--color-expense)' : 'var(--color-text)',
+                  textShadow: isDebt || isNegativeBalance ? '0 0 12px oklch(62% 0.28 18 / 40%)' : 'none',
                 }}
               >
-                {formatAmount(Math.abs(account.balance))}
+                {isNegativeBalance ? '\u2212' : ''}{formatAmount(Math.abs(account.balance))}
               </div>
             </div>
             <button

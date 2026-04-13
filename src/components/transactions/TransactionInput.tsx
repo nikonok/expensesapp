@@ -613,8 +613,8 @@ interface Step3Props {
   toSecondaryAmount: string;
   onToSecondaryAmountChange: (v: string) => void;
   toAccount2ndCurrencyDiffers: boolean;
-  focusedField: "primary" | "secondary";
-  onFocusedFieldChange: (f: "primary" | "secondary") => void;
+  focusedField: "primary" | "secondary" | "destination";
+  onFocusedFieldChange: (f: "primary" | "secondary" | "destination") => void;
   isDebtPaymentMode: boolean;
   paymentType: "regular" | "overpayment";
   onPaymentTypeChange: (t: "regular" | "overpayment") => void;
@@ -690,6 +690,8 @@ function Step3({
     fromCurrency !== mainCurrency &&
     (toAccount?.currency ?? mainCurrency) !== mainCurrency &&
     toAccount2ndCurrencyDiffers;
+  const hasMultipleAmountFields =
+    showForeignCurrency || showDebtMainCurrency || showTransferDestForeign || showDebtDestForeign;
 
   // Debt payment split preview
   const monthlyRate = isDebtPaymentMode && toAccount ? getMonthlyRate(toAccount) : null;
@@ -914,14 +916,14 @@ function Step3({
 
         {/* Amount display */}
         <div
-          onClick={showForeignCurrency ? () => onFocusedFieldChange("primary") : undefined}
+          onClick={hasMultipleAmountFields ? () => onFocusedFieldChange("primary") : undefined}
           style={{
             paddingInline: "var(--space-4)",
             paddingBottom: "var(--space-2)",
             textAlign: "right",
-            cursor: showForeignCurrency ? "pointer" : undefined,
+            cursor: hasMultipleAmountFields ? "pointer" : undefined,
             borderBottom:
-              showForeignCurrency && focusedField === "primary"
+              hasMultipleAmountFields && focusedField === "primary"
                 ? "2px solid var(--color-primary)"
                 : "2px solid transparent",
           }}
@@ -1046,15 +1048,28 @@ function Step3({
           </div>
         )}
 
-        {/* Transfer destination secondary amount */}
-        {showTransferDestForeign && (
+        {/* Transfer/debt destination secondary amount */}
+        {(showTransferDestForeign || showDebtDestForeign) && (
           <div
             style={{
               paddingInline: "var(--space-4)",
               paddingBottom: "var(--space-2)",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+            <div
+              onClick={() => onFocusedFieldChange("destination")}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-2)",
+                cursor: "pointer",
+                borderBottom:
+                  focusedField === "destination"
+                    ? "2px solid var(--color-primary)"
+                    : "2px solid transparent",
+                paddingBottom: "var(--space-1)",
+              }}
+            >
               <span
                 style={{
                   fontFamily: '"JetBrains Mono", monospace',
@@ -1065,79 +1080,23 @@ function Step3({
               >
                 {t("transactions.fields.to")}:
               </span>
-              <input
-                type="number"
-                inputMode="decimal"
-                min="0"
-                value={toSecondaryAmount}
-                onChange={(e) => onToSecondaryAmountChange(e.target.value)}
-                placeholder="0.00"
+              <div
                 style={{
                   flex: 1,
                   background: "var(--color-surface-raised)",
-                  border: "1px solid var(--color-border)",
+                  border: `1px solid ${focusedField === "destination" ? "var(--color-primary)" : "var(--color-border)"}`,
                   borderRadius: "var(--radius-input)",
                   padding: "var(--space-2) var(--space-3)",
                   fontFamily: '"JetBrains Mono", monospace',
                   fontSize: "var(--text-caption)",
-                  color: "var(--color-text)",
+                  color: toSecondaryAmount ? "var(--color-text)" : "var(--color-text-disabled)",
                   minHeight: "44px",
-                  outline: "none",
-                }}
-              />
-              <span
-                style={{
-                  fontFamily: '"JetBrains Mono", monospace',
-                  fontSize: "var(--text-caption)",
-                  color: "var(--color-text-secondary)",
-                  flexShrink: 0,
+                  display: "flex",
+                  alignItems: "center",
                 }}
               >
-                {toAccount?.currency}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Debt payment destination amount (cross-currency debt) */}
-        {showDebtDestForeign && (
-          <div
-            style={{
-              paddingInline: "var(--space-4)",
-              paddingBottom: "var(--space-2)",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <span
-                style={{
-                  fontFamily: '"JetBrains Mono", monospace',
-                  fontSize: "var(--text-caption)",
-                  color: "var(--color-text-secondary)",
-                  flexShrink: 0,
-                }}
-              >
-                {t("transactions.fields.to")}:
-              </span>
-              <input
-                type="number"
-                inputMode="decimal"
-                min="0"
-                value={toSecondaryAmount}
-                onChange={(e) => onToSecondaryAmountChange(e.target.value)}
-                placeholder="0.00"
-                style={{
-                  flex: 1,
-                  background: "var(--color-surface-raised)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: "var(--radius-input)",
-                  padding: "var(--space-2) var(--space-3)",
-                  fontFamily: '"JetBrains Mono", monospace',
-                  fontSize: "var(--text-caption)",
-                  color: "var(--color-text)",
-                  minHeight: "44px",
-                  outline: "none",
-                }}
-              />
+                {toSecondaryAmount || "0.00"}
+              </div>
               <span
                 style={{
                   fontFamily: '"JetBrains Mono", monospace',
@@ -1482,10 +1441,18 @@ function Step3({
 
         {/* Numpad */}
         <Numpad
-          value={focusedField === "secondary" ? secondaryAmount : numpadValue}
-          onChange={focusedField === "secondary" ? onSecondaryAmountChange : onNumpadChange}
+          value={
+            focusedField === "secondary" ? secondaryAmount
+            : focusedField === "destination" ? toSecondaryAmount
+            : numpadValue
+          }
+          onChange={
+            focusedField === "secondary" ? onSecondaryAmountChange
+            : focusedField === "destination" ? onToSecondaryAmountChange
+            : onNumpadChange
+          }
           onSave={(result) => {
-            if (focusedField === "secondary") {
+            if (focusedField === "secondary" || focusedField === "destination") {
               // Always save using the primary (account-currency) amount
               const primaryResult = evaluateExpression(numpadValue);
               if (primaryResult === null || primaryResult <= 0) return;
@@ -1750,7 +1717,7 @@ export default function TransactionInput() {
   const [date, setDate] = useState(getLocalDateString);
   const [secondaryAmount, setSecondaryAmount] = useState("");
   const [secondaryManual, setSecondaryManual] = useState(false);
-  const [focusedField, setFocusedField] = useState<"primary" | "secondary">("primary");
+  const [focusedField, setFocusedField] = useState<"primary" | "secondary" | "destination">("primary");
   const [toSecondaryAmount, setToSecondaryAmount] = useState("");
   const [toSecondaryManual, setToSecondaryManual] = useState(false);
   const [noRateWarning, setNoRateWarning] = useState(false);
@@ -1974,6 +1941,7 @@ export default function TransactionInput() {
   useEffect(() => {
     setToSecondaryManual(false);
     setToSecondaryAmount("");
+    setFocusedField("primary");
   }, [toAccount]);
 
   const handleSecondaryAmountChange = (v: string) => {

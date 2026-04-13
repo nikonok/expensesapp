@@ -223,7 +223,10 @@
       "scheduleOff": "Off",
       "restoreConfirm": "This will delete all current data and replace it with the backup. This cannot be undone.",
       "created": "Backup created.",
-      "restored": "Data restored."
+      "restored": "Data restored.",
+      "noBackup": "No backup found.",
+      "exported": "Backup exported.",
+      "restoreFileConfirm": "This will replace all data with the imported file. This cannot be undone."
     },
     "export": {
       "label": "Export data",
@@ -273,6 +276,10 @@
     "invalidDate": "Invalid date.",
     "sameAccount": "Source and destination must be different.",
     "quotaExceeded": "Storage full. Export your data and clear old backups.",
-    "generic": "Something went wrong. Please try again."
+    "generic": "Something went wrong. Please try again.",
+    "integrityTitle": "Database Error",
+    "integrityBody": "Your database appears to be corrupted. Restore from a backup to recover your data.",
+    "restoreFailed": "Restore failed. Please try a different backup.",
+    "invalidFile": "Invalid or corrupted backup file."
   }
 }

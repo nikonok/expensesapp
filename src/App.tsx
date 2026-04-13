@@ -1,9 +1,12 @@
-import { useEffect, useRef, lazy, Suspense } from "react";
+import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router";
 import { useSettingsStore } from "./stores/settings-store";
 import { scheduleDailyReminder, cancelDailyReminder } from "./services/notification.service";
 import { registerPeriodicSync, unregisterPeriodicSync } from "./sw-register";
 import { ToastProvider } from "./components/shared/Toast";
+import { checkDatabaseIntegrity } from "./services/integrity.service";
+import { checkAndRunAutoBackup, setAutoBackupSchedule } from "./services/backup.service";
+import { IntegrityErrorScreen } from "./components/shared/IntegrityErrorScreen";
 import TabLayout from "./components/layout/TabLayout";
 import AccountsPage from "./pages/AccountsPage";
 import CategoriesPage from "./pages/CategoriesPage";
@@ -25,20 +28,40 @@ function AppRoutes() {
     notificationEnabled,
     notificationTime,
   } = useSettingsStore();
+  const [integrityError, setIntegrityError] = useState(false);
   const coldStartPathRef = useRef(window.location.pathname);
 
   useEffect(() => {
-    load().catch((err) => {
-      if (import.meta.env.DEV) console.error("Failed to load settings:", err);
-      useSettingsStore.setState({ isLoaded: true });
-    });
+    (async () => {
+      const integrity = await checkDatabaseIntegrity();
+      if (!integrity.ok) {
+        if (import.meta.env.DEV) console.error('Database integrity check failed:', integrity.error);
+        setIntegrityError(true);
+        return;
+      }
+      try {
+        await load();
+      } catch (err) {
+        if (import.meta.env.DEV) console.error('Failed to load settings:', err);
+        useSettingsStore.setState({ isLoaded: true });
+      }
+    })();
   }, [load]);
 
   useEffect(() => {
-    const handleBackupRestored = () => navigate("/accounts", { replace: true });
+    if (!isLoaded || integrityError) return;
+    checkAndRunAutoBackup().catch((err) => {
+      if (import.meta.env.DEV) console.error('Auto-backup check failed:', err);
+    });
+    const intervalHours = useSettingsStore.getState().autoBackupIntervalHours;
+    setAutoBackupSchedule(intervalHours);
+  }, [isLoaded, integrityError]);
+
+  useEffect(() => {
+    const handleBackupRestored = () => window.location.reload();
     window.addEventListener("backup-restored", handleBackupRestored);
     return () => window.removeEventListener("backup-restored", handleBackupRestored);
-  }, [navigate]);
+  }, []);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -58,15 +81,17 @@ function AppRoutes() {
       navigate("/onboarding", { replace: true });
       return;
     }
-    // PWA cold-start fix: Android restores the last-visited URL from session
-    // history. If that URL is a full-screen transaction route, redirect to the
-    // user's configured startup tab instead.
+    // On PWA cold start, always redirect to the configured startup tab unless already on it.
     const path = coldStartPathRef.current;
-    if (path === "/transactions/new" || /^\/transactions\/[^/]+\/edit$/.test(path)) {
+    if (path && path !== `/${startupScreen}`) {
       coldStartPathRef.current = "";
       navigate(`/${startupScreen}`, { replace: true });
     }
   }, [isLoaded, hasCompletedOnboarding, navigate, startupScreen]);
+
+  if (integrityError) {
+    return <IntegrityErrorScreen />;
+  }
 
   if (!isLoaded) {
     return (

@@ -1,9 +1,15 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronRight } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settings-store';
-import { createBackup } from '../../services/backup.service';
-import { ComingSoonStub } from '../shared/ComingSoonStub';
+import {
+  createBackup,
+  listBackups,
+  restoreFromBackup,
+  exportToFile,
+  importFromFile,
+  setAutoBackupSchedule,
+} from '../../services/backup.service';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import BottomSheet from '../layout/BottomSheet';
 import { useToast } from '../shared/Toast';
@@ -23,6 +29,9 @@ export function BackupSettings() {
 
   const [intervalOpen, setIntervalOpen] = useState(false);
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
+  const [restoreFileConfirmOpen, setRestoreFileConfirmOpen] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const currentIntervalLabel =
     INTERVAL_OPTIONS.find((o) => o.value === autoBackupIntervalHours)?.label ?? 'Off';
@@ -45,6 +54,7 @@ export function BackupSettings() {
   async function handleIntervalSelect(value: number | null) {
     try {
       await update('autoBackupIntervalHours', value);
+      setAutoBackupSchedule(value);
       setIntervalOpen(false);
     } catch {
       show(t('errors.generic'), 'error');
@@ -53,7 +63,53 @@ export function BackupSettings() {
 
   async function handleRestoreConfirm() {
     setRestoreConfirmOpen(false);
-    show('Coming soon', 'coming-soon');
+    try {
+      const backups = await listBackups();
+      if (backups.length === 0) {
+        show(t('settings.backup.noBackup'), 'error');
+        return;
+      }
+      await restoreFromBackup(backups[0].id!);
+      // _restoreData() dispatches 'backup-restored' event → App.tsx calls window.location.reload()
+    } catch (err) {
+      if (import.meta.env.DEV) console.error(err);
+      show(t('errors.generic'), 'error');
+    }
+  }
+
+  async function handleExportToFile() {
+    try {
+      await exportToFile();
+      show(t('settings.backup.exported'), 'success');
+    } catch {
+      show(t('errors.generic'), 'error');
+    }
+  }
+
+  function handleRestoreFromFileClick() {
+    fileInputRef.current?.click();
+  }
+
+  function handleFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = ''; // reset so same file can be re-selected
+    setPendingFile(file);
+    setRestoreFileConfirmOpen(true);
+  }
+
+  async function handleRestoreFileConfirm() {
+    setRestoreFileConfirmOpen(false);
+    if (!pendingFile) return;
+    try {
+      await importFromFile(pendingFile);
+      // _restoreData() dispatches 'backup-restored' event → App.tsx calls window.location.reload()
+    } catch (err) {
+      if (import.meta.env.DEV) console.error(err);
+      show(t('errors.invalidFile'), 'error');
+    } finally {
+      setPendingFile(null);
+    }
   }
 
   return (
@@ -128,31 +184,34 @@ export function BackupSettings() {
         </span>
       </button>
 
-      {/* Export to file — ComingSoonStub (T21) */}
-      <ComingSoonStub>
-        <div
+      {/* Export to file */}
+      <button
+        onClick={handleExportToFile}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          minHeight: '52px',
+          width: '100%',
+          padding: '0 var(--space-4)',
+          background: 'none',
+          border: 'none',
+          borderBottom: '1px solid var(--color-border)',
+          cursor: 'pointer',
+          color: 'var(--color-text)',
+        }}
+      >
+        <span
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            minHeight: '52px',
-            padding: '0 var(--space-4)',
-            borderBottom: '1px solid var(--color-border)',
+            fontFamily: '"DM Sans", sans-serif',
+            fontWeight: 500,
+            fontSize: 'var(--text-body)',
           }}
         >
-          <span
-            style={{
-              fontFamily: '"DM Sans", sans-serif',
-              fontWeight: 500,
-              fontSize: 'var(--text-body)',
-              color: 'var(--color-text)',
-            }}
-          >
-            {t('settings.backup.export')}
-          </span>
-          <ChevronRight size={16} strokeWidth={2} style={{ color: 'var(--color-text-secondary)' }} />
-        </div>
-      </ComingSoonStub>
+          {t('settings.backup.export')}
+        </span>
+        <ChevronRight size={16} strokeWidth={2} style={{ color: 'var(--color-text-secondary)' }} />
+      </button>
 
       {/* Restore from backup */}
       <button
@@ -183,31 +242,34 @@ export function BackupSettings() {
         <ChevronRight size={16} strokeWidth={2} style={{ color: 'var(--color-text-secondary)' }} />
       </button>
 
-      {/* Restore from file — ComingSoonStub (T21) */}
-      <ComingSoonStub>
-        <div
+      {/* Restore from file */}
+      <button
+        onClick={handleRestoreFromFileClick}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          minHeight: '52px',
+          width: '100%',
+          padding: '0 var(--space-4)',
+          background: 'none',
+          border: 'none',
+          borderBottom: '1px solid var(--color-border)',
+          cursor: 'pointer',
+          color: 'var(--color-text)',
+        }}
+      >
+        <span
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            minHeight: '52px',
-            padding: '0 var(--space-4)',
-            borderBottom: '1px solid var(--color-border)',
+            fontFamily: '"DM Sans", sans-serif',
+            fontWeight: 500,
+            fontSize: 'var(--text-body)',
           }}
         >
-          <span
-            style={{
-              fontFamily: '"DM Sans", sans-serif',
-              fontWeight: 500,
-              fontSize: 'var(--text-body)',
-              color: 'var(--color-text)',
-            }}
-          >
-            {t('settings.backup.restoreFile')}
-          </span>
-          <ChevronRight size={16} strokeWidth={2} style={{ color: 'var(--color-text-secondary)' }} />
-        </div>
-      </ComingSoonStub>
+          {t('settings.backup.restoreFile')}
+        </span>
+        <ChevronRight size={16} strokeWidth={2} style={{ color: 'var(--color-text-secondary)' }} />
+      </button>
 
       {/* Interval picker sheet */}
       <BottomSheet
@@ -274,6 +336,25 @@ export function BackupSettings() {
         onConfirm={handleRestoreConfirm}
         onCancel={() => setRestoreConfirmOpen(false)}
         variant="destructive"
+      />
+
+      {/* Restore from file confirm dialog */}
+      <ConfirmDialog
+        isOpen={restoreFileConfirmOpen}
+        title={t('settings.backup.restoreFile')}
+        body={t('settings.backup.restoreFileConfirm')}
+        confirmLabel="Restore"
+        onConfirm={handleRestoreFileConfirm}
+        onCancel={() => { setRestoreFileConfirmOpen(false); setPendingFile(null); }}
+        variant="destructive"
+      />
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json"
+        style={{ display: 'none' }}
+        onChange={handleFileInputChange}
       />
     </div>
   );
