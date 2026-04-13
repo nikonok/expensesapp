@@ -197,11 +197,17 @@ export default function DonutChart({ slices, totalExpense, totalIncome, categori
           const secondaryStr = `${secondaryPrefix}${formatAmount(secondaryAmount)}`;
           const primaryFontSize = dynamicFontSize(primaryStr, 24, 14);
           const secondaryFontSize = dynamicFontSize(secondaryStr, 14, 10);
+          const lineHeightRatio = 1.2;
+          const primaryLineHeight = primaryFontSize * lineHeightRatio;
+          const secondaryLineHeight = secondaryFontSize * lineHeightRatio;
+          const gap = 4;
+          const primaryY = CY - gap / 2 - primaryLineHeight / 2;
+          const secondaryY = CY + gap / 2 + secondaryLineHeight / 2;
           return (
             <>
               <text
                 x={CX}
-                y={CY - 12}
+                y={primaryY}
                 textAnchor="middle"
                 dominantBaseline="middle"
                 fill={primaryColor}
@@ -213,7 +219,7 @@ export default function DonutChart({ slices, totalExpense, totalIncome, categori
               </text>
               <text
                 x={CX}
-                y={CY + 13}
+                y={secondaryY}
                 textAnchor="middle"
                 dominantBaseline="middle"
                 fill={secondaryColor}

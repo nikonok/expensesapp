@@ -20,6 +20,7 @@ import { useTransactions } from '../../hooks/use-transactions';
 import { useAccounts } from '../../hooks/use-accounts';
 import { useCategories } from '../../hooks/use-categories';
 import { useUIStore } from '../../stores/ui-store';
+import { useSettingsStore } from '../../stores/settings-store';
 import { useToast } from '../shared/Toast';
 import type { Transaction, Account, Category } from '../../db/models';
 import { isExpenseForReporting } from '../../utils/transaction-utils';
@@ -49,6 +50,8 @@ export default function TransactionList() {
     toggleTransactionSelection,
     clearSelection,
   } = useUIStore();
+
+  const mainCurrency = useSettingsStore((s) => s.mainCurrency);
 
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -146,15 +149,10 @@ export default function TransactionList() {
     let income = 0;
     let expense = 0;
     for (const t of txs) {
-      if (t.type === 'INCOME') income += t.amount;
-      else if (isExpenseForReporting(t)) expense += t.amount;
+      if (t.type === 'INCOME') income += t.amountMainCurrency;
+      else if (isExpenseForReporting(t)) expense += t.amountMainCurrency;
     }
     return { income, expense };
-  }
-
-  // Get the currency for a transaction's account
-  function getCurrency(tx: Transaction): string {
-    return accountMap.get(tx.accountId)?.currency ?? 'USD';
   }
 
   // Find the partner side of a transfer
@@ -227,15 +225,6 @@ export default function TransactionList() {
     }
     clearSelection();
     navigate(`/transactions/${editId}/edit`);
-  }
-
-  // The main currency for the day header — use first tx's account currency
-  function getDayCurrency(txs: Transaction[]): string {
-    for (const t of txs) {
-      const cur = getCurrency(t);
-      if (cur) return cur;
-    }
-    return 'USD';
   }
 
   // Drag sensors — distance:8 so taps still register as selection
@@ -362,7 +351,7 @@ export default function TransactionList() {
         <div style={{ paddingBottom: selectionCount > 0 ? 'calc(56px + env(safe-area-inset-bottom) + 16px)' : 'var(--space-4)' }}>
           {groupedByDate.map(({ date, txs }) => {
             const { income, expense } = getDayTotals(txs);
-            const dayCurrency = getDayCurrency(txs);
+            const dayCurrency = mainCurrency;
             const dayTxIds = txs.map((t) => t.id!);
             return (
               <div key={date} style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 200px' } as React.CSSProperties}>

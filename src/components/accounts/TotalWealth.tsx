@@ -10,6 +10,12 @@ interface CurrencyGroup {
   debts: number;
 }
 
+function cellFontSize(str: string): string {
+  if (str.length > 13) return 'var(--text-caption)';
+  if (str.length > 10) return 'var(--text-amount-sm)';
+  return 'var(--text-body)';
+}
+
 export default function TotalWealth() {
   const mainCurrency = useSettingsStore((s) => s.mainCurrency);
 
@@ -137,50 +143,54 @@ export default function TotalWealth() {
       </div>
 
       {/* Currency rows */}
-      {groups.map((g) => (
-        <div
-          key={g.currency}
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr 1fr',
-            padding: 'var(--space-2) var(--space-4)',
-            borderBottom: '1px solid var(--color-border)',
-          }}
-        >
-          <span
+      {groups.map((g) => {
+        const assetsStr = formatAmount(g.assets, g.currency);
+        const debtsStr = formatAmount(g.debts, g.currency);
+        return (
+          <div
+            key={g.currency}
             style={{
-              fontFamily: '"JetBrains Mono", monospace',
-              fontWeight: 500,
-              fontSize: 'var(--text-body)',
-              color: 'var(--color-text)',
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr 1fr',
+              padding: 'var(--space-2) var(--space-4)',
+              borderBottom: '1px solid var(--color-border)',
             }}
           >
-            {g.currency}
-          </span>
-          <span
-            style={{
-              fontFamily: '"JetBrains Mono", monospace',
-              fontWeight: 500,
-              fontSize: 'var(--text-body)',
-              color: g.assets < 0 ? 'var(--color-expense)' : g.assets > 0 ? 'var(--color-income)' : 'var(--color-text-secondary)',
-              textAlign: 'right',
-            }}
-          >
-            {g.assets < 0 ? '\u2212' : ''}{formatAmount(g.assets, g.currency)}
-          </span>
-          <span
-            style={{
-              fontFamily: '"JetBrains Mono", monospace',
-              fontWeight: 500,
-              fontSize: 'var(--text-body)',
-              color: g.debts > 0 ? 'var(--color-expense)' : 'var(--color-text-secondary)',
-              textAlign: 'right',
-            }}
-          >
-            {g.debts > 0 ? formatAmount(g.debts, g.currency) : '—'}
-          </span>
-        </div>
-      ))}
+            <span
+              style={{
+                fontFamily: '"JetBrains Mono", monospace',
+                fontWeight: 500,
+                fontSize: 'var(--text-body)',
+                color: 'var(--color-text)',
+              }}
+            >
+              {g.currency}
+            </span>
+            <span
+              style={{
+                fontFamily: '"JetBrains Mono", monospace',
+                fontWeight: 500,
+                fontSize: cellFontSize(assetsStr),
+                color: g.assets < 0 ? 'var(--color-expense)' : g.assets > 0 ? 'var(--color-income)' : 'var(--color-text-secondary)',
+                textAlign: 'right',
+              }}
+            >
+              {g.assets < 0 ? '\u2212' : ''}{assetsStr}
+            </span>
+            <span
+              style={{
+                fontFamily: '"JetBrains Mono", monospace',
+                fontWeight: 500,
+                fontSize: g.debts > 0 ? cellFontSize(debtsStr) : 'var(--text-body)',
+                color: g.debts > 0 ? 'var(--color-expense)' : 'var(--color-text-secondary)',
+                textAlign: 'right',
+              }}
+            >
+              {g.debts > 0 ? debtsStr : '—'}
+            </span>
+          </div>
+        );
+      })}
 
       {/* Grand total row */}
       {grandAssets != null && grandDebts != null && (
@@ -207,7 +217,7 @@ export default function TotalWealth() {
             style={{
               fontFamily: '"JetBrains Mono", monospace',
               fontWeight: 600,
-              fontSize: 'var(--text-body)',
+              fontSize: cellFontSize(formatAmount(grandAssets, mainCurrency)),
               color: grandAssets < 0 ? 'var(--color-expense)' : grandAssets > 0 ? 'var(--color-income)' : 'var(--color-text-secondary)',
               textAlign: 'right',
             }}
@@ -218,7 +228,7 @@ export default function TotalWealth() {
             style={{
               fontFamily: '"JetBrains Mono", monospace',
               fontWeight: 600,
-              fontSize: 'var(--text-body)',
+              fontSize: netWorth != null ? cellFontSize(formatAmount(netWorth, mainCurrency)) : 'var(--text-body)',
               color: netWorth != null && netWorth >= 0 ? 'var(--color-income)' : 'var(--color-expense)',
               textAlign: 'right',
             }}
