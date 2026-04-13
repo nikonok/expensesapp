@@ -16,7 +16,7 @@ function formatAmount(amount: number, currency: string): string {
     currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(amount);
+  }).format(amount / 100);
 }
 
 export function BudgetStats({ categoryId, accountId, month }: BudgetStatsProps) {

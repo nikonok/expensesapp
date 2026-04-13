@@ -85,14 +85,14 @@ export default function DebtPaymentCard({
           }}
         >
           <span style={{ color: 'var(--color-text-secondary)' }}>
-            Budget: {budget !== null ? budget.toFixed(2) : '—'}
+            Budget: {budget !== null ? (budget / 100).toFixed(2) : '—'}
           </span>
           <span
             style={{
               color: 'var(--color-expense)',
             }}
           >
-            Paid: {spent.toFixed(2)}
+            Paid: {(spent / 100).toFixed(2)}
           </span>
         </div>
       </div>

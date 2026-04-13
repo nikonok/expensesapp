@@ -42,7 +42,7 @@ describe('DebtPaymentCard', () => {
   });
 
   it('renders the spent amount with "Paid:" label', () => {
-    render(<DebtPaymentCard account={makeDebtAccount()} spent={1234.56} budget={null} />);
+    render(<DebtPaymentCard account={makeDebtAccount()} spent={123456} budget={null} />);
     expect(screen.getByText('Paid: 1234.56')).toBeTruthy();
   });
 

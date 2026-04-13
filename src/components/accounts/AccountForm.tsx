@@ -81,16 +81,16 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       setIcon(editAccount.icon);
       setCurrency(editAccount.currency);
       setDescription(editAccount.description);
-      setStartingBalance(String(editAccount.startingBalance));
+      setStartingBalance(String(editAccount.startingBalance / 100));
       setIncludeInTotal(editAccount.includeInTotal);
-      setSavingsGoal(editAccount.savingsGoal != null ? String(editAccount.savingsGoal) : '');
+      setSavingsGoal(editAccount.savingsGoal != null ? String(editAccount.savingsGoal / 100) : '');
       setInterestRateYearly(editAccount.interestRateYearly != null ? String(editAccount.interestRateYearly * 100) : '');
       setInterestRateMonthly(editAccount.interestRateMonthly != null ? String(editAccount.interestRateMonthly * 100) : '');
-      setMortgageLoanAmount(editAccount.mortgageLoanAmount != null ? String(editAccount.mortgageLoanAmount) : '');
+      setMortgageLoanAmount(editAccount.mortgageLoanAmount != null ? String(editAccount.mortgageLoanAmount / 100) : '');
       setMortgageStartDate(editAccount.mortgageStartDate ?? '');
       setMortgageTermYears(editAccount.mortgageTermYears != null ? String(editAccount.mortgageTermYears) : '');
       setMortgageInterestRate(editAccount.mortgageInterestRate != null ? String(editAccount.mortgageInterestRate * 100) : '');
-      setDebtOriginalAmount(editAccount.debtOriginalAmount != null ? String(editAccount.debtOriginalAmount) : '');
+      setDebtOriginalAmount(editAccount.debtOriginalAmount != null ? String(editAccount.debtOriginalAmount / 100) : '');
       setAlreadyPaid('');
       setDebtInputMode('original');
       const isMortgage =
@@ -187,7 +187,7 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
   const activeConfig = activeNumpadField ? numpadFieldConfig[activeNumpadField] : null;
 
   const handleNumpadSave = (result: number) => {
-    const strVal = String(result);
+    const strVal = String(result / 100);
     switch (activeNumpadField) {
       case 'startingBalance':
         setStartingBalance(strVal);
@@ -228,16 +228,16 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       icon,
       currency,
       description: description.trim(),
-      startingBalance: parseFloat(startingBalance) || 0,
+      startingBalance: Math.round(parseFloat(startingBalance) * 100) || 0,
       includeInTotal,
-      savingsGoal: type === 'SAVINGS' && savingsGoal ? parseFloat(savingsGoal) : null,
+      savingsGoal: type === 'SAVINGS' && savingsGoal ? Math.round(parseFloat(savingsGoal) * 100) : null,
       interestRateMonthly: type === 'DEBT' && debtSubtype === 'regular' && interestRateMonthly ? parseFloat(interestRateMonthly) / 100 : null,
       interestRateYearly: type === 'DEBT' && debtSubtype === 'regular' && interestRateYearly ? parseFloat(interestRateYearly) / 100 : null,
-      mortgageLoanAmount: type === 'DEBT' && debtSubtype === 'mortgage' && effectiveDebtOriginalAmount ? parseFloat(effectiveDebtOriginalAmount) : null,
+      mortgageLoanAmount: type === 'DEBT' && debtSubtype === 'mortgage' && effectiveDebtOriginalAmount ? Math.round(parseFloat(effectiveDebtOriginalAmount) * 100) : null,
       mortgageStartDate: type === 'DEBT' && debtSubtype === 'mortgage' ? (mortgageStartDate || null) : null,
       mortgageTermYears: type === 'DEBT' && debtSubtype === 'mortgage' && mortgageTermYears ? parseInt(mortgageTermYears) : null,
       mortgageInterestRate: type === 'DEBT' && debtSubtype === 'mortgage' && mortgageInterestRate ? parseFloat(mortgageInterestRate) / 100 : null,
-      debtOriginalAmount: type === 'DEBT' && effectiveDebtOriginalAmount ? parseFloat(effectiveDebtOriginalAmount) : null,
+      debtOriginalAmount: type === 'DEBT' && effectiveDebtOriginalAmount ? Math.round(parseFloat(effectiveDebtOriginalAmount) * 100) : null,
     };
     const result = accountSchema.safeParse(raw);
     if (!result.success) {
@@ -290,7 +290,7 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
           updatedAt: now,
         });
       } else {
-        const sb = parseFloat(startingBalance) || 0;
+        const sb = Math.round(parseFloat(startingBalance) * 100) || 0;
         await db.accounts.add({
           name: data.name,
           type: data.type,
@@ -652,7 +652,7 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
                       </button>
                       {/* Read-only already-paid derived from original - current balance */}
                       <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: 'var(--font-sm)', color: 'var(--color-text-secondary)' }}>
-                        Already paid: {formatNumpadDisplay(String(Math.max(0, parseFloat(debtOriginalAmount || '0') - Math.abs(editAccount?.balance ?? 0))))}
+                        Already paid: {formatNumpadDisplay(String(Math.max(0, parseFloat(debtOriginalAmount || '0') - Math.abs((editAccount?.balance ?? 0) / 100))))}
                       </span>
                     </div>
                   )}

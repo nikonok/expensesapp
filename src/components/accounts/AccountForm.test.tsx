@@ -54,7 +54,7 @@ vi.mock("../shared/Numpad", () => ({
       <button aria-label="numpad-save-5000" onClick={() => onSave(5000)}>Save 5000</button>
       <button aria-label="numpad-save-2000" onClick={() => onSave(2000)}>Save 2000</button>
       <button aria-label="numpad-save-3000" onClick={() => onSave(3000)}>Save 3000</button>
-      <button data-testid="numpad-save" onClick={() => onSave(250)}>Save 250</button>
+      <button data-testid="numpad-save" onClick={() => onSave(25000)}>Save 250</button>
     </div>
   ),
 }));
@@ -221,11 +221,11 @@ describe("AccountForm — debt input mode toggle", () => {
       icon: "car",
       currency: "USD",
       description: "",
-      balance: 3000,
-      startingBalance: 5000,
+      balance: -300000,
+      startingBalance: 500000,
       includeInTotal: true,
       isTrashed: false,
-      debtOriginalAmount: 5000,
+      debtOriginalAmount: 500000,
       interestRateYearly: 0.05,
       interestRateMonthly: null,
       createdAt: "2025-01-01T00:00:00Z",

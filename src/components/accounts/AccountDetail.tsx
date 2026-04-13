@@ -45,7 +45,7 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
       currency: account.currency,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(v);
+    }).format(v / 100);
 
   // Debt calculations
   const monthlyRate = account.interestRateMonthly ?? (account.interestRateYearly ? account.interestRateYearly / 12 : null);
@@ -321,7 +321,7 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
           {!showAdjust ? (
             <button
               onClick={() => {
-                setAdjustValue(String(Math.abs(account.balance)));
+                setAdjustValue(String(Math.abs(account.balance) / 100));
                 setShowAdjust(true);
               }}
               style={{

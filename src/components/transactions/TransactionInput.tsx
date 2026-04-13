@@ -1312,7 +1312,7 @@ function Step3({
                       color: "var(--color-expense)",
                     }}
                   >
-                    {paymentSplit.interestAmount.toFixed(2)}
+                    {(paymentSplit.interestAmount / 100).toFixed(2)}
                   </span>
                 </div>
                 <div style={{ width: "1px", background: "var(--color-border)" }} />
@@ -1334,7 +1334,7 @@ function Step3({
                       color: "var(--color-income)",
                     }}
                   >
-                    {paymentSplit.principalAmount.toFixed(2)}
+                    {(paymentSplit.principalAmount / 100).toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -1898,7 +1898,7 @@ export default function TransactionInput() {
       }
     }
 
-    setNumpadValue(String(existingTx.amount));
+    setNumpadValue(String(existingTx.amount / 100));
     setNote(existingTx.note ?? "");
     setDate(existingTx.date);
     setStep(3);
@@ -1918,15 +1918,15 @@ export default function TransactionInput() {
       .then((rate) => {
         if (rate === null) {
           setNoRateWarning(true);
-          setSecondaryAmount(String(amount));
+          setSecondaryAmount(String(amount / 100));
         } else {
           setNoRateWarning(false);
-          setSecondaryAmount(String(Math.round(amount * rate * 100) / 100));
+          setSecondaryAmount(String(Math.round(amount * rate) / 100));
         }
       })
       .catch(() => {
         setNoRateWarning(true);
-        setSecondaryAmount(String(amount));
+        setSecondaryAmount(String(amount / 100));
       });
   }, [numpadValue, account, mainCurrency, secondaryManual]);
 
@@ -1964,7 +1964,7 @@ export default function TransactionInput() {
       .getRate(account.currency, toAccount.currency)
       .then((rate) => {
         if (rate !== null) {
-          setToSecondaryAmount(String(Math.round(amount * rate * 100) / 100));
+          setToSecondaryAmount(String(Math.round(amount * rate) / 100));
         }
       })
       .catch(() => {});
@@ -2214,9 +2214,9 @@ export default function TransactionInput() {
             Number.isFinite(parsedSecondaryDebt) &&
             parsedSecondaryDebt > 0
           ) {
-            outAmountMain = parsedSecondaryDebt;
+            outAmountMain = Math.round(parsedSecondaryDebt * 100);
           } else {
-            outAmountMain = Math.round(amount * outRate * 100) / 100;
+            outAmountMain = Math.round(amount * outRate);
           }
 
           // Same-currency: inAmount = amount; cross-currency: use rate to dest account
@@ -2225,13 +2225,13 @@ export default function TransactionInput() {
           if (toAccount!.currency !== account.currency) {
             const parsedToSecondary = parseFloat(toSecondaryAmount);
             if (toSecondaryAmount && Number.isFinite(parsedToSecondary) && parsedToSecondary > 0) {
-              inAmount = parsedToSecondary;
+              inAmount = Math.round(parsedToSecondary * 100);
             } else {
               const crossRate = await exchangeRateService
                 .getRate(account.currency, toAccount!.currency)
                 .then((r) => r ?? 1)
                 .catch(() => 1);
-              inAmount = Math.round(amount * crossRate * 100) / 100;
+              inAmount = Math.round(amount * crossRate);
             }
             inRate = await exchangeRateService
               .getRate(toAccount!.currency, mainCurrency)
@@ -2281,7 +2281,7 @@ export default function TransactionInput() {
             categoryId: null,
             currency: toAccount!.currency,
             amount: inAmount,
-            amountMainCurrency: Math.round(inAmount * inRate * 100) / 100,
+            amountMainCurrency: Math.round(inAmount * inRate),
             exchangeRate: inRate,
             note: note.trim(),
             transferGroupId: groupId,
@@ -2302,7 +2302,7 @@ export default function TransactionInput() {
             .then((r) => r ?? 1)
             .catch(() => 1);
 
-          const outAmountMain = Math.round(amount * outRate * 100) / 100;
+          const outAmountMain = Math.round(amount * outRate);
 
           let inAmount = amount;
           let inRate = outRate;
@@ -2316,9 +2316,9 @@ export default function TransactionInput() {
 
             const parsedToSecondary = parseFloat(toSecondaryAmount);
             if (toSecondaryAmount && Number.isFinite(parsedToSecondary) && parsedToSecondary > 0) {
-              inAmount = parsedToSecondary;
+              inAmount = Math.round(parsedToSecondary * 100);
             } else {
-              inAmount = Math.round(amount * crossRate * 100) / 100;
+              inAmount = Math.round(amount * crossRate);
             }
 
             const toRate = await exchangeRateService
@@ -2357,7 +2357,7 @@ export default function TransactionInput() {
             categoryId: null,
             currency: toAccount!.currency,
             amount: inAmount,
-            amountMainCurrency: Math.round(inAmount * inRate * 100) / 100,
+            amountMainCurrency: Math.round(inAmount * inRate),
             exchangeRate: inRate,
             note: note.trim(),
             transferGroupId: groupId,
@@ -2386,9 +2386,9 @@ export default function TransactionInput() {
             Number.isFinite(parsedSecondary) &&
             parsedSecondary > 0
           ) {
-            amountMain = parsedSecondary;
+            amountMain = Math.round(parsedSecondary * 100);
           } else {
-            amountMain = Math.round(amount * rate * 100) / 100;
+            amountMain = Math.round(amount * rate);
           }
 
           const tx: Transaction = {

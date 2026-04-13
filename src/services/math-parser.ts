@@ -4,7 +4,7 @@
  * Trailing operator is silently stripped before evaluation.
  * Division by zero returns null (Infinity is treated as invalid input).
  * Returns null for empty or invalid input.
- * Result is rounded to 2 decimal places.
+ * Result is an integer in minor currency units (cents). e.g. "10.50" → 1050.
  */
 export function evaluateExpression(expr: string): number | null {
   if (!expr || expr.trim() === '') return null;
@@ -92,8 +92,8 @@ export function evaluateExpression(expr: string): number | null {
     }
   }
 
-  const rounded = Math.round(result * 100) / 100;
-  const MAX_AMOUNT = 999_999_999.99;
+  const rounded = Math.round(result * 100);
+  const MAX_AMOUNT = 99_999_999_999;
   if (!isFinite(rounded) || rounded > MAX_AMOUNT || rounded < 0) return null;
   return rounded;
 }

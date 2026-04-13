@@ -89,11 +89,11 @@ describe('calculatePaymentSplit', () => {
     expect(split.principalAmount).toBe(1000);
   });
 
-  it('rounds to 2 decimal places', () => {
-    // balance = 10000, rate = 0.333% => interest = 33.33...
+  it('rounds to nearest integer (minor units)', () => {
+    // balance = 10000, rate = 0.333% => interest = Math.round(10000 * 0.003333) = 33
     const split = calculatePaymentSplit(10000, 0.003333, 500);
-    expect(split.interestAmount).toBe(33.33);
-    expect(split.principalAmount).toBe(466.67);
+    expect(split.interestAmount).toBe(33);
+    expect(split.principalAmount).toBe(467);
   });
 
   it('handles exact payoff (payment covers full balance + interest)', () => {

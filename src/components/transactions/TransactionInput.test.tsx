@@ -827,8 +827,8 @@ describe("cross-currency debt payment (Bug #2)", () => {
       expect(applyTransfer).toHaveBeenCalled();
       const calls = vi.mocked(applyTransfer).mock.calls;
       const [, inTx] = calls[calls.length - 1];
-      // IN leg (debt account) must use the user-entered 75, not the exchange-rate auto-calc
-      expect(inTx.amount).toBe(75);
+      // IN leg (debt account) must use the user-entered 75 → Math.round(75 * 100) = 7500
+      expect(inTx.amount).toBe(7500);
     });
   });
 
@@ -925,9 +925,9 @@ describe("secondaryManual reset fix (Bug #1)", () => {
       expect(applyTransaction).toHaveBeenCalled();
       const calls = vi.mocked(applyTransaction).mock.calls;
       const tx = calls[calls.length - 1][0];
-      // secondaryManual stayed true → amountMainCurrency = 99 (manual override)
+      // secondaryManual stayed true → amountMainCurrency = Math.round(99 * 100) = 9900 (manual override)
       // If Bug #1 still present: secondaryManual reset → amountMainCurrency = 110 (exchange rate)
-      expect(tx.amountMainCurrency).toBe(99);
+      expect(tx.amountMainCurrency).toBe(9900);
     });
   });
 

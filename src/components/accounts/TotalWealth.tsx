@@ -72,7 +72,7 @@ export default function TotalWealth() {
       currency,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(Math.abs(amount));
+    }).format(Math.abs(amount) / 100);
 
   const netWorth = grandAssets != null && grandDebts != null
     ? grandAssets - grandDebts

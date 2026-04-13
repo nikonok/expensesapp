@@ -3,8 +3,8 @@ import { formatAmount, dynamicFontSize } from './DonutChart';
 
 describe('formatAmount', () => {
   it('returns integer string for values below 1000', () => {
-    expect(formatAmount(999)).toBe('999');
-    expect(formatAmount(42)).toBe('42');
+    expect(formatAmount(99900)).toBe('999');
+    expect(formatAmount(4200)).toBe('42');
   });
 
   it('returns "0" for zero', () => {
@@ -12,15 +12,15 @@ describe('formatAmount', () => {
   });
 
   it('returns "1.0k" for exactly 1000', () => {
-    expect(formatAmount(1000)).toBe('1.0k');
+    expect(formatAmount(100000)).toBe('1.0k');
   });
 
   it('returns formatted thousands string for values in thousands', () => {
-    expect(formatAmount(12345)).toBe('12.3k');
+    expect(formatAmount(1234500)).toBe('12.3k');
   });
 
   it('returns formatted millions string for values in millions', () => {
-    expect(formatAmount(1234567)).toBe('1.2M');
+    expect(formatAmount(123456700)).toBe('1.2M');
   });
 });
 

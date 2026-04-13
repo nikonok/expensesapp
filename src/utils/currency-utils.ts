@@ -2,7 +2,7 @@ export function formatAmount(amount: number, currency: string, locale?: string):
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
-  }).format(amount);
+  }).format(amount / 100);
 }
 
 export function formatAmountNoSymbol(amount: number, currency: string, locale?: string): string {
@@ -10,11 +10,11 @@ export function formatAmountNoSymbol(amount: number, currency: string, locale?: 
     style: 'decimal',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(amount);
+  }).format(amount / 100);
 }
 
 export function convertAmount(amount: number, rate: number): number {
-  return Math.round(amount * rate * 100) / 100;
+  return Math.round(amount * rate);
 }
 
 export function getCurrencySymbol(currency: string, locale?: string): string {

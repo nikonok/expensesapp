@@ -26,7 +26,7 @@ export function BudgetNumpad({
   onClose,
 }: BudgetNumpadProps) {
   const [value, setValue] = useState(
-    currentPlanned != null && currentPlanned > 0 ? String(currentPlanned) : '',
+    currentPlanned != null && currentPlanned > 0 ? String(currentPlanned / 100) : '',
   );
   const [statsOpen, setStatsOpen] = useState(false);
   const { show } = useToast();

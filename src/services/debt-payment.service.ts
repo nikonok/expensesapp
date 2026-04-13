@@ -19,7 +19,7 @@ export function calculatePaymentSplit(
   paymentAmount: number,
 ): PaymentSplit {
   const rawInterest = Math.abs(currentBalance) * monthlyRate;
-  const interestAmount = Math.round(Math.min(rawInterest, paymentAmount) * 100) / 100;
-  const principalAmount = Math.round(Math.max(0, paymentAmount - interestAmount) * 100) / 100;
+  const interestAmount = Math.round(Math.min(rawInterest, paymentAmount));
+  const principalAmount = Math.round(Math.max(0, paymentAmount - interestAmount));
   return { interestAmount, principalAmount };
 }

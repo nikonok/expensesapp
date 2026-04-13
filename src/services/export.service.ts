@@ -68,7 +68,7 @@ async function exportTransactions(
           sanitizeCell(formatDate(outTx.date)),
           sanitizeCell(outTx.note ?? ''),
           '',
-          outTx.amountMainCurrency,
+          outTx.amountMainCurrency / 100,
           sanitizeCell(categoryLabel),
           sanitizeCell(account?.name ?? ''),
         ] as (string | number)[]);
@@ -79,7 +79,7 @@ async function exportTransactions(
         dataRows.push([
           sanitizeCell(formatDate(inTx.date)),
           sanitizeCell(inTx.note ?? ''),
-          inTx.amountMainCurrency,
+          inTx.amountMainCurrency / 100,
           '',
           'Transfer',
           sanitizeCell(account?.name ?? ''),
@@ -89,8 +89,8 @@ async function exportTransactions(
       const account = accounts.find((a) => a.id === tx.accountId);
       const category = categories.find((c) => c.id === tx.categoryId);
 
-      const incomeAmount = tx.type === 'INCOME' ? tx.amountMainCurrency : '';
-      const expenseAmount = tx.type === 'EXPENSE' ? tx.amountMainCurrency : '';
+      const incomeAmount = tx.type === 'INCOME' ? tx.amountMainCurrency / 100 : '';
+      const expenseAmount = tx.type === 'EXPENSE' ? tx.amountMainCurrency / 100 : '';
 
       dataRows.push([
         sanitizeCell(formatDate(tx.date)),
