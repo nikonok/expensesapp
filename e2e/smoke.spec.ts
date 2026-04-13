@@ -79,9 +79,8 @@ test('new transaction form — elements present', async ({ page }) => {
 
   await expect(page.getByRole('heading', { name: 'New Transaction' })).toBeVisible();
   await expect(page.locator('button[aria-label="Back"]')).toBeVisible();
-  // Type tabs (Transfer tab removed — transfers are auto-detected from Expense list)
-  await expect(page.getByText('Expense')).toBeVisible();
-  await expect(page.getByText('Income')).toBeVisible();
+  // Step-based form (no tabs) — verify the form shell is open and interactive
+  await expect(page.locator('button[aria-label="Back"]')).toBeEnabled();
 });
 
 // ── Settings ──────────────────────────────────────────────────────────────────

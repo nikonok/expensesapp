@@ -16,7 +16,11 @@ export async function setup(page: Page) {
       req.onsuccess = () => {
         const db = req.result;
         const tx = db.transaction('settings', 'readwrite');
-        tx.objectStore('settings').put({ key: 'hasCompletedOnboarding', value: true });
+        const store = tx.objectStore('settings');
+        store.put({ key: 'hasCompletedOnboarding', value: true });
+        // Prevent cold-start redirect: default startupScreen is 'transactions',
+        // which would immediately redirect away from /accounts after page load.
+        store.put({ key: 'startupScreen', value: 'accounts' });
         tx.oncomplete = () => { db.close(); resolve(); };
         tx.onerror = () => reject(tx.error);
       };

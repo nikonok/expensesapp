@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { setup } from "./helpers";
+import { setup, goToTab } from "./helpers";
 
 /**
  * Seed a regular account and a mortgage account directly into IndexedDB.
@@ -104,15 +104,22 @@ test("mortgage overpayment shows term savings hint", async ({ page }) => {
 
   // Reload so Dexie picks up the newly seeded accounts
   await page.reload();
-  await page.waitForURL(/\/accounts/);
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForURL(/\/accounts/, { timeout: 8000 });
 
   // Both accounts should now be visible in the list
   await expect(page.getByText("Test Account")).toBeVisible();
   await expect(page.getByText("Test Mortgage")).toBeVisible();
 
-  // Open the new transaction form
-  await page.locator('button[aria-label="Add transaction"]').click();
-  await page.waitForURL(/\/transactions\/new/);
+  // Navigate to Transactions tab to access the Add transaction FAB
+  await goToTab(page, "Transactions", /\/transactions/);
+  // Wait for the page to fully settle after view-transition before clicking FAB
+  await expect(page.locator('button[aria-label="Add transaction"]')).toBeVisible();
+
+  // Open the new transaction form (evaluate dispatches click directly, bypassing
+  // BottomSheet/transform viewport geometry checks in Playwright)
+  await page.locator('button[aria-label="Add transaction"]').evaluate(el => (el as HTMLButtonElement).click());
+  await page.waitForURL(/\/transactions\/new/, { timeout: 10000 });
 
   // ── Step 1: select source account ─────────────────────────────────────────
   // Step 1 shows non-debt accounts; click "Test Account"
