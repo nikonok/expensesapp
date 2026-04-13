@@ -68,6 +68,8 @@ describe("AccountCard — mortgage monthly payment display", () => {
     // Card renders the account name and type label
     expect(screen.getByText("Test Account")).toBeTruthy();
     expect(screen.getByText("Debt")).toBeTruthy();
+    // Monthly payment is displayed below the progress bar
+    expect(screen.getByText(/2 338 PLN\/mo/)).toBeTruthy();
   });
 
   it("does not show /mo text for a REGULAR account", () => {

@@ -313,6 +313,9 @@ describe("AccountForm — mortgage payment preview", () => {
     expect(dialog.textContent).toContain("250%");
     expect(dialog.textContent).toContain("Term (years)");
     expect(dialog.textContent).toContain("Annual Interest Rate (%)");
+    // Monthly payment preview appears when all mortgage fields have non-zero values
+    expect(dialog.textContent).toContain("Monthly payment:");
+    expect(dialog.textContent).toContain("2 338 USD");
   });
 
   it("shows mortgage subtype fields when editing an existing mortgage account", () => {
@@ -349,5 +352,8 @@ describe("AccountForm — mortgage payment preview", () => {
     expect(dialog.textContent).toContain("5%");
     expect(dialog.textContent).toContain("Term (years)");
     expect(dialog.textContent).toContain("Annual Interest Rate (%)");
+    // Edit mode shows "New monthly payment:" label with calculated amount
+    expect(dialog.textContent).toContain("New monthly payment:");
+    expect(dialog.textContent).toContain("2 338 USD");
   });
 });

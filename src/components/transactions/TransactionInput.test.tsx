@@ -1050,6 +1050,28 @@ describe("mortgage overpayment features", () => {
     });
   });
 
+  it("switching to Overpayment with amount entered shows term savings text", async () => {
+    const { getMonthlyRate } = await import("@/services/debt-payment.service");
+    vi.mocked(getMonthlyRate).mockReturnValue(0.05 / 12);
+
+    await navigateToDebtPayment(sourceAccount, mortgageAccount);
+
+    // Type an amount so currentAmount > 0
+    await act(async () => {
+      fireEvent.click(screen.getByText("Type 99"));
+    });
+
+    // Switch to overpayment mode
+    await act(async () => {
+      fireEvent.click(screen.getByText("transactions.debtPayment.overpayment"));
+    });
+
+    // Term savings text appears (calculateTermSaved mocked to return 6)
+    await waitFor(() => {
+      expect(screen.getByText("transactions.debtPayment.termSaved")).toBeTruthy();
+    });
+  });
+
   it("staying on Regular Payment does not show term savings text", async () => {
     const { getMonthlyRate } = await import("@/services/debt-payment.service");
     vi.mocked(getMonthlyRate).mockReturnValue(0.05 / 12);
