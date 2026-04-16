@@ -1,6 +1,13 @@
 import { db } from '../db/database';
 import type { Backup } from '../db/models';
-import { accountSchema, categorySchema, transactionSchema, budgetSchema } from '../utils/validation';
+import {
+  backupAccountSchema,
+  backupCategorySchema,
+  backupTransactionSchema,
+  backupBudgetSchema,
+  backupExchangeRateSchema,
+  backupSettingSchema,
+} from '../utils/backup-validation';
 import { logger } from './log.service';
 
 interface BackupJSON {
@@ -185,63 +192,36 @@ class BackupService {
     }
   }
 
-  async _restoreData(data: BackupJSON): Promise<void> {
-    const validAccounts = (data.tables.accounts as unknown[]).filter(
-      row => accountSchema.safeParse(row).success,
-    );
-    if (data.tables.accounts.length > 0 && validAccounts.length === 0) {
-      throw new Error('Invalid backup file: accounts table failed validation');
+  private async _restoreData(data: BackupJSON): Promise<void> {
+    function validateTable<T>(
+      rows: unknown[],
+      schema: { safeParse: (r: unknown) => { success: boolean; data?: T; error?: { issues: { code: string; path: (string | number)[]; message: string }[] } } },
+      tableName: string,
+    ): T[] {
+      return rows.map((row, i) => {
+        const result = schema.safeParse(row);
+        if (!result.success) {
+          const detail = JSON.stringify(
+            result.error!.issues.map(({ code, path, message }) => ({ code, path, message }))
+          ).slice(0, 200);
+          throw new Error(
+            `Invalid backup: ${tableName}[${i}] failed validation. ${detail}`,
+          );
+        }
+        return result.data as T;
+      });
     }
 
-    const validCategories = (data.tables.categories as unknown[]).filter(
-      row => categorySchema.safeParse(row).success,
-    );
-    if (data.tables.categories.length > 0 && validCategories.length === 0) {
-      throw new Error('Invalid backup file: categories table failed validation');
-    }
-
-    const validTransactions = (data.tables.transactions as unknown[]).filter(
-      row => transactionSchema.safeParse(row).success,
-    );
-    if (data.tables.transactions.length > 0 && validTransactions.length === 0) {
-      throw new Error('Invalid backup file: transactions table failed validation');
-    }
-
-    const validBudgets = (data.tables.budgets as unknown[]).filter(
-      row => budgetSchema.safeParse(row).success,
-    );
-    if (data.tables.budgets.length > 0 && validBudgets.length === 0) {
-      throw new Error('Invalid backup file: budgets table failed validation');
-    }
-
-    const validExchangeRates = (data.tables.exchangeRates as unknown[]).filter(row => {
-      if (typeof row !== 'object' || row === null) return false;
-      const r = row as Record<string, unknown>;
-      return r.baseCurrency != null && r.rates != null;
-    });
-    if (data.tables.exchangeRates.length > 0 && validExchangeRates.length === 0) {
-      throw new Error('Invalid backup file: exchangeRates table failed validation');
-    }
-
-    const validSettings = (data.tables.settings as unknown[]).filter(row => {
-      if (typeof row !== 'object' || row === null) return false;
-      const r = row as Record<string, unknown>;
-      return r.key != null && r.value != null;
-    });
-    if (data.tables.settings.length > 0 && validSettings.length === 0) {
-      throw new Error('Invalid backup file: settings table failed validation');
-    }
+    const validAccounts = validateTable(data.tables.accounts, backupAccountSchema, 'accounts');
+    const validCategories = validateTable(data.tables.categories, backupCategorySchema, 'categories');
+    const validTransactions = validateTable(data.tables.transactions, backupTransactionSchema, 'transactions');
+    const validBudgets = validateTable(data.tables.budgets, backupBudgetSchema, 'budgets');
+    const validExchangeRates = validateTable(data.tables.exchangeRates, backupExchangeRateSchema, 'exchangeRates');
+    const validSettings = validateTable(data.tables.settings, backupSettingSchema, 'settings');
 
     await db.transaction(
       'rw',
-      [
-        db.accounts,
-        db.categories,
-        db.transactions,
-        db.budgets,
-        db.exchangeRates,
-        db.settings,
-      ],
+      [db.accounts, db.categories, db.transactions, db.budgets, db.exchangeRates, db.settings],
       async () => {
         await db.accounts.clear();
         await db.categories.clear();
@@ -250,18 +230,13 @@ class BackupService {
         await db.exchangeRates.clear();
         await db.settings.clear();
 
-        if (validAccounts.length)
-          await db.accounts.bulkAdd(validAccounts as Parameters<typeof db.accounts.bulkAdd>[0]);
-        if (validCategories.length)
-          await db.categories.bulkAdd(validCategories as Parameters<typeof db.categories.bulkAdd>[0]);
-        if (validTransactions.length)
-          await db.transactions.bulkAdd(validTransactions as Parameters<typeof db.transactions.bulkAdd>[0]);
-        if (validBudgets.length)
-          await db.budgets.bulkAdd(validBudgets as Parameters<typeof db.budgets.bulkAdd>[0]);
-        if (validExchangeRates.length)
-          await db.exchangeRates.bulkAdd(validExchangeRates as Parameters<typeof db.exchangeRates.bulkAdd>[0]);
-        if (validSettings.length)
-          await db.settings.bulkAdd(validSettings as Parameters<typeof db.settings.bulkAdd>[0]);
+        if (validAccounts.length) await db.accounts.bulkAdd(validAccounts as any);
+        if (validCategories.length) await db.categories.bulkAdd(validCategories as any);
+        if (validTransactions.length) await db.transactions.bulkAdd(validTransactions as any);
+        if (validBudgets.length) await db.budgets.bulkAdd(validBudgets as any);
+        if (validExchangeRates.length) await db.exchangeRates.bulkAdd(validExchangeRates as any);
+        // settings pk is `key` (string, not autoincrement) → bulkPut tolerates duplicates
+        if (validSettings.length) await db.settings.bulkPut(validSettings as any);
       },
     );
 

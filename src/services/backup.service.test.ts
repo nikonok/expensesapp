@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '@/db/database';
-import type { Account } from '@/db/models';
+import type { Account, Category, Transaction, Budget } from '@/db/models';
 import {
   backupService,
   checkAndRunAutoBackup,
@@ -52,6 +52,54 @@ function makeValidBackupJSON(overrides: Record<string, unknown> = {}): object {
       exchangeRates: [],
       settings: [],
     },
+    ...overrides,
+  };
+}
+
+function makeCategory(overrides: Partial<Category> = {}): Category {
+  return {
+    name: 'Test Category',
+    type: 'EXPENSE',
+    color: 'oklch(70% 0.2 180)',
+    icon: 'tag',
+    displayOrder: 0,
+    isTrashed: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function makeTransaction(overrides: Partial<Transaction> = {}): Transaction {
+  return {
+    type: 'EXPENSE',
+    date: '2026-01-01',
+    timestamp: new Date().toISOString(),
+    displayOrder: 0,
+    accountId: 1,
+    categoryId: 1,
+    currency: 'USD',
+    amount: 500,
+    amountMainCurrency: 500,
+    exchangeRate: 1,
+    note: '',
+    isTrashed: false,
+    transferGroupId: null,
+    transferDirection: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function makeBudget(overrides: Partial<Budget> = {}): Budget {
+  return {
+    categoryId: 1,
+    accountId: null,
+    month: '2026-01',
+    plannedAmount: 10000,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     ...overrides,
   };
 }
@@ -347,5 +395,136 @@ describe('importFromFile', () => {
     const event = spy.mock.calls[0][0] as CustomEvent;
     expect(event.type).toBe('backup-restored');
     spy.mockRestore();
+  });
+});
+
+describe('_restoreData — full shape round-trip', () => {
+  it('isTrashed, timestamp, displayOrder, createdAt, updatedAt survive restore', async () => {
+    const fixedTs = '2025-06-15T12:00:00.000Z';
+    const accountId = await db.accounts.add(
+      makeAccount({ isTrashed: true }) as Account,
+    );
+    const categoryId = await db.categories.add(
+      makeCategory({ displayOrder: 5, isTrashed: true }) as Category,
+    );
+    await db.transactions.add(
+      makeTransaction({
+        accountId: accountId as number,
+        categoryId: categoryId as number,
+        isTrashed: true,
+        timestamp: fixedTs,
+        displayOrder: 7,
+      }) as Transaction,
+    );
+
+    await createBackup();
+    const [backup] = await db.backups.toArray();
+
+    await db.accounts.clear();
+    await db.categories.clear();
+    await db.transactions.clear();
+
+    await restoreFromBackup(backup.id!);
+
+    const [restoredAccount] = await db.accounts.toArray();
+    expect(restoredAccount.isTrashed).toBe(true);
+
+    const [restoredCategory] = await db.categories.toArray();
+    expect(restoredCategory.displayOrder).toBe(5);
+    expect(restoredCategory.isTrashed).toBe(true);
+
+    const [restoredTx] = await db.transactions.toArray();
+    expect(restoredTx.isTrashed).toBe(true);
+    expect(restoredTx.timestamp).toBe(fixedTs);
+    expect(restoredTx.displayOrder).toBe(7);
+  });
+
+  it('transaction with amount: 0 survives restore (regression — old schema rejected zero)', async () => {
+    const accountId = await db.accounts.add(makeAccount() as Account);
+    await db.transactions.add(
+      makeTransaction({
+        type: 'TRANSFER',
+        accountId: accountId as number,
+        categoryId: null,
+        amount: 0,
+        amountMainCurrency: 0,
+        transferGroupId: 'test-group-uuid',
+        transferDirection: 'OUT',
+      }) as Transaction,
+    );
+
+    await createBackup();
+    const [backup] = await db.backups.toArray();
+
+    await db.transactions.clear();
+
+    await restoreFromBackup(backup.id!);
+
+    const [restoredTx] = await db.transactions.toArray();
+    expect(restoredTx.amount).toBe(0);
+    expect(restoredTx.amountMainCurrency).toBe(0);
+  });
+
+  it('budget with null categoryId and null accountId survives restore', async () => {
+    await db.budgets.add(
+      makeBudget({ categoryId: null, accountId: null }) as Budget,
+    );
+
+    await createBackup();
+    const [backup] = await db.backups.toArray();
+
+    await db.budgets.clear();
+
+    await restoreFromBackup(backup.id!);
+
+    const [restoredBudget] = await db.budgets.toArray();
+    expect(restoredBudget.categoryId).toBeNull();
+    expect(restoredBudget.accountId).toBeNull();
+  });
+
+  it('Dexie error inside transaction propagates as a real error', async () => {
+    await db.accounts.add(makeAccount({ name: 'Disk Full Test' }) as Account);
+
+    await createBackup();
+    const [backup] = await db.backups.toArray();
+
+    await db.accounts.clear();
+
+    const spy = vi
+      .spyOn(db.accounts, 'bulkAdd')
+      .mockRejectedValueOnce(new Error('disk full'));
+
+    try {
+      await expect(restoreFromBackup(backup.id!)).rejects.toThrow('disk full');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('settings table — duplicate keys tolerated via bulkPut', async () => {
+    const backupData = makeValidBackupJSON({
+      tables: {
+        accounts: [],
+        categories: [],
+        transactions: [],
+        budgets: [],
+        exchangeRates: [],
+        settings: [
+          { key: 'mainCurrency', value: 'USD' },
+          { key: 'mainCurrency', value: 'EUR' },
+        ],
+      },
+    });
+
+    const backupId = await db.backups.add({
+      createdAt: new Date().toISOString(),
+      data: JSON.stringify(backupData),
+      isAutomatic: false,
+    });
+
+    await expect(restoreFromBackup(backupId as number)).resolves.toBeUndefined();
+
+    const setting = await db.settings.get('mainCurrency');
+    expect(setting?.value).toBe('EUR');
   });
 });

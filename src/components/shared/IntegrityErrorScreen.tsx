@@ -23,8 +23,9 @@ export function IntegrityErrorScreen() {
       }
       await restoreFromBackup(backups[0].id!);
       window.location.reload();
-    } catch {
-      show(t('errors.restoreFailed'), 'error');
+    } catch (err) {
+      console.error('[IntegrityErrorScreen] restoreFromBackup failed:', err);
+      show(err instanceof Error ? err.message : t('errors.restoreFailed'), 'error');
     } finally {
       setIsLoading(false);
     }

@@ -185,4 +185,83 @@ describe('BackupSettings', () => {
       fireEvent.click(scheduleBtn);
     });
   });
+
+  describe('error handling', () => {
+    it('console.error is always called on restore failure (no DEV guard)', async () => {
+      const backup = { id: 1, createdAt: '2026-01-01T00:00:00Z', data: '{}', isAutomatic: false };
+      (backupService.listBackups as ReturnType<typeof vi.fn>).mockResolvedValue([backup]);
+      (backupService.restoreFromBackup as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('test error'),
+      );
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      try {
+        render(<BackupSettings />);
+        fireEvent.click(screen.getByRole('button', { name: BTN_RESTORE }));
+        fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+
+        await waitFor(() => {
+          expect(consoleSpy).toHaveBeenCalled();
+        });
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+
+    it('err.message is surfaced in the toast on restore failure', async () => {
+      const backup = { id: 1, createdAt: '2026-01-01T00:00:00Z', data: '{}', isAutomatic: false };
+      (backupService.listBackups as ReturnType<typeof vi.fn>).mockResolvedValue([backup]);
+      (backupService.restoreFromBackup as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('test error'),
+      );
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      try {
+        render(<BackupSettings />);
+        fireEvent.click(screen.getByRole('button', { name: BTN_RESTORE }));
+        fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+
+        await waitFor(() => {
+          expect(mockShow).toHaveBeenCalledWith(
+            expect.stringContaining('test error'),
+            'error',
+          );
+        });
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+
+    it('console.error is called on importFromFile failure', async () => {
+      (backupService.importFromFile as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('import failed'),
+      );
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      try {
+        render(<BackupSettings />);
+
+        const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+        const file = new File(['{}'], 'backup.json', { type: 'application/json' });
+        Object.defineProperty(fileInput, 'files', { value: [file], configurable: true });
+        fireEvent.change(fileInput);
+
+        const confirmBtn = await screen.findByRole('button', { name: 'Restore' });
+        fireEvent.click(confirmBtn);
+
+        await waitFor(() => {
+          expect(consoleSpy).toHaveBeenCalled();
+        });
+
+        await waitFor(() => {
+          expect(mockShow).toHaveBeenCalledWith(
+            expect.stringContaining('import failed'),
+            'error',
+          );
+        });
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+  });
 });

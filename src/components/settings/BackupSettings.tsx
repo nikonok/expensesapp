@@ -72,8 +72,8 @@ export function BackupSettings() {
       await restoreFromBackup(backups[0].id!);
       // _restoreData() dispatches 'backup-restored' event → App.tsx calls window.location.reload()
     } catch (err) {
-      if (import.meta.env.DEV) console.error(err);
-      show(t('errors.generic'), 'error');
+      console.error('[BackupSettings] restoreFromBackup failed:', err);
+      show(err instanceof Error ? err.message : t('errors.generic'), 'error');
     }
   }
 
@@ -81,7 +81,8 @@ export function BackupSettings() {
     try {
       await exportToFile();
       show(t('settings.backup.exported'), 'success');
-    } catch {
+    } catch (err) {
+      console.error('[BackupSettings] exportToFile failed:', err);
       show(t('errors.generic'), 'error');
     }
   }
@@ -105,8 +106,8 @@ export function BackupSettings() {
       await importFromFile(pendingFile);
       // _restoreData() dispatches 'backup-restored' event → App.tsx calls window.location.reload()
     } catch (err) {
-      if (import.meta.env.DEV) console.error(err);
-      show(t('errors.invalidFile'), 'error');
+      console.error('[BackupSettings] importFromFile failed:', err);
+      show(err instanceof Error ? err.message : t('errors.invalidFile'), 'error');
     } finally {
       setPendingFile(null);
     }
