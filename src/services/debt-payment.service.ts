@@ -7,8 +7,6 @@ export interface PaymentSplit {
 
 export function getMonthlyRate(account: Account): number | null {
   if (account.type !== "DEBT") return null;
-  if (account.interestRateMonthly != null) return account.interestRateMonthly;
-  if (account.interestRateYearly != null) return account.interestRateYearly / 12;
   if (account.mortgageInterestRate != null) return account.mortgageInterestRate / 12;
   return null;
 }

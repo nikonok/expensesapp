@@ -11,7 +11,7 @@ import { ConfirmDialog } from "../shared/ConfirmDialog";
 import { getLucideIcon } from "../shared/IconPicker";
 import { useToast } from "../shared/Toast";
 import { formatNumpadDisplay } from "../../utils/numpad-utils";
-import { calculateMortgagePayment } from "../../services/debt-payment.service";
+import { calculateMortgagePayment, getMonthlyRate } from "../../services/debt-payment.service";
 
 interface AccountDetailProps {
   account: Account;
@@ -54,9 +54,7 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
     }).format(v / 100);
 
   // Debt calculations
-  const monthlyRate =
-    account.interestRateMonthly ??
-    (account.interestRateYearly ? account.interestRateYearly / 12 : null);
+  const monthlyRate = getMonthlyRate(account);
   const accruedInterest = monthlyRate != null ? Math.abs(account.balance) * monthlyRate : null;
 
   // Mortgage time left

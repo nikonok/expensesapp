@@ -20,8 +20,6 @@ export interface Account {
   savingsInterestRate?: number | null; // future feature stub: annual interest rate as decimal
 
   // Debt-specific
-  interestRateMonthly?: number | null; // stored as decimal (e.g. 0.01 = 1%)
-  interestRateYearly?: number | null; // stored as decimal
   debtOriginalAmount?: number | null; // total debt at inception; used for payoff progress bar
   mortgageLoanAmount?: number | null;
   mortgageStartDate?: string | null; // ISO-8601

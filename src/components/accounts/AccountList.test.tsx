@@ -35,8 +35,6 @@ const dummyAccount: Account = {
   isTrashed: false,
   savingsGoal: null,
   savingsInterestRate: null,
-  interestRateMonthly: null,
-  interestRateYearly: null,
   mortgageLoanAmount: null,
   mortgageStartDate: null,
   mortgageTermYears: null,

@@ -39,8 +39,6 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
   const [startingBalance, setStartingBalance] = useState("");
   const [includeInTotal, setIncludeInTotal] = useState(true);
   const [savingsGoal, setSavingsGoal] = useState("");
-  const [interestRateYearly, setInterestRateYearly] = useState("");
-  const [interestRateMonthly, setInterestRateMonthly] = useState("");
   const [mortgageLoanAmount, setMortgageLoanAmount] = useState("");
   const [mortgageStartDate, setMortgageStartDate] = useState("");
   const [mortgageTermYears, setMortgageTermYears] = useState("");
@@ -56,8 +54,6 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
     | "startingBalance"
     | "debtOriginalAmount"
     | "alreadyPaid"
-    | "interestRateYearly"
-    | "interestRateMonthly"
     | "mortgageTermYears"
     | "mortgageInterestRate"
     | null
@@ -88,14 +84,6 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       setStartingBalance(String(editAccount.startingBalance / 100));
       setIncludeInTotal(editAccount.includeInTotal);
       setSavingsGoal(editAccount.savingsGoal != null ? String(editAccount.savingsGoal / 100) : "");
-      setInterestRateYearly(
-        editAccount.interestRateYearly != null ? String(editAccount.interestRateYearly * 100) : "",
-      );
-      setInterestRateMonthly(
-        editAccount.interestRateMonthly != null
-          ? String(editAccount.interestRateMonthly * 100)
-          : "",
-      );
       setMortgageLoanAmount(
         editAccount.mortgageLoanAmount != null ? String(editAccount.mortgageLoanAmount / 100) : "",
       );
@@ -129,8 +117,6 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       setStartingBalance("");
       setIncludeInTotal(true);
       setSavingsGoal("");
-      setInterestRateYearly("");
-      setInterestRateMonthly("");
       setMortgageLoanAmount("");
       setMortgageStartDate("");
       setMortgageTermYears("");
@@ -140,7 +126,9 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       setDebtSubtype("regular");
       setDebtInputMode("original");
     }
-  }, [isOpen, editAccount, mainCurrency]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Intentional: re-init only when account identity changes, not on every Dexie reactive re-render.
+  }, [isOpen, editAccount?.id, mainCurrency]);
 
   const handleCurrencyChange = (c: string) => {
     if (isEdit && c !== currency) {
@@ -171,9 +159,6 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       setMortgageStartDate("");
       setMortgageTermYears("");
       setMortgageInterestRate("");
-    } else {
-      setInterestRateYearly("");
-      setInterestRateMonthly("");
     }
   };
 
@@ -203,8 +188,6 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
     },
     debtOriginalAmount: { label: `Original Amount (${currency})` },
     alreadyPaid: { label: `Already Paid (${currency})` },
-    interestRateYearly: { label: "Yearly Interest Rate", suffix: "%" },
-    interestRateMonthly: { label: "Monthly Interest Rate", suffix: "%" },
     mortgageTermYears: { label: "Term (years)" },
     mortgageInterestRate: { label: "Annual Interest Rate", suffix: "%" },
   };
@@ -223,12 +206,6 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       case "alreadyPaid":
         setAlreadyPaid(strVal);
         recalcStartingBalance(debtOriginalAmount, strVal);
-        break;
-      case "interestRateYearly":
-        setInterestRateYearly(strVal);
-        break;
-      case "interestRateMonthly":
-        setInterestRateMonthly(strVal);
         break;
       case "mortgageTermYears":
         setMortgageTermYears(strVal);
@@ -257,14 +234,6 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       includeInTotal,
       savingsGoal:
         type === "SAVINGS" && savingsGoal ? Math.round(parseFloat(savingsGoal) * 100) : null,
-      interestRateMonthly:
-        type === "DEBT" && debtSubtype === "regular" && interestRateMonthly
-          ? parseFloat(interestRateMonthly) / 100
-          : null,
-      interestRateYearly:
-        type === "DEBT" && debtSubtype === "regular" && interestRateYearly
-          ? parseFloat(interestRateYearly) / 100
-          : null,
       mortgageLoanAmount:
         type === "DEBT" && debtSubtype === "mortgage" && effectiveDebtOriginalAmount
           ? Math.round(parseFloat(effectiveDebtOriginalAmount) * 100)
@@ -295,15 +264,6 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       return null;
     }
 
-    if (type === "DEBT" && debtSubtype === "regular") {
-      const hasYearly = !!interestRateYearly;
-      const hasMonthly = !!interestRateMonthly;
-      if (hasYearly && hasMonthly) {
-        setErrors({ interestRateYearly: "Enter yearly or monthly rate — not both" });
-        return null;
-      }
-    }
-
     setErrors({});
     return raw;
   };
@@ -330,8 +290,6 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
           description: data.description,
           includeInTotal: data.includeInTotal,
           savingsGoal: data.savingsGoal ?? null,
-          interestRateMonthly: data.interestRateMonthly ?? null,
-          interestRateYearly: data.interestRateYearly ?? null,
           mortgageLoanAmount: data.mortgageLoanAmount ?? null,
           mortgageStartDate: data.mortgageStartDate ?? null,
           mortgageTermYears: data.mortgageTermYears ?? null,
@@ -354,8 +312,6 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
           isTrashed: false,
           savingsGoal: data.savingsGoal ?? null,
           savingsInterestRate: null,
-          interestRateMonthly: data.interestRateMonthly ?? null,
-          interestRateYearly: data.interestRateYearly ?? null,
           mortgageLoanAmount: data.mortgageLoanAmount ?? null,
           mortgageStartDate: data.mortgageStartDate ?? null,
           mortgageTermYears: data.mortgageTermYears ?? null,
@@ -812,87 +768,6 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
                     ))}
                   </div>
                 </div>
-
-                {/* Regular debt fields */}
-                {debtSubtype === "regular" && (
-                  <>
-                    <span
-                      style={{
-                        fontFamily: '"DM Sans", sans-serif',
-                        fontSize: "var(--text-caption)",
-                        color: "var(--color-text-disabled)",
-                      }}
-                    >
-                      Enter yearly OR monthly interest rate — at least one is required, not both
-                    </span>
-                    <div style={sectionStyle}>
-                      <span style={labelStyle}>Yearly Interest Rate (%)</span>
-                      <button
-                        onClick={() => {
-                          setNumpadValue(interestRateYearly);
-                          setActiveNumpadField("interestRateYearly");
-                        }}
-                        style={{
-                          ...inputStyle,
-                          textAlign: "left",
-                          cursor: "pointer",
-                          background: "var(--color-surface-raised)",
-                          fontFamily: '"JetBrains Mono", monospace',
-                          fontWeight: 500,
-                          borderColor: errors.interestRateYearly
-                            ? "var(--color-expense)"
-                            : "var(--color-border)",
-                        }}
-                      >
-                        {interestRateYearly ? `${interestRateYearly}%` : "0%"}
-                      </button>
-                      {errors.interestRateYearly && (
-                        <span style={errorStyle}>{errors.interestRateYearly}</span>
-                      )}
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "var(--space-3)",
-                      }}
-                    >
-                      <div style={{ flex: 1, height: "1px", background: "var(--color-border)" }} />
-                      <span
-                        style={{
-                          fontFamily: '"DM Sans", sans-serif',
-                          fontSize: "var(--text-caption)",
-                          color: "var(--color-text-disabled)",
-                          fontWeight: 500,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.06em",
-                        }}
-                      >
-                        or
-                      </span>
-                      <div style={{ flex: 1, height: "1px", background: "var(--color-border)" }} />
-                    </div>
-                    <div style={sectionStyle}>
-                      <span style={labelStyle}>Monthly Interest Rate (%)</span>
-                      <button
-                        onClick={() => {
-                          setNumpadValue(interestRateMonthly);
-                          setActiveNumpadField("interestRateMonthly");
-                        }}
-                        style={{
-                          ...inputStyle,
-                          textAlign: "left",
-                          cursor: "pointer",
-                          background: "var(--color-surface-raised)",
-                          fontFamily: '"JetBrains Mono", monospace',
-                          fontWeight: 500,
-                        }}
-                      >
-                        {interestRateMonthly ? `${interestRateMonthly}%` : "0%"}
-                      </button>
-                    </div>
-                  </>
-                )}
 
                 {/* Mortgage fields */}
                 {debtSubtype === "mortgage" && (

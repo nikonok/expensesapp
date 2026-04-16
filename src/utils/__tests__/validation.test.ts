@@ -29,7 +29,6 @@ describe('accountSchema — valid', () => {
       startingBalance: -500000,
       includeInTotal: true,
       debtOriginalAmount: 500000,
-      interestRateYearly: 0.05,
     });
     expect(result.success).toBe(true);
   });

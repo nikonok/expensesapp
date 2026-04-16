@@ -245,8 +245,6 @@ describe("AccountForm — debt input mode toggle", () => {
       includeInTotal: true,
       isTrashed: false,
       debtOriginalAmount: 500000,
-      interestRateYearly: 0.05,
-      interestRateMonthly: null,
       createdAt: "2025-01-01T00:00:00Z",
       updatedAt: "2025-01-01T00:00:00Z",
     };
@@ -337,8 +335,6 @@ describe("AccountForm — mortgage payment preview", () => {
       isTrashed: false,
       savingsGoal: null,
       savingsInterestRate: null,
-      interestRateMonthly: null,
-      interestRateYearly: null,
       debtOriginalAmount: 40000000,
       mortgageLoanAmount: 40000000,
       mortgageStartDate: "2020-01-01",

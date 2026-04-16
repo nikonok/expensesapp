@@ -12,8 +12,6 @@ export const accountSchema = z.object({
   includeInTotal: z.boolean().default(true),
   savingsGoal: z.number().int().positive().nullable().optional(),
   savingsInterestRate: z.number().min(0).max(1).nullable().optional(),
-  interestRateMonthly: z.number().min(0).max(1).nullable().optional(),
-  interestRateYearly: z.number().min(0).max(1).nullable().optional(),
   debtOriginalAmount: z.number().int().positive().nullable().optional(),
   mortgageLoanAmount: z.number().int().positive().nullable().optional(),
   mortgageStartDate: z

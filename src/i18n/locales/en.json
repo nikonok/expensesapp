@@ -57,8 +57,6 @@
       "startingBalance": "Starting balance",
       "includeInTotal": "Include in total balance",
       "savingsGoal": "Savings goal",
-      "interestRateMonthly": "Monthly interest rate",
-      "interestRateYearly": "Yearly interest rate",
       "mortgageLoanAmount": "Loan amount",
       "mortgageStartDate": "Start date",
       "mortgageTermYears": "Term (years)",

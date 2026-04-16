@@ -58,7 +58,6 @@ const DEMO_ACCOUNTS = [
     description: "",
     balance: -1230.5,
     startingBalance: -2000,
-    interestRateYearly: 0.185,
     debtOriginalAmount: 2000,
     includeInTotal: true,
     isTrashed: false,

@@ -33,26 +33,8 @@ describe('getMonthlyRate', () => {
     expect(getMonthlyRate(makeAccount({}))).toBeNull();
   });
 
-  it('returns interestRateMonthly directly when set', () => {
-    expect(getMonthlyRate(makeAccount({ interestRateMonthly: 0.005 }))).toBe(0.005);
-  });
-
-  it('converts interestRateYearly to monthly', () => {
-    expect(getMonthlyRate(makeAccount({ interestRateYearly: 0.06 }))).toBeCloseTo(0.005, 10);
-  });
-
   it('converts mortgageInterestRate to monthly', () => {
     expect(getMonthlyRate(makeAccount({ mortgageInterestRate: 0.048 }))).toBeCloseTo(0.004, 10);
-  });
-
-  it('prefers interestRateMonthly over yearly', () => {
-    expect(
-      getMonthlyRate(makeAccount({ interestRateMonthly: 0.003, interestRateYearly: 0.06 })),
-    ).toBe(0.003);
-  });
-
-  it('returns 0 when interestRateYearly is explicitly 0', () => {
-    expect(getMonthlyRate(makeAccount({ type: 'DEBT', interestRateYearly: 0 }))).toBe(0);
   });
 });
 
