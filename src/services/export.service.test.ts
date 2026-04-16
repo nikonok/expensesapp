@@ -82,6 +82,9 @@ beforeEach(() => {
     { id: 2, name: 'Savings', type: 'REGULAR', color: '', icon: '', currency: 'USD',
       description: '', balance: 0, startingBalance: 0, includeInTotal: true, isTrashed: false,
       createdAt: '', updatedAt: '' },
+    { id: 3, name: 'Mortgage', type: 'DEBT', color: '', icon: '', currency: 'USD',
+      description: '', balance: 0, startingBalance: 0, includeInTotal: true, isTrashed: false,
+      createdAt: '', updatedAt: '' },
   ]);
 
   vi.mocked(db.categories.toArray).mockResolvedValue([
@@ -92,74 +95,249 @@ beforeEach(() => {
   setupDomMocks();
 });
 
-// ── Helper to get aoa_to_sheet call data ──────────────────────────────────────
+// ── Helpers to get sheet data ─────────────────────────────────────────────────
 
-async function getSheetData(): Promise<(string | number)[][]> {
+async function getExpensesSheetData(): Promise<(string | number)[][]> {
   const XLSX = await import('xlsx');
   return vi.mocked(XLSX.utils.aoa_to_sheet).mock.calls[0][0] as (string | number)[][];
+}
+
+async function getIncomesSheetData(): Promise<(string | number)[][]> {
+  const XLSX = await import('xlsx');
+  return vi.mocked(XLSX.utils.aoa_to_sheet).mock.calls[1][0] as (string | number)[][];
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('exportService.exportTransactions', () => {
-  describe('amount conversion (integer minor units)', () => {
-    it('writes income amount as amountMainCurrency / 100', async () => {
+  describe('two worksheet tabs', () => {
+    it('calls book_append_sheet twice — once for Expenses, once for Incomes', async () => {
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
+
+      const XLSX = await import('xlsx');
+      const calls = vi.mocked(XLSX.utils.book_append_sheet).mock.calls;
+      expect(calls).toHaveLength(2);
+      expect(calls[0][2]).toBe('Expenses');
+      expect(calls[1][2]).toBe('Incomes');
+    });
+
+    it('routes EXPENSE transactions to Expenses sheet only', async () => {
       mockTxQuery.sortBy.mockResolvedValue([
-        makeTx({ type: 'INCOME', amountMainCurrency: 1050, accountId: 1, categoryId: 1 }),
+        makeTx({ type: 'EXPENSE', amountMainCurrency: 2000, categoryId: 1 }),
       ]);
 
       await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
 
-      const sheetData = await getSheetData();
-      // row index 1 (after header), col index 2 = income, col index 3 = expense
-      expect(sheetData[1][2]).toBe(10.5);  // 1050 / 100
-      expect(sheetData[1][3]).toBe('');    // expense col is empty for INCOME
+      const expenseRows = (await getExpensesSheetData()).slice(1);
+      const incomeRows = (await getIncomesSheetData()).slice(1);
+      expect(expenseRows).toHaveLength(1);
+      expect(incomeRows).toHaveLength(0);
     });
 
-    it('writes expense amount as amountMainCurrency / 100', async () => {
+    it('routes INCOME transactions to Incomes sheet only', async () => {
       mockTxQuery.sortBy.mockResolvedValue([
-        makeTx({ type: 'EXPENSE', amountMainCurrency: 2000, accountId: 1, categoryId: 1 }),
+        makeTx({ type: 'INCOME', amountMainCurrency: 3000, categoryId: 1 }),
       ]);
 
       await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
 
-      const sheetData = await getSheetData();
-      expect(sheetData[1][3]).toBe(20);   // 2000 / 100
-      expect(sheetData[1][2]).toBe('');   // income col is empty for EXPENSE
+      const expenseRows = (await getExpensesSheetData()).slice(1);
+      const incomeRows = (await getIncomesSheetData()).slice(1);
+      expect(expenseRows).toHaveLength(0);
+      expect(incomeRows).toHaveLength(1);
     });
+  });
 
-    it('writes transfer OUT/IN amounts as amountMainCurrency / 100', async () => {
-      const groupId = 'transfer-group-uuid';
+  describe('debt payment handling', () => {
+    it('emits 1 Expenses row and 0 Incomes rows for a debt payment transfer pair', async () => {
+      const groupId = 'debt-group-uuid';
       mockTxQuery.sortBy.mockResolvedValue([
         makeTx({
           id: 10,
           type: 'TRANSFER',
           transferGroupId: groupId,
           transferDirection: 'OUT',
-          amountMainCurrency: 5000,
+          amountMainCurrency: 50000,
           accountId: 1,
+          toAccountId: 3,
           categoryId: null,
+          note: 'Mortgage payment',
         }),
         makeTx({
           id: 11,
           type: 'TRANSFER',
           transferGroupId: groupId,
           transferDirection: 'IN',
-          amountMainCurrency: 7500,
-          accountId: 2,
+          amountMainCurrency: 50000,
+          accountId: 3,
+          toAccountId: null,
           categoryId: null,
         }),
       ]);
 
       await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
 
-      const sheetData = await getSheetData();
-      // Row 1: OUT leg → expense col = 5000 / 100 = 50
-      // Row 2: IN leg  → income col = 7500 / 100 = 75
-      expect(sheetData[1][3]).toBe(50);   // OUT: expense col
-      expect(sheetData[1][2]).toBe('');   // OUT: income col empty
-      expect(sheetData[2][2]).toBe(75);   // IN: 7500 / 100
-      expect(sheetData[2][3]).toBe('');   // IN: expense col empty
+      const expenseRows = (await getExpensesSheetData()).slice(1);
+      const incomeRows = (await getIncomesSheetData()).slice(1);
+      expect(expenseRows).toHaveLength(1);
+      expect(incomeRows).toHaveLength(0);
+    });
+
+    it('uses the debt account name as category for debt payment', async () => {
+      const groupId = 'debt-group-uuid-2';
+      mockTxQuery.sortBy.mockResolvedValue([
+        makeTx({
+          id: 20,
+          type: 'TRANSFER',
+          transferGroupId: groupId,
+          transferDirection: 'OUT',
+          amountMainCurrency: 50000,
+          accountId: 1,
+          toAccountId: 3,
+          categoryId: null,
+        }),
+        makeTx({
+          id: 21,
+          type: 'TRANSFER',
+          transferGroupId: groupId,
+          transferDirection: 'IN',
+          amountMainCurrency: 50000,
+          accountId: 3,
+          toAccountId: null,
+          categoryId: null,
+        }),
+      ]);
+
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
+
+      const expenseRows = (await getExpensesSheetData()).slice(1);
+      // col 3 = Category
+      expect(expenseRows[0][3]).toBe('Mortgage');
+    });
+
+    it('writes the debt payment amount correctly', async () => {
+      const groupId = 'debt-group-uuid-3';
+      mockTxQuery.sortBy.mockResolvedValue([
+        makeTx({
+          id: 30,
+          type: 'TRANSFER',
+          transferGroupId: groupId,
+          transferDirection: 'OUT',
+          amountMainCurrency: 75000,
+          accountId: 1,
+          toAccountId: 3,
+          categoryId: null,
+        }),
+        makeTx({
+          id: 31,
+          type: 'TRANSFER',
+          transferGroupId: groupId,
+          transferDirection: 'IN',
+          amountMainCurrency: 75000,
+          accountId: 3,
+          toAccountId: null,
+          categoryId: null,
+        }),
+      ]);
+
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
+
+      const expenseRows = (await getExpensesSheetData()).slice(1);
+      // col 1 = Amount
+      expect(expenseRows[0][1]).toBe(750);
+    });
+  });
+
+  describe('regular transfer handling', () => {
+    it('emits 1 Expenses row and 1 Incomes row for a regular transfer pair', async () => {
+      const groupId = 'regular-transfer-uuid';
+      mockTxQuery.sortBy.mockResolvedValue([
+        makeTx({
+          id: 40,
+          type: 'TRANSFER',
+          transferGroupId: groupId,
+          transferDirection: 'OUT',
+          amountMainCurrency: 10000,
+          accountId: 1,
+          toAccountId: null,
+          categoryId: null,
+        }),
+        makeTx({
+          id: 41,
+          type: 'TRANSFER',
+          transferGroupId: groupId,
+          transferDirection: 'IN',
+          amountMainCurrency: 10000,
+          accountId: 2,
+          toAccountId: null,
+          categoryId: null,
+        }),
+      ]);
+
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
+
+      const expenseRows = (await getExpensesSheetData()).slice(1);
+      const incomeRows = (await getIncomesSheetData()).slice(1);
+      expect(expenseRows).toHaveLength(1);
+      expect(incomeRows).toHaveLength(1);
+    });
+
+    it('uses "Transfer" as category for regular transfer rows', async () => {
+      const groupId = 'regular-transfer-uuid-2';
+      mockTxQuery.sortBy.mockResolvedValue([
+        makeTx({
+          id: 50,
+          type: 'TRANSFER',
+          transferGroupId: groupId,
+          transferDirection: 'OUT',
+          amountMainCurrency: 5000,
+          accountId: 1,
+          toAccountId: null,
+          categoryId: null,
+        }),
+        makeTx({
+          id: 51,
+          type: 'TRANSFER',
+          transferGroupId: groupId,
+          transferDirection: 'IN',
+          amountMainCurrency: 5000,
+          accountId: 2,
+          toAccountId: null,
+          categoryId: null,
+        }),
+      ]);
+
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
+
+      const expenseRows = (await getExpensesSheetData()).slice(1);
+      const incomeRows = (await getIncomesSheetData()).slice(1);
+      expect(expenseRows[0][3]).toBe('Transfer');
+      expect(incomeRows[0][3]).toBe('Transfer');
+    });
+  });
+
+  describe('amount conversion (integer minor units)', () => {
+    it('writes expense amount as amountMainCurrency / 100', async () => {
+      mockTxQuery.sortBy.mockResolvedValue([
+        makeTx({ type: 'EXPENSE', amountMainCurrency: 2000, categoryId: 1 }),
+      ]);
+
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
+
+      const sheetData = await getExpensesSheetData();
+      // col 1 = Amount
+      expect(sheetData[1][1]).toBe(20);
+    });
+
+    it('writes income amount as amountMainCurrency / 100', async () => {
+      mockTxQuery.sortBy.mockResolvedValue([
+        makeTx({ type: 'INCOME', amountMainCurrency: 1050, categoryId: 1 }),
+      ]);
+
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
+
+      const sheetData = await getIncomesSheetData();
+      expect(sheetData[1][1]).toBe(10.5);
     });
 
     it('amountMainCurrency=1 → spreadsheet value 0.01 (integer minor unit boundary)', async () => {
@@ -169,8 +347,8 @@ describe('exportService.exportTransactions', () => {
 
       await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
 
-      const sheetData = await getSheetData();
-      expect(sheetData[1][2]).toBe(0.01);
+      const sheetData = await getIncomesSheetData();
+      expect(sheetData[1][1]).toBe(0.01);
     });
 
     it('amountMainCurrency=100000 → spreadsheet value 1000 (large integer)', async () => {
@@ -180,8 +358,8 @@ describe('exportService.exportTransactions', () => {
 
       await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
 
-      const sheetData = await getSheetData();
-      expect(sheetData[1][3]).toBe(1000);
+      const sheetData = await getExpensesSheetData();
+      expect(sheetData[1][1]).toBe(1000);
     });
   });
 
@@ -194,7 +372,7 @@ describe('exportService.exportTransactions', () => {
 
       await exportService.exportTransactions('2026-04-01', '2026-04-30', 'USD');
 
-      const sheetData = await getSheetData();
+      const sheetData = await getExpensesSheetData();
       const dataRows = sheetData.slice(1);
       expect(dataRows).toHaveLength(1);
       expect(dataRows[0]).toContain(50);    // 5000 / 100
@@ -209,13 +387,15 @@ describe('exportService.exportTransactions', () => {
 
       await exportService.exportTransactions('2026-04-01', '2026-04-30', 'USD');
 
-      const sheetData = await getSheetData();
-      expect(sheetData.slice(1)).toHaveLength(0);
+      const expenseRows = (await getExpensesSheetData()).slice(1);
+      const incomeRows = (await getIncomesSheetData()).slice(1);
+      expect(expenseRows).toHaveLength(0);
+      expect(incomeRows).toHaveLength(0);
     });
   });
 
   describe('transfer deduplication', () => {
-    it('emits exactly two rows for a transfer pair (not four)', async () => {
+    it('emits exactly one row per sheet for a regular transfer pair (not two each)', async () => {
       const groupId = 'dedup-group-uuid';
       mockTxQuery.sortBy.mockResolvedValue([
         makeTx({
@@ -240,9 +420,10 @@ describe('exportService.exportTransactions', () => {
 
       await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
 
-      const sheetData = await getSheetData();
-      // header + 2 data rows (OUT + IN), not 4
-      expect(sheetData).toHaveLength(3);
+      const expenseRows = (await getExpensesSheetData()).slice(1);
+      const incomeRows = (await getIncomesSheetData()).slice(1);
+      expect(expenseRows).toHaveLength(1);
+      expect(incomeRows).toHaveLength(1);
     });
   });
 
@@ -288,9 +469,9 @@ describe('exportService.exportTransactions', () => {
 
       await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
 
-      const sheetData = await getSheetData();
-      // col index 1 = note
-      expect(sheetData[1][1]).toBe("'=SUM(A1)");
+      const sheetData = await getExpensesSheetData();
+      // col 2 = Note
+      expect(sheetData[1][2]).toBe("'=SUM(A1)");
     });
 
     it('sanitizes + prefix injection strings', async () => {
@@ -300,8 +481,8 @@ describe('exportService.exportTransactions', () => {
 
       await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
 
-      const sheetData = await getSheetData();
-      expect(sheetData[1][1]).toBe("'+CMD");
+      const sheetData = await getExpensesSheetData();
+      expect(sheetData[1][2]).toBe("'+CMD");
     });
 
     it('sanitizes - prefix injection strings', async () => {
@@ -311,63 +492,51 @@ describe('exportService.exportTransactions', () => {
 
       await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
 
-      const sheetData = await getSheetData();
-      expect(sheetData[1][1]).toBe("'-1+2");
+      const sheetData = await getExpensesSheetData();
+      expect(sheetData[1][2]).toBe("'-1+2");
     });
   });
 
   describe('date formatting', () => {
-    it('formats dates as DD.MM.YYYY', async () => {
+    it('formats dates as dd.MM.yyyy', async () => {
       mockTxQuery.sortBy.mockResolvedValue([
         makeTx({ type: 'EXPENSE', date: '2026-01-15', amountMainCurrency: 1000 }),
       ]);
 
       await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
 
-      const sheetData = await getSheetData();
-      // col index 0 = date
+      const sheetData = await getExpensesSheetData();
+      // col 0 = Date
       expect(sheetData[1][0]).toBe('15.01.2026');
     });
   });
 
   describe('header row', () => {
-    it('includes the main currency in income and expense column headers', async () => {
+    it('includes the main currency in the Amount column header', async () => {
       await exportService.exportTransactions('2026-04-01', '2026-04-30', 'JPY');
 
-      const sheetData = await getSheetData();
-      const header = sheetData[0] as string[];
-      expect(header).toContain('Income (JPY)');
-      expect(header).toContain('Expense (JPY)');
+      const expenseSheet = await getExpensesSheetData();
+      const incomeSheet = await getIncomesSheetData();
+      expect(expenseSheet[0]).toContain('Amount (JPY)');
+      expect(incomeSheet[0]).toContain('Amount (JPY)');
     });
 
-    it('includes all six columns in the correct order', async () => {
+    it('Expenses sheet has 4 columns in the correct order', async () => {
       await exportService.exportTransactions('2026-01-01', '2026-01-31', 'EUR');
 
-      const sheetData = await getSheetData();
-      expect(sheetData[0]).toEqual([
-        'Date (dd.mm.yyyy)',
-        'Note',
-        'Income (EUR)',
-        'Expense (EUR)',
-        'Category',
-        'Account',
-      ]);
+      const sheetData = await getExpensesSheetData();
+      expect(sheetData[0]).toEqual(['Date', 'Amount (EUR)', 'Note', 'Category']);
+    });
+
+    it('Incomes sheet has 4 columns in the correct order', async () => {
+      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'EUR');
+
+      const sheetData = await getIncomesSheetData();
+      expect(sheetData[0]).toEqual(['Date', 'Amount (EUR)', 'Note', 'Category']);
     });
   });
 
   describe('name resolution', () => {
-    it('resolves account name in the account column', async () => {
-      mockTxQuery.sortBy.mockResolvedValue([
-        makeTx({ type: 'EXPENSE', accountId: 2, amountMainCurrency: 500 }),
-      ]);
-
-      await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
-
-      const sheetData = await getSheetData();
-      // col index 5 = account
-      expect(sheetData[1][5]).toBe('Savings');
-    });
-
     it('resolves category name in the category column', async () => {
       mockTxQuery.sortBy.mockResolvedValue([
         makeTx({ type: 'EXPENSE', categoryId: 1, amountMainCurrency: 500 }),
@@ -375,9 +544,9 @@ describe('exportService.exportTransactions', () => {
 
       await exportService.exportTransactions('2026-01-01', '2026-01-31', 'USD');
 
-      const sheetData = await getSheetData();
-      // col index 4 = category
-      expect(sheetData[1][4]).toBe('Food');
+      const sheetData = await getExpensesSheetData();
+      // col 3 = Category
+      expect(sheetData[1][3]).toBe('Food');
     });
   });
 

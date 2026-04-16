@@ -232,6 +232,19 @@
       "label": "Export data",
       "button": "Export",
       "complete": "Export complete. Your file has been downloaded."
+    },
+    "log": {
+      "label": "Logs",
+      "level": "Log level",
+      "levels": {
+        "all": "All (debug + errors)",
+        "errors": "Errors only"
+      },
+      "export": "Export logs",
+      "clear": "Clear logs",
+      "clearConfirm": "This will delete all stored log entries.",
+      "cleared": "Logs cleared",
+      "exported": "Logs exported"
     }
   },
   "onboarding": {

@@ -7,6 +7,7 @@ import type {
   ExchangeRateCache,
   Setting,
   Backup,
+  Log,
 } from "./models";
 
 const db = new Dexie("expenses-app-db") as Dexie & {
@@ -17,10 +18,10 @@ const db = new Dexie("expenses-app-db") as Dexie & {
   exchangeRates: EntityTable<ExchangeRateCache, "id">;
   settings: EntityTable<Setting, "key">;
   backups: EntityTable<Backup, "id">;
+  logs: EntityTable<Log, "id">;
 };
 
 // v1 — initial release schema (all development migrations collapsed)
-// Future schema changes: add db.version(2).stores({...}) here
 db.version(1).stores({
   accounts: "++id, type, name, isTrashed, currency",
   categories: "++id, type, name, isTrashed, displayOrder",
@@ -30,6 +31,19 @@ db.version(1).stores({
   exchangeRates: "++id, baseCurrency, &[baseCurrency+date]",
   settings: "key",
   backups: "++id, createdAt",
+});
+
+// v2 — add logs table
+db.version(2).stores({
+  accounts: "++id, type, name, isTrashed, currency",
+  categories: "++id, type, name, isTrashed, displayOrder",
+  transactions:
+    "++id, date, accountId, categoryId, type, isTrashed, [date+displayOrder], [accountId+date], transferGroupId, toAccountId",
+  budgets: "++id, categoryId, accountId, month, [categoryId+month], [accountId+month]",
+  exchangeRates: "++id, baseCurrency, &[baseCurrency+date]",
+  settings: "key",
+  backups: "++id, createdAt",
+  logs: "++id, timestamp, level",
 });
 
 export { db };

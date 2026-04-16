@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { MemoryRouter } from "react-router";
 
 // Mock all heavy dependencies pulled in by SettingsView and its sub-components
-vi.mock("../../db/database", () => ({ db: {} }));
+vi.mock("../../db/database", () => ({ db: { logs: { clear: vi.fn() } } }));
 vi.mock("../../hooks/use-accounts", () => ({ useAccounts: () => [] }));
 vi.mock("../../hooks/use-transactions", () => ({
   useTransactions: () => [],
@@ -18,6 +18,9 @@ vi.mock("../../services/backup.service", () => ({
 vi.mock("../../services/export.service", () => ({ exportService: { exportTransactions: vi.fn() } }));
 vi.mock("../../services/exchange-rate.service", () => ({
   exchangeRateService: { fetchRate: vi.fn() },
+}));
+vi.mock("../../services/log.service", () => ({
+  logger: { exportLogs: vi.fn() },
 }));
 vi.mock("../shared/Toast", () => ({
   useToast: () => ({ show: vi.fn() }),
@@ -62,10 +65,13 @@ vi.mock("react-router", async () => {
 });
 
 // Mock settings store
+type MockState = { startupScreen: string; logLevel: 'errors' | 'all'; update: vi.Mock };
+const mockUpdate = vi.fn();
+const mockState: MockState = { startupScreen: "transactions", logLevel: "errors", update: mockUpdate };
 vi.mock("../../stores/settings-store", () => ({
-  useSettingsStore: (sel: (s: { startupScreen: string }) => unknown) =>
-    sel({ startupScreen: "transactions" }),
-  settingsStore: { getState: () => ({ startupScreen: "transactions" }) },
+  useSettingsStore: (sel?: (s: MockState) => unknown) =>
+    typeof sel === "function" ? sel(mockState) : mockState,
+  settingsStore: { getState: () => mockState },
 }));
 
 import React from "react";

@@ -1,6 +1,7 @@
 import { db } from '../db/database';
 import type { Backup } from '../db/models';
 import { accountSchema, categorySchema, transactionSchema, budgetSchema } from '../utils/validation';
+import { logger } from './log.service';
 
 interface BackupJSON {
   version: number;
@@ -66,6 +67,7 @@ class BackupService {
         await db.backups.bulkDelete(idsToDelete);
       }
     });
+    logger.info('backup.created', { isAutomatic });
   }
 
   async listBackups(): Promise<Backup[]> {
@@ -89,19 +91,25 @@ class BackupService {
   }
 
   async exportToFile(): Promise<void> {
-    const snapshot = await this._buildSnapshot();
-    const jsonStr = JSON.stringify(snapshot, null, 2);
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
+    try {
+      const snapshot = await this._buildSnapshot();
+      const jsonStr = JSON.stringify(snapshot, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
 
-    const dateStr = new Date().toISOString().slice(0, 10);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `expenses-backup-${dateStr}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `expenses-backup-${dateStr}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      logger.info('backup.exported');
+    } catch (err) {
+      logger.error('backup.export.failed', err instanceof Error ? err : { message: String(err) });
+      throw err;
+    }
   }
 
   async importFromFile(file: File): Promise<void> {
@@ -121,7 +129,13 @@ class BackupService {
       throw new Error('Invalid backup file structure');
     }
 
-    await this._restoreData(parsed);
+    try {
+      await this._restoreData(parsed);
+      logger.info('backup.restored');
+    } catch (err) {
+      logger.error('backup.restore.failed', err instanceof Error ? err : { message: String(err) });
+      throw err;
+    }
   }
 
   setAutoBackupSchedule(intervalHours: number | null): void {

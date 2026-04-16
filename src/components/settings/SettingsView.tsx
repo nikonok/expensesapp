@@ -9,6 +9,7 @@ import { NotificationSetting } from './NotificationSetting';
 import { MainCurrencySetting } from './MainCurrencySetting';
 import { BackupSettings } from './BackupSettings';
 import { ExportSettings } from './ExportSettings';
+import { LogSettings } from './LogSettings';
 import { ComingSoonStub } from '../shared/ComingSoonStub';
 import { InstallSetting } from './InstallSetting';
 
@@ -152,6 +153,7 @@ export function SettingsView() {
         <MainCurrencySetting />
         <BackupSettings />
         <ExportSettings />
+        <LogSettings />
 
         {/* Bottom safe area padding */}
         <div style={{ height: 'calc(var(--space-8) + env(safe-area-inset-bottom))' }} />

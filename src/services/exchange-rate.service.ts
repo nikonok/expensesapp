@@ -1,5 +1,6 @@
 import { db } from '../db/database';
 import { getLocalDateString, getUTCISOString } from '../utils/date-utils';
+import { logger } from './log.service';
 
 const API_BASE = 'https://open.er-api.com/v6/latest';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -120,7 +121,8 @@ export const exchangeRateService = {
             .where('[baseCurrency+date]')
             .equals([base, today])
             .first();
-        } catch {
+        } catch (err) {
+          logger.error('exchangeRate.fetch.failed', err instanceof Error ? err : { message: String(err) });
           // Fetch failed — fall through to use stale entry already loaded
         }
       }
@@ -132,7 +134,8 @@ export const exchangeRateService = {
           .where('[baseCurrency+date]')
           .equals([base, today])
           .first();
-      } catch {
+      } catch (err) {
+        logger.error('exchangeRate.fetch.failed', err instanceof Error ? err : { message: String(err) });
         // Fetch failed — try to find any cached entry for this base
         entry = await db.exchangeRates
           .where('baseCurrency')

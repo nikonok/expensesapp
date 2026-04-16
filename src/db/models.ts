@@ -142,3 +142,15 @@ export interface Backup {
   data: string; // JSON-serialized full database snapshot
   isAutomatic: boolean; // true if created by scheduled backup
 }
+
+// ── Logs ──
+
+export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
+
+export interface Log {
+  id?: number;
+  timestamp: string;
+  level: LogLevel;
+  message: string;
+  context?: Record<string, unknown> | null;
+}

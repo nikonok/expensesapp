@@ -6,6 +6,7 @@ import { registerPeriodicSync, unregisterPeriodicSync } from "./sw-register";
 import { ToastProvider } from "./components/shared/Toast";
 import { checkDatabaseIntegrity } from "./services/integrity.service";
 import { checkAndRunAutoBackup, setAutoBackupSchedule } from "./services/backup.service";
+import { logger } from "./services/log.service";
 import { IntegrityErrorScreen } from "./components/shared/IntegrityErrorScreen";
 import TabLayout from "./components/layout/TabLayout";
 import AccountsPage from "./pages/AccountsPage";
@@ -36,11 +37,13 @@ function AppRoutes() {
       const integrity = await checkDatabaseIntegrity();
       if (!integrity.ok) {
         if (import.meta.env.DEV) console.error('Database integrity check failed:', integrity.error);
+        logger.error('app.integrity.failed', { error: String(integrity.error) });
         setIntegrityError(true);
         return;
       }
       try {
         await load();
+        logger.info('app.startup');
       } catch (err) {
         if (import.meta.env.DEV) console.error('Failed to load settings:', err);
         useSettingsStore.setState({ isLoaded: true });
@@ -52,6 +55,9 @@ function AppRoutes() {
     if (!isLoaded || integrityError) return;
     checkAndRunAutoBackup().catch((err) => {
       if (import.meta.env.DEV) console.error('Auto-backup check failed:', err);
+    });
+    logger.trimOldLogs().catch((err) => {
+      if (import.meta.env.DEV) console.error('Log trim failed:', err);
     });
     const intervalHours = useSettingsStore.getState().autoBackupIntervalHours;
     setAutoBackupSchedule(intervalHours);

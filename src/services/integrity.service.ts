@@ -10,6 +10,7 @@ export async function checkDatabaseIntegrity(): Promise<{ ok: boolean; error?: s
       db.exchangeRates.limit(1).toArray(),
       db.settings.limit(1).toArray(),
       db.backups.limit(1).toArray(),
+      db.logs.limit(1).toArray(),
     ]);
     return { ok: true };
   } catch (err) {

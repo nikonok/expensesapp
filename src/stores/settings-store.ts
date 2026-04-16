@@ -11,6 +11,7 @@ interface SettingsStore {
   autoBackupIntervalHours: number | null;
   lastAutoBackupAt: string | null;
   hasCompletedOnboarding: boolean;
+  logLevel: 'all' | 'errors';
   isLoaded: boolean;
 
   load: () => Promise<void>;
@@ -27,6 +28,7 @@ const VALID_SETTING_KEYS = new Set([
   'autoBackupIntervalHours',
   'lastAutoBackupAt',
   'hasCompletedOnboarding',
+  'logLevel',
 ]);
 
 const DEFAULTS: Omit<SettingsStore, 'load' | 'update' | 'isLoaded'> = {
@@ -39,6 +41,7 @@ const DEFAULTS: Omit<SettingsStore, 'load' | 'update' | 'isLoaded'> = {
   autoBackupIntervalHours: null,
   lastAutoBackupAt: null,
   hasCompletedOnboarding: false,
+  logLevel: 'errors',
 };
 
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
@@ -72,6 +75,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         (map['lastAutoBackupAt'] as string | null) ?? DEFAULTS.lastAutoBackupAt,
       hasCompletedOnboarding:
         (map['hasCompletedOnboarding'] as boolean) ?? DEFAULTS.hasCompletedOnboarding,
+      logLevel: (['all', 'errors'] as const).includes(map['logLevel'] as 'all' | 'errors')
+        ? (map['logLevel'] as 'all' | 'errors')
+        : DEFAULTS.logLevel,
       isLoaded: true,
     });
   },

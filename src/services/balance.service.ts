@@ -1,5 +1,6 @@
 import { db } from '@/db/database';
 import type { Account, Transaction } from '@/db/models';
+import { logger } from '@/services/log.service';
 
 export class QuotaError extends Error {
   name = 'QuotaError';
@@ -42,7 +43,7 @@ async function getMinDisplayOrder(date: string): Promise<number> {
 }
 
 export async function applyTransaction(tx: Transaction): Promise<void> {
-  return wrapQuotaError(
+  await wrapQuotaError(
     db.transaction('rw', [db.accounts, db.transactions], async () => {
       const account = await db.accounts.get(tx.accountId);
       if (!account) throw new Error(`Account ${tx.accountId} not found`);
@@ -65,10 +66,11 @@ export async function applyTransaction(tx: Transaction): Promise<void> {
       await db.transactions.add(newTx);
     })
   );
+  logger.debug('tx.apply', { type: tx.type, accountId: tx.accountId });
 }
 
 export async function revertTransaction(tx: Transaction): Promise<void> {
-  return wrapQuotaError(
+  await wrapQuotaError(
     db.transaction('rw', [db.accounts, db.transactions], async () => {
       const account = await db.accounts.get(tx.accountId);
       if (!account) throw new Error(`Account ${tx.accountId} not found`);
@@ -85,13 +87,14 @@ export async function revertTransaction(tx: Transaction): Promise<void> {
       await db.transactions.delete(tx.id!);
     })
   );
+  logger.debug('tx.delete', { id: tx.id, type: tx.type });
 }
 
 export async function replaceTransaction(
   oldTx: Transaction,
   newTx: Transaction
 ): Promise<void> {
-  return wrapQuotaError(
+  await wrapQuotaError(
     db.transaction('rw', [db.accounts, db.transactions], async () => {
       const now = new Date().toISOString();
 
@@ -142,6 +145,7 @@ export async function replaceTransaction(
       await db.transactions.put(updatedTx);
     })
   );
+  logger.debug('tx.update', { id: oldTx.id, type: newTx.type });
 }
 
 export async function applyTransfer(
@@ -151,7 +155,7 @@ export async function applyTransfer(
   if (outTx.transferGroupId !== inTx.transferGroupId) {
     throw new Error('Transfer records must share the same transferGroupId');
   }
-  return wrapQuotaError(
+  await wrapQuotaError(
     db.transaction('rw', [db.accounts, db.transactions], async () => {
       const now = new Date().toISOString();
 
@@ -209,7 +213,7 @@ export async function applyTransfer(
 }
 
 export async function revertTransfer(transferGroupId: string): Promise<void> {
-  return wrapQuotaError(
+  await wrapQuotaError(
     db.transaction('rw', [db.accounts, db.transactions], async () => {
       const records = await db.transactions
         .where('transferGroupId')
@@ -244,7 +248,7 @@ export async function replaceTransfer(
   outTx: Transaction,
   inTx: Transaction
 ): Promise<void> {
-  return wrapQuotaError(
+  await wrapQuotaError(
     db.transaction('rw', [db.accounts, db.transactions], async () => {
       const records = await db.transactions
         .where('transferGroupId')
@@ -327,7 +331,7 @@ export async function adjustBalance(
   accountId: number,
   newBalance: number
 ): Promise<void> {
-  return wrapQuotaError(
+  await wrapQuotaError(
     db.transaction('rw', [db.accounts], async () => {
       const account = await db.accounts.get(accountId);
       if (!account) throw new Error(`Account ${accountId} not found`);
