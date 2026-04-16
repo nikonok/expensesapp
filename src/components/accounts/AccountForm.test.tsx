@@ -74,6 +74,10 @@ vi.mock("../shared/Numpad", () => ({
 
 vi.mock("../shared/ConfirmDialog", () => ({ ConfirmDialog: () => null }));
 
+vi.mock("../shared/Toast", () => ({
+  useToast: () => ({ show: vi.fn() }),
+}));
+
 vi.mock("../../services/debt-payment.service", () => ({
   calculateMortgagePayment: vi.fn(() => 233837),
 }));

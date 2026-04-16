@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Archive, ArrowDownCircle, ArrowUpCircle, List } from "lucide-react";
+import { Archive, ArrowDownCircle, ArrowUpCircle, List, Plus } from "lucide-react";
 import { db } from "../../db/database";
 import type { Account } from "../../db/models";
 import { adjustBalance } from "../../services/balance.service";
@@ -129,6 +129,11 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
   const handleAddWithdrawal = () => {
     onClose();
     navigate(`/transactions/new?type=expense&accountId=${account.id}`);
+  };
+
+  const handleAddDebtTransaction = () => {
+    onClose();
+    navigate(`/transactions/new?type=expense&toAccountId=${account.id}`);
   };
 
   const shortcutBtnStyle: React.CSSProperties = {
@@ -485,38 +490,55 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
           {/* Shortcut buttons */}
           {!showAdjust && (
             <div style={{ display: "flex", gap: "var(--space-2)" }}>
-              <button onClick={handleAddIncome} style={shortcutBtnStyle}>
-                <ArrowDownCircle
-                  size={20}
-                  strokeWidth={1.5}
-                  style={{ color: "var(--color-income)" }}
-                />
-                <span
-                  style={{
-                    fontFamily: '"DM Sans", sans-serif',
-                    fontSize: "var(--text-caption)",
-                    fontWeight: 500,
-                  }}
-                >
-                  Income
-                </span>
-              </button>
-              <button onClick={handleAddWithdrawal} style={shortcutBtnStyle}>
-                <ArrowUpCircle
-                  size={20}
-                  strokeWidth={1.5}
-                  style={{ color: "var(--color-expense)" }}
-                />
-                <span
-                  style={{
-                    fontFamily: '"DM Sans", sans-serif',
-                    fontSize: "var(--text-caption)",
-                    fontWeight: 500,
-                  }}
-                >
-                  Expense
-                </span>
-              </button>
+              {isDebt ? (
+                <button onClick={handleAddDebtTransaction} style={shortcutBtnStyle}>
+                  <Plus size={20} strokeWidth={1.5} />
+                  <span
+                    style={{
+                      fontFamily: '"DM Sans", sans-serif',
+                      fontSize: "var(--text-caption)",
+                      fontWeight: 500,
+                    }}
+                  >
+                    New transaction
+                  </span>
+                </button>
+              ) : (
+                <>
+                  <button onClick={handleAddIncome} style={shortcutBtnStyle}>
+                    <ArrowDownCircle
+                      size={20}
+                      strokeWidth={1.5}
+                      style={{ color: "var(--color-income)" }}
+                    />
+                    <span
+                      style={{
+                        fontFamily: '"DM Sans", sans-serif',
+                        fontSize: "var(--text-caption)",
+                        fontWeight: 500,
+                      }}
+                    >
+                      Income
+                    </span>
+                  </button>
+                  <button onClick={handleAddWithdrawal} style={shortcutBtnStyle}>
+                    <ArrowUpCircle
+                      size={20}
+                      strokeWidth={1.5}
+                      style={{ color: "var(--color-expense)" }}
+                    />
+                    <span
+                      style={{
+                        fontFamily: '"DM Sans", sans-serif',
+                        fontSize: "var(--text-caption)",
+                        fontWeight: 500,
+                      }}
+                    >
+                      Expense
+                    </span>
+                  </button>
+                </>
+              )}
               <button onClick={handleViewTransactions} style={shortcutBtnStyle}>
                 <List size={20} strokeWidth={1.5} />
                 <span

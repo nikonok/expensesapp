@@ -43,8 +43,8 @@ export function computeTextPositions(primaryFontSize: number, secondaryFontSize:
   const primaryLineHeight = primaryFontSize * lineHeightRatio;
   const secondaryLineHeight = secondaryFontSize * lineHeightRatio;
   const gap = 4;
-  const primaryY = CY - gap / 2 - primaryLineHeight / 2;
-  const secondaryY = CY + gap / 2 + secondaryLineHeight / 2;
+  const primaryY = CY;
+  const secondaryY = CY + primaryLineHeight / 2 + gap + secondaryLineHeight / 2;
   return { primaryY, secondaryY };
 }
 
@@ -208,12 +208,7 @@ export default function DonutChart({ slices, totalExpense, totalIncome, categori
           const secondaryStr = `${secondaryPrefix}${formatAmount(secondaryAmount)}`;
           const primaryFontSize = dynamicFontSize(primaryStr, 24, 14);
           const secondaryFontSize = dynamicFontSize(secondaryStr, 14, 10);
-          const lineHeightRatio = 1.2;
-          const primaryLineHeight = primaryFontSize * lineHeightRatio;
-          const secondaryLineHeight = secondaryFontSize * lineHeightRatio;
-          const gap = 4;
-          const primaryY = CY - gap / 2 - primaryLineHeight / 2;
-          const secondaryY = CY + gap / 2 + secondaryLineHeight / 2;
+          const { primaryY, secondaryY } = computeTextPositions(primaryFontSize, secondaryFontSize);
           return (
             <>
               <text

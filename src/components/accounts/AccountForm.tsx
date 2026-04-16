@@ -9,6 +9,7 @@ import { IconPicker } from "../shared/IconPicker";
 import { CurrencyPicker } from "../shared/CurrencyPicker";
 import { Numpad } from "../shared/Numpad";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
+import { useToast } from "../shared/Toast";
 import { COLOR_PALETTE } from "../../utils/constants";
 import { useSettingsStore } from "../../stores/settings-store";
 import { formatNumpadDisplay } from "../../utils/numpad-utils";
@@ -27,6 +28,7 @@ const DEFAULT_ICON = "wallet";
 export default function AccountForm({ isOpen, onClose, editAccount }: AccountFormProps) {
   const isEdit = !!editAccount;
   const mainCurrency = useSettingsStore((s) => s.mainCurrency);
+  const { show: showToast } = useToast();
 
   const [name, setName] = useState("");
   const [type, setType] = useState<AccountType>("REGULAR");
@@ -308,7 +310,12 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
 
   const handleSave = async () => {
     const data = validate();
-    if (!data) return;
+    if (!data) {
+      const firstError =
+        !name.trim() ? 'Name is required' : 'Please fix the highlighted fields';
+      showToast(firstError, 'error');
+      return;
+    }
     setIsSaving(true);
     setSaveError(null);
     try {

@@ -134,6 +134,7 @@ export default function TransactionRow({
             style={{
               width: '32px',
               height: '32px',
+              minWidth: '32px',
               borderRadius: '50%',
               background: 'var(--color-primary)',
               display: 'flex',
@@ -149,6 +150,7 @@ export default function TransactionRow({
             style={{
               width: '32px',
               height: '32px',
+              minWidth: '32px',
               borderRadius: '50%',
               background: iconBg,
               display: 'flex',
@@ -175,7 +177,7 @@ export default function TransactionRow({
         )}
 
         {/* Center: label + note */}
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px', justifyContent: 'center', alignSelf: 'stretch' }}>
           <span
             style={{
               fontFamily: '"DM Sans", sans-serif',
@@ -209,7 +211,7 @@ export default function TransactionRow({
         </div>
 
         {/* Amount */}
-        <div style={{ flexShrink: 0 }}>
+        <div style={{ flexShrink: 0, minWidth: '72px', textAlign: 'right' }}>
           <AmountDisplay
             amount={transaction.amount}
             currency={account.currency}
@@ -223,7 +225,8 @@ export default function TransactionRow({
       <div
         {...listeners}
         {...attributes}
-        aria-label={`Reorder ${category?.name ?? (isDebtPmt ? (toAccount?.name ?? t('transactions.debtPayment.label')) : isTransfer ? 'Transfer' : 'transaction')}`}
+        aria-label={`Reorder ${centerLabel}`}
+        data-drag-handle="true"
         style={{
           width: '44px',
           height: '44px',

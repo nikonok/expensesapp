@@ -223,23 +223,76 @@ export default function TransactionList() {
   });
   const sensors = useSensors(pointerSensor, keyboardSensor);
 
-  // Handle drag end for a specific day group
-  async function handleDragEnd(event: DragEndEvent, dayTxs: Transaction[]) {
+  // Handle drag end — supports same-day and cross-day reordering
+  async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const oldIndex = dayTxs.findIndex((t) => t.id === active.id);
-    const newIndex = dayTxs.findIndex((t) => t.id === over.id);
-    if (oldIndex === -1 || newIndex === -1) return;
+    const activeId = active.id as number;
+    const overId = over.id as number;
 
-    const reordered = arrayMove(dayTxs, oldIndex, newIndex);
-    const updates = reordered.map((tx, index) => ({
-      ...tx,
-      displayOrder: index * 10,
-    }));
+    const activeTx = txById.get(activeId);
+    const overTx = txById.get(overId);
+    if (!activeTx || !overTx) return;
+
+    const sourceDate = activeTx.date;
+    const targetDate = overTx.date;
+
+    const sourceGroup = groupedByDate.find((g) => g.date === sourceDate)?.txs ?? [];
+    const targetGroup = groupedByDate.find((g) => g.date === targetDate)?.txs ?? [];
 
     try {
-      await db.transactions.bulkPut(updates);
+      if (sourceDate === targetDate) {
+        const oldIndex = sourceGroup.findIndex((t) => t.id === activeId);
+        const newIndex = sourceGroup.findIndex((t) => t.id === overId);
+        if (oldIndex === -1 || newIndex === -1) return;
+
+        const reordered = arrayMove(sourceGroup, oldIndex, newIndex);
+        const updates = reordered.map((tx, index) => ({ ...tx, displayOrder: index * 10 }));
+        await db.transaction('rw', db.transactions, async () => {
+          await db.transactions.bulkPut(updates);
+        });
+      } else {
+        const targetIndex = targetGroup.findIndex((t) => t.id === overId);
+        if (targetIndex === -1) return;
+
+        const now = new Date().toISOString();
+        const newTargetList = [
+          ...targetGroup.slice(0, targetIndex),
+          { ...activeTx, date: targetDate },
+          ...targetGroup.slice(targetIndex),
+        ];
+        const newSourceList = sourceGroup.filter((t) => t.id !== activeId);
+
+        const targetUpdates = newTargetList.map((tx, index) => ({
+          ...tx,
+          date: targetDate,
+          displayOrder: index * 10,
+          updatedAt: now,
+        }));
+        const sourceUpdates = newSourceList.map((tx, index) => ({
+          ...tx,
+          displayOrder: index * 10,
+          updatedAt: now,
+        }));
+
+        await db.transaction('rw', db.transactions, async () => {
+          await db.transactions.bulkPut(targetUpdates);
+          if (sourceUpdates.length > 0) {
+            await db.transactions.bulkPut(sourceUpdates);
+          }
+          if (activeTx.type === 'TRANSFER' && activeTx.transferGroupId) {
+            const partner = await db.transactions
+              .where('transferGroupId')
+              .equals(activeTx.transferGroupId)
+              .filter((t) => t.id !== activeTx.id)
+              .first();
+            if (partner) {
+              await db.transactions.put({ ...partner, date: targetDate, updatedAt: now });
+            }
+          }
+        });
+      }
     } catch (err) {
       console.error('Failed to save transaction order:', err);
       showToast('Failed to save order', 'error');
@@ -249,6 +302,38 @@ export default function TransactionList() {
   const hasFilters = hasActiveTransactionFilters();
   const isEmpty = groupedByDate.length === 0;
   const selectionCount = selectedTransactionIds.size;
+
+  const dayGroupsJsx = groupedByDate.map(({ date, txs }) => {
+    const { income, expense } = getDayTotals(txs);
+    return (
+      <div key={date}>
+        <TransactionDayHeader
+          date={date}
+          totalIncome={income}
+          totalExpense={expense}
+          currency={mainCurrency}
+        />
+        {txs.map((tx) => {
+          const account = accountMap.get(tx.accountId);
+          if (!account) return null;
+          const category =
+            tx.categoryId !== null ? (categoryMap.get(tx.categoryId) ?? null) : null;
+          const toAccount = getTransferToAccount(tx);
+          return (
+            <TransactionRow
+              key={tx.id}
+              transaction={tx}
+              account={account}
+              toAccount={toAccount}
+              category={category}
+              isSelected={isRowSelected(tx)}
+              onSelect={() => handleSelect(tx)}
+            />
+          );
+        })}
+      </div>
+    );
+  });
 
   return (
     <>
@@ -338,47 +423,23 @@ export default function TransactionList() {
         />
       ) : (
         <div style={{ paddingBottom: selectionCount > 0 ? 'calc(56px + env(safe-area-inset-bottom) + 16px)' : 'var(--space-4)' }}>
-          {groupedByDate.map(({ date, txs }) => {
-            const { income, expense } = getDayTotals(txs);
-            const dayCurrency = mainCurrency;
-            const dayTxIds = txs.map((t) => t.id!);
-            return (
-              <div key={date} style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 200px' } as React.CSSProperties}>
-                <TransactionDayHeader
-                  date={date}
-                  totalIncome={income}
-                  totalExpense={expense}
-                  currency={dayCurrency}
-                />
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={(event) => handleDragEnd(event, txs)}
-                >
-                  <SortableContext items={dayTxIds} strategy={verticalListSortingStrategy}>
-                    {txs.map((tx) => {
-                      const account = accountMap.get(tx.accountId);
-                      if (!account) return null;
-                      const category =
-                        tx.categoryId !== null ? (categoryMap.get(tx.categoryId) ?? null) : null;
-                      const toAccount = getTransferToAccount(tx);
-                      return (
-                        <TransactionRow
-                          key={tx.id}
-                          transaction={tx}
-                          account={account}
-                          toAccount={toAccount}
-                          category={category}
-                          isSelected={isRowSelected(tx)}
-                          onSelect={() => handleSelect(tx)}
-                        />
-                      );
-                    })}
-                  </SortableContext>
-                </DndContext>
-              </div>
-            );
-          })}
+          {hasFilters ? (
+            dayGroupsJsx
+          ) : (
+            // Unfiltered view — single global DndContext for same-day and cross-day reordering
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={groupedByDate.flatMap((g) => g.txs.map((t) => t.id!))}
+                strategy={verticalListSortingStrategy}
+              >
+                {dayGroupsJsx}
+              </SortableContext>
+            </DndContext>
+          )}
         </div>
       )}
 

@@ -1854,16 +1854,30 @@ export default function TransactionInput() {
     }
   }, [allCategories, searchParams, category]);
 
+  // Initialize toAccount from query param
+  useEffect(() => {
+    if (toAccount !== null) return;
+    const qToAccountId = searchParams.get("toAccountId");
+    if (qToAccountId && allAccounts.length > 0) {
+      const found = allAccounts.find((a) => a.id === parseInt(qToAccountId, 10));
+      if (found) setToAccount(found);
+    }
+  }, [allAccounts, searchParams, toAccount]);
+
   // Step-skip logic based on query params and active filter
   useEffect(() => {
     if (isEdit) return;
     const qType = searchParams.get("type");
     const qCategoryId = searchParams.get("categoryId");
     const qAccountId = searchParams.get("accountId");
+    const qToAccountId = searchParams.get("toAccountId");
 
     if (qCategoryId) {
       // CategoryList: category pre-set, go straight to amount form
       setStep(3);
+    } else if (qToAccountId && !qAccountId) {
+      // AccountDetail debt: TO account pre-set, user picks FROM
+      setStep(1);
     } else if (qType === "expense" && qAccountId) {
       // AccountDetail Expense: FROM account pre-set, user picks TO
       setStep(2);
@@ -2026,15 +2040,22 @@ export default function TransactionInput() {
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
-  // Step 1 → 2: FROM account selected
-  const handleFromAccountSelect = useCallback((acc: Account) => {
-    setAccount(acc);
-    setTxType("expense");
-    setCategory(null);
-    history.pushState(null, "", window.location.href);
-    historyDepthRef.current++;
-    setStep(2);
-  }, []);
+  // Step 1 → 2 (or 3 if TO pre-set): FROM account selected
+  const handleFromAccountSelect = useCallback(
+    (acc: Account) => {
+      setAccount(acc);
+      setTxType("expense");
+      setCategory(null);
+      history.pushState(null, "", window.location.href);
+      historyDepthRef.current++;
+      if (toAccount !== null) {
+        setStep(3);
+      } else {
+        setStep(2);
+      }
+    },
+    [toAccount],
+  );
 
   // Step 1 → 2 (or 3 if TO pre-set): FROM income category selected
   const handleFromIncomeCategorySelect = useCallback(

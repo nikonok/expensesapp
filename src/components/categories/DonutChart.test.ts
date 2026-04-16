@@ -51,21 +51,14 @@ describe('computeTextPositions', () => {
   const gap = 4;
   const lineHeightRatio = 1.2;
 
-  it('gap is centered at CY at max sizes (primary=24, secondary=14): bottom-of-primary = CY - gap/2', () => {
+  it('primaryY equals CY at max sizes (primary=24, secondary=14)', () => {
     const { primaryY } = computeTextPositions(24, 14);
-    const primaryLineHeight = 24 * lineHeightRatio;
-    expect(primaryY + primaryLineHeight / 2).toBe(CY - gap / 2);
+    expect(primaryY).toBe(CY);
   });
 
-  it('gap is centered at CY at min sizes (primary=14, secondary=10): bottom-of-primary = CY - gap/2', () => {
+  it('primaryY equals CY at min sizes (primary=14, secondary=10)', () => {
     const { primaryY } = computeTextPositions(14, 10);
-    const primaryLineHeight = 14 * lineHeightRatio;
-    expect(primaryY + primaryLineHeight / 2).toBe(CY - gap / 2);
-  });
-
-  it('primaryY is always above CY', () => {
-    expect(computeTextPositions(24, 14).primaryY).toBeLessThan(CY);
-    expect(computeTextPositions(14, 10).primaryY).toBeLessThan(CY);
+    expect(primaryY).toBe(CY);
   });
 
   it('secondaryY is always below CY', () => {
