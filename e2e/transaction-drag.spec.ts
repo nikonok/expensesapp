@@ -202,36 +202,31 @@ async function readDragTxs(
   );
 }
 
-// ── Helper: perform a drag using low-level mouse API ──────────────────────────
+// ── Helper: keyboard-based drag (reliable in headless Chromium with dnd-kit) ──
 
 /**
- * Drag an element's bounding-box centre to a target Y coordinate.
- * Moves 10px downward first to overcome the PointerSensor distance:8 constraint.
+ * Drag a sortable item using dnd-kit's KeyboardSensor:
+ * focus the handle → Space to pick up → Arrow keys to move → Space to drop.
+ * `steps` is the number of Arrow presses; `direction` is 'up' or 'down'.
  */
-async function dragTo(
+async function dragWithKeyboard(
   page: import('@playwright/test').Page,
   sourceHandle: import('@playwright/test').Locator,
-  targetHandle: import('@playwright/test').Locator,
+  direction: 'up' | 'down',
+  steps: number,
 ) {
-  const sourceBB = await sourceHandle.boundingBox();
-  const targetBB = await targetHandle.boundingBox();
-  if (!sourceBB || !targetBB) throw new Error('Could not get bounding boxes for drag handles');
-
-  const startX = sourceBB.x + sourceBB.width / 2;
-  const startY = sourceBB.y + sourceBB.height / 2;
-  const endX = targetBB.x + targetBB.width / 2;
-  const endY = targetBB.y + targetBB.height / 2 + 5; // land just below centre of target
-
-  // Move to start position
-  await page.mouse.move(startX, startY);
-  // Press
-  await page.mouse.down();
-  // Small nudge to exceed the distance:8 activation constraint
-  await page.mouse.move(startX, startY + 10, { steps: 3 });
-  // Move to destination
-  await page.mouse.move(endX, endY, { steps: 20 });
-  // Release
-  await page.mouse.up();
+  await sourceHandle.focus();
+  await page.keyboard.press('Space');
+  // dnd-kit measures droppable rects in a useEffect → setQueue → re-render cycle.
+  // Without this pause, ArrowKey fires before the rect map is populated, so
+  // sortableKeyboardCoordinates finds no candidates and the ghost stays put.
+  await page.waitForTimeout(300);
+  const key = direction === 'down' ? 'ArrowDown' : 'ArrowUp';
+  for (let i = 0; i < steps; i++) {
+    await page.keyboard.press(key);
+    await page.waitForTimeout(50);
+  }
+  await page.keyboard.press('Space');
 }
 
 // ── TC-DRAG-01: Same-day reorder ───────────────────────────────────────────────
@@ -247,13 +242,12 @@ test('TC-DRAG-01: same-day drag reorders displayOrder in IndexedDB', async ({ pa
   await expect(page.getByText('DRAG-A')).toBeVisible();
   await expect(page.getByText('DRAG-B')).toBeVisible();
 
-  // Drag handles: DRAG-A is first (index 0), DRAG-B is second (index 1) within today's group
+  // Drag handles: DRAG-A is first (index 0), DRAG-B is second (index 1)
   const handles = page.locator('[data-drag-handle="true"]');
   const handleA = handles.nth(0); // DRAG-A (displayOrder=0, rendered first)
-  const handleB = handles.nth(1); // DRAG-B (displayOrder=10, rendered second)
 
-  // Drag A below B
-  await dragTo(page, handleA, handleB);
+  // Keyboard drag: pick up A, move it one step down (below B), drop
+  await dragWithKeyboard(page, handleA, 'down', 1);
 
   // Wait for Dexie live-query to propagate and React to re-render
   await page.waitForTimeout(500);
@@ -283,13 +277,12 @@ test('TC-DRAG-02: cross-day drag moves transaction to target date in IndexedDB',
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   });
 
-  // The layout order is: today group (DRAG-A at index 0, DRAG-B at index 1), then yesterday group (DRAG-C at index 2)
+  // Flat sort order: [A(0), B(1), C(2)] — C is at index 2, must move up 2 steps to reach index 0
   const handles = page.locator('[data-drag-handle="true"]');
   const handleC = handles.nth(2); // DRAG-C, yesterday
-  const handleA = handles.nth(0); // DRAG-A, today — drag C to this position
 
-  // Drag C (yesterday) up to A's position (today)
-  await dragTo(page, handleC, handleA);
+  // Keyboard drag: pick up C, move it two steps up (past B then A), drop at index 0
+  await dragWithKeyboard(page, handleC, 'up', 2);
 
   // Wait for DB write and React re-render
   await page.waitForTimeout(500);
