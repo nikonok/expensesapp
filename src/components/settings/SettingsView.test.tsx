@@ -1,6 +1,6 @@
 /* @vitest-environment jsdom */
 import { render, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
 import { MemoryRouter } from "react-router";
 
 // Mock all heavy dependencies pulled in by SettingsView and its sub-components
@@ -65,7 +65,7 @@ vi.mock("react-router", async () => {
 });
 
 // Mock settings store
-type MockState = { startupScreen: string; logLevel: 'errors' | 'all'; update: vi.Mock };
+type MockState = { startupScreen: string; logLevel: 'errors' | 'all'; update: Mock };
 const mockUpdate = vi.fn();
 const mockState: MockState = { startupScreen: "transactions", logLevel: "errors", update: mockUpdate };
 vi.mock("../../stores/settings-store", () => ({

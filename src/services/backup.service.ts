@@ -195,7 +195,7 @@ class BackupService {
   private async _restoreData(data: BackupJSON): Promise<void> {
     function validateTable<T>(
       rows: unknown[],
-      schema: { safeParse: (r: unknown) => { success: boolean; data?: T; error?: { issues: { code: string; path: (string | number)[]; message: string }[] } } },
+      schema: { safeParse: (r: unknown) => { success: boolean; data?: T; error?: { issues: { code: string; path: PropertyKey[]; message: string }[] } } },
       tableName: string,
     ): T[] {
       return rows.map((row, i) => {
