@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { useEffect } from 'react';
 import BottomSheet from '../layout/BottomSheet';
 import { useUIStore } from '../../stores/ui-store';
 import { useCategories } from '../../hooks/use-categories';
@@ -9,6 +8,15 @@ import { getLucideIcon } from '../shared/IconPicker';
 interface TransactionFiltersProps {
   isOpen: boolean;
   onClose: () => void;
+}
+
+export function shouldClearAccountFilter(
+  filter: number | null,
+  accounts: Array<{ id?: number }>,
+): boolean {
+  if (filter === null) return false;
+  if (accounts.length === 0) return false; // still loading
+  return !accounts.some((a) => a.id === filter);
 }
 
 export default function TransactionFilters({ isOpen, onClose }: TransactionFiltersProps) {
@@ -24,10 +32,12 @@ export default function TransactionFilters({ isOpen, onClose }: TransactionFilte
 
   const activeCategories = useCategories(undefined, false);
   const activeAccounts = useAccounts(false);
-  const allAccounts = useAccounts(true);
-  const archivedAccounts = allAccounts.filter((a) => a.isTrashed);
 
-  const [archivedExpanded, setArchivedExpanded] = useState(false);
+  useEffect(() => {
+    if (shouldClearAccountFilter(transactionAccountFilter, activeAccounts)) {
+      setTransactionAccountFilter(null);
+    }
+  }, [transactionAccountFilter, activeAccounts, setTransactionAccountFilter]);
 
   function handleClearAll() {
     clearTransactionFilters();
@@ -252,110 +262,6 @@ export default function TransactionFilters({ isOpen, onClose }: TransactionFilte
                 </button>
               );
             })}
-
-            {/* Archived accounts */}
-            {archivedAccounts.length > 0 && (
-              <>
-                <button
-                  onClick={() => setArchivedExpanded((v) => !v)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    minHeight: '44px',
-                    padding: '0 var(--space-1)',
-                    background: 'none',
-                    border: 'none',
-                    borderBottom: '1px solid var(--color-border)',
-                    cursor: 'pointer',
-                    color: 'var(--color-text-secondary)',
-                  }}
-                >
-                  <span
-                    style={{
-                      fontFamily: '"DM Sans", sans-serif',
-                      fontWeight: 500,
-                      fontSize: 'var(--text-body)',
-                    }}
-                  >
-                    Archived ({archivedAccounts.length})
-                  </span>
-                  {archivedExpanded ? (
-                    <ChevronUp size={16} strokeWidth={2} />
-                  ) : (
-                    <ChevronDown size={16} strokeWidth={2} />
-                  )}
-                </button>
-
-                {archivedExpanded &&
-                  archivedAccounts.map((acc) => {
-                    const isSelected = transactionAccountFilter === acc.id;
-                    const Icon = getLucideIcon(acc.icon);
-                    return (
-                      <button
-                        key={acc.id}
-                        onClick={() => setTransactionAccountFilter(isSelected ? null : acc.id!)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 'var(--space-3)',
-                          minHeight: '48px',
-                          padding: '0 var(--space-1)',
-                          background: 'none',
-                          border: 'none',
-                          borderBottom: '1px solid var(--color-border)',
-                          cursor: 'pointer',
-                          color: isSelected ? 'var(--color-primary)' : 'var(--color-text-disabled)',
-                          textAlign: 'left',
-                          opacity: 0.7,
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: '28px',
-                            height: '28px',
-                            borderRadius: '50%',
-                            background: `color-mix(in oklch, ${acc.color} 20%, transparent)`,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: acc.color,
-                            flexShrink: 0,
-                          }}
-                        >
-                          {Icon ? (
-                            <Icon size={14} strokeWidth={1.5} />
-                          ) : (
-                            <span style={{ fontSize: '14px', lineHeight: 1 }}>{acc.icon}</span>
-                          )}
-                        </div>
-                        <span
-                          style={{
-                            flex: 1,
-                            fontFamily: '"DM Sans", sans-serif',
-                            fontWeight: 500,
-                            fontSize: 'var(--text-body)',
-                          }}
-                        >
-                          {acc.name}
-                        </span>
-                        {isSelected && (
-                          <span
-                            style={{
-                              width: '8px',
-                              height: '8px',
-                              borderRadius: '50%',
-                              background: 'var(--color-primary)',
-                              flexShrink: 0,
-                              boxShadow: '0 0 6px var(--color-primary)',
-                            }}
-                          />
-                        )}
-                      </button>
-                    );
-                  })}
-              </>
-            )}
           </div>
         </section>
 

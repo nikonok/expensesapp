@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { accountSchema, categorySchema, transactionSchema, budgetSchema, settingSchemas } from '../validation';
+import { backupAccountSchema } from '../backup-validation';
 
 // ── accountSchema ──
 
@@ -449,5 +450,56 @@ describe('settingSchemas', () => {
 
   it('autoBackupIntervalHours: rejects zero', () => {
     expect(settingSchemas.autoBackupIntervalHours.safeParse(0).success).toBe(false);
+  });
+});
+
+// ── backupAccountSchema — description length ──
+
+const baseBackupAccount = {
+  name: 'Checking',
+  type: 'REGULAR' as const,
+  color: 'oklch(70% 0.15 200)',
+  icon: 'wallet',
+  currency: 'USD',
+  description: '',
+  balance: 0,
+  startingBalance: 0,
+  includeInTotal: true,
+  isTrashed: false,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+};
+
+describe('backupAccountSchema — description validation', () => {
+  it('accepts a short description', () => {
+    const result = backupAccountSchema.safeParse({
+      ...baseBackupAccount,
+      description: 'Hello',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts an empty description', () => {
+    const result = backupAccountSchema.safeParse({
+      ...baseBackupAccount,
+      description: '',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a description of exactly 255 characters', () => {
+    const result = backupAccountSchema.safeParse({
+      ...baseBackupAccount,
+      description: 'x'.repeat(255),
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a description longer than 255 characters', () => {
+    const result = backupAccountSchema.safeParse({
+      ...baseBackupAccount,
+      description: 'x'.repeat(256),
+    });
+    expect(result.success).toBe(false);
   });
 });

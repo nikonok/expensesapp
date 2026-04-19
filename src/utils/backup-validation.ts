@@ -16,7 +16,7 @@ export const backupAccountSchema = z
     color: z.string(),
     icon: z.string(),
     currency: z.string(),
-    description: z.string(),
+    description: z.string().max(255),
     balance: z.number().int().finite(),
     startingBalance: z.number().int().finite(),
     includeInTotal: z.boolean(),

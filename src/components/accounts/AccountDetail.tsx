@@ -235,6 +235,22 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
             </button>
           </div>
 
+          {account.description && account.description.trim() && (
+            <p
+              style={{
+                fontFamily: '"DM Sans", sans-serif',
+                fontSize: 'var(--text-body)',
+                color: 'var(--color-text-secondary)',
+                lineHeight: 1.4,
+                margin: 0,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {account.description}
+            </p>
+          )}
+
           {/* Savings progress */}
           {hasGoal && (
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>

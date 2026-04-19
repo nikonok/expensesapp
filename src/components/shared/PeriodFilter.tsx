@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarCheck, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import BottomSheet from '../layout/BottomSheet';
-import { getPeriodLabel, shiftPeriod, getLocalDateString } from '../../utils/date-utils';
+import { getPeriodLabel, parsePeriodFilter, shiftPeriod, getLocalDateString } from '../../utils/date-utils';
 import type { PeriodFilter, PeriodFilterType } from '../../types';
 
 interface PeriodFilterProps {
@@ -44,6 +44,13 @@ function isNavigable(type: PeriodFilterType): boolean {
   return type === 'today' || type === 'day' || type === 'week' || type === 'month' || type === 'year';
 }
 
+export function isCurrentPeriod(filter: PeriodFilter): boolean {
+  if (!isNavigable(filter.type)) return false;
+  const { start, end } = parsePeriodFilter(filter);
+  const now = Date.now();
+  return start.getTime() <= now && now <= end.getTime();
+}
+
 export default function PeriodFilter({ value, onChange, variant = 'full' }: PeriodFilterProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState(value.startDate);
@@ -52,6 +59,7 @@ export default function PeriodFilter({ value, onChange, variant = 'full' }: Peri
 
   const label = getPeriodLabel(value);
   const showArrows = variant === 'month-only' || isNavigable(value.type);
+  const showToday = variant !== 'month-only' && isNavigable(value.type) && !isCurrentPeriod(value);
   const isCustomActive = value.type === 'custom';
 
   function handleChipClick() {
@@ -86,6 +94,10 @@ export default function PeriodFilter({ value, onChange, variant = 'full' }: Peri
 
   function handleNext() {
     onChange(shiftPeriod(value, 1));
+  }
+
+  function handleToday() {
+    onChange(buildFilterForType(value.type, getLocalDateString()));
   }
 
   return (
@@ -132,6 +144,29 @@ export default function PeriodFilter({ value, onChange, variant = 'full' }: Peri
           />
         )}
       </button>
+
+      {/* Today button */}
+      {showToday && (
+        <button
+          onClick={handleToday}
+          aria-label="Jump to today"
+          style={{
+            width: '44px',
+            height: '44px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--color-primary-dim)',
+            border: '1px solid var(--color-primary)',
+            borderRadius: 'var(--radius-chip)',
+            cursor: 'pointer',
+            color: 'var(--color-primary)',
+            flexShrink: 0,
+          }}
+        >
+          <CalendarCheck size={16} strokeWidth={2} />
+        </button>
+      )}
 
       {/* Prev arrow */}
       {showArrows && (

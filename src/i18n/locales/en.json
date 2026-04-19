@@ -126,8 +126,7 @@
       "title": "Filter transactions",
       "note": "Note contains",
       "category": "Category",
-      "account": "Account",
-      "archived": "Archived accounts"
+      "account": "Account"
     },
     "transfer": {
       "from": "{{from}} → {{to}}"

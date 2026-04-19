@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
-import { ArrowLeft, ChevronDown, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, Tag, Wallet, X } from "lucide-react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useAccounts } from "@/hooks/use-accounts";
 import { useCategories } from "@/hooks/use-categories";
@@ -27,6 +27,7 @@ import {
   calculateTermSaved,
 } from "@/services/debt-payment.service";
 import { CalendarPicker } from "@/components/shared/CalendarPicker";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Numpad } from "@/components/shared/Numpad";
 import { NumpadDisplay } from "@/components/shared/NumpadDisplay";
 import { ComingSoonStub } from "@/components/shared/ComingSoonStub";
@@ -74,6 +75,8 @@ interface Step1Props {
   onFromAccountSelect: (acc: Account) => void;
   onFromIncomeCategorySelect: (cat: Category) => void;
   onBack: () => void;
+  onNavigateToCategories: () => void;
+  onNavigateToAccounts: () => void;
 }
 
 function Step1({
@@ -83,6 +86,8 @@ function Step1({
   onFromAccountSelect,
   onFromIncomeCategorySelect,
   onBack,
+  onNavigateToCategories,
+  onNavigateToAccounts,
 }: Step1Props) {
   const { t } = useTranslation();
 
@@ -161,13 +166,29 @@ function Step1({
       >
         {txType === "income" ? (
           // Income TO pre-set (from AccountDetail): user picks income category (FROM)
-          incomeCategories.map((cat) => (
-            <CategoryRow
-              key={cat.id}
-              category={cat}
-              onPress={() => onFromIncomeCategorySelect(cat)}
+          incomeCategories.length === 0 ? (
+            <EmptyState
+              icon={Tag}
+              heading="No categories yet"
+              body="Create an income category first"
+              action={{ label: "Go to Categories", onClick: onNavigateToCategories }}
             />
-          ))
+          ) : (
+            incomeCategories.map((cat) => (
+              <CategoryRow
+                key={cat.id}
+                category={cat}
+                onPress={() => onFromIncomeCategorySelect(cat)}
+              />
+            ))
+          )
+        ) : nonDebtAccounts.length === 0 && incomeCategories.length === 0 ? (
+          <EmptyState
+            icon={Wallet}
+            heading="No accounts yet"
+            body="Create an account first"
+            action={{ label: "Go to Accounts", onClick: onNavigateToAccounts }}
+          />
         ) : (
           <>
             {nonDebtAccounts.map((acc) => (
@@ -208,6 +229,8 @@ interface Step2TOProps {
   onToDebtAccountSelect: (acc: Account) => void;
   onToIncomeAccountSelect: (acc: Account) => void;
   onBack: () => void;
+  onNavigateToCategories: () => void;
+  onNavigateToAccounts: () => void;
 }
 
 function Step2TO({
@@ -220,6 +243,8 @@ function Step2TO({
   onToDebtAccountSelect,
   onToIncomeAccountSelect,
   onBack,
+  onNavigateToCategories,
+  onNavigateToAccounts,
 }: Step2TOProps) {
   const { t } = useTranslation();
 
@@ -295,21 +320,42 @@ function Step2TO({
       >
         {txType === "income"
           ? // Income FROM was category: show accounts as TO destination
-            accounts
-              .filter((a) => a.type !== "DEBT")
-              .map((acc) => (
+            (() => {
+              const incomeDestAccounts = accounts.filter((a) => a.type !== "DEBT");
+              if (incomeDestAccounts.length === 0) {
+                return (
+                  <EmptyState
+                    icon={Wallet}
+                    heading="No accounts yet"
+                    body="Create an account first"
+                    action={{ label: "Go to Accounts", onClick: onNavigateToAccounts }}
+                  />
+                );
+              }
+              return incomeDestAccounts.map((acc) => (
                 <AccountRow
                   key={acc.id}
                   account={acc}
                   onPress={() => onToIncomeAccountSelect(acc)}
                 />
-              ))
+              ));
+            })()
           : (() => {
               const debtAccounts = accounts.filter((a) => a.type === "DEBT");
               const transferAccounts = accounts.filter(
                 (a) => a.type !== "DEBT" && a.id !== fromAccountId,
               );
               const expenseCategories = categories.filter((c) => c.type === "EXPENSE");
+              if (debtAccounts.length === 0 && transferAccounts.length === 0 && expenseCategories.length === 0) {
+                return (
+                  <EmptyState
+                    icon={Tag}
+                    heading="No categories yet"
+                    body="Create an expense category first"
+                    action={{ label: "Go to Categories", onClick: onNavigateToCategories }}
+                  />
+                );
+              }
               return (
                 <>
                   {debtAccounts.length > 0 && (
@@ -624,6 +670,8 @@ interface Step3Props {
   isDebtPaymentMode: boolean;
   paymentType: "regular" | "overpayment";
   onPaymentTypeChange: (t: "regular" | "overpayment") => void;
+  onNavigateToCategories: () => void;
+  onNavigateToAccounts: () => void;
 }
 
 function Step3({
@@ -657,6 +705,8 @@ function Step3({
   isDebtPaymentMode,
   paymentType,
   onPaymentTypeChange,
+  onNavigateToCategories,
+  onNavigateToAccounts,
 }: Step3Props) {
   const { t } = useTranslation();
   const [pickerMode, setPickerMode] = useState<"from" | "to" | null>(null);
@@ -1635,51 +1685,78 @@ function Step3({
       {/* Picker sheets */}
       {pickerMode === "from" && (
         <PickerSheet title={t("transactions.fields.from")} onClose={() => setPickerMode(null)}>
-          {nonDebtAccounts.map((acc) => (
-            <AccountRow
-              key={acc.id}
-              account={acc}
-              onPress={() => {
-                onFromPick({ type: "account", account: acc });
-                setPickerMode(null);
-              }}
+          {nonDebtAccounts.length === 0 && incomeCategories.length === 0 ? (
+            <EmptyState
+              icon={Wallet}
+              heading="No accounts yet"
+              body="Create an account first"
+              action={{ label: "Go to Accounts", onClick: onNavigateToAccounts }}
             />
-          ))}
-          {nonDebtAccounts.length > 0 && incomeCategories.length > 0 && (
-            <div
-              style={{
-                height: "1px",
-                background: "var(--color-border)",
-                marginBlock: "var(--space-1)",
-              }}
-            />
+          ) : (
+            <>
+              {nonDebtAccounts.map((acc) => (
+                <AccountRow
+                  key={acc.id}
+                  account={acc}
+                  onPress={() => {
+                    onFromPick({ type: "account", account: acc });
+                    setPickerMode(null);
+                  }}
+                />
+              ))}
+              {nonDebtAccounts.length > 0 && incomeCategories.length > 0 && (
+                <div
+                  style={{
+                    height: "1px",
+                    background: "var(--color-border)",
+                    marginBlock: "var(--space-1)",
+                  }}
+                />
+              )}
+              {incomeCategories.map((cat) => (
+                <CategoryRow
+                  key={cat.id}
+                  category={cat}
+                  onPress={() => {
+                    onFromPick({ type: "incomeCategory", category: cat });
+                    setPickerMode(null);
+                  }}
+                />
+              ))}
+            </>
           )}
-          {incomeCategories.map((cat) => (
-            <CategoryRow
-              key={cat.id}
-              category={cat}
-              onPress={() => {
-                onFromPick({ type: "incomeCategory", category: cat });
-                setPickerMode(null);
-              }}
-            />
-          ))}
         </PickerSheet>
       )}
 
       {pickerMode === "to" && (
         <PickerSheet title={t("transactions.fields.to")} onClose={() => setPickerMode(null)}>
           {txType === "income" ? (
-            nonDebtAccounts.map((acc) => (
-              <AccountRow
-                key={acc.id}
-                account={acc}
-                onPress={() => {
-                  onToPick({ type: "incomeDestAccount", account: acc });
-                  setPickerMode(null);
-                }}
+            nonDebtAccounts.length === 0 ? (
+              <EmptyState
+                icon={Wallet}
+                heading="No accounts yet"
+                body="Create an account first"
+                action={{ label: "Go to Accounts", onClick: onNavigateToAccounts }}
               />
-            ))
+            ) : (
+              nonDebtAccounts.map((acc) => (
+                <AccountRow
+                  key={acc.id}
+                  account={acc}
+                  onPress={() => {
+                    onToPick({ type: "incomeDestAccount", account: acc });
+                    setPickerMode(null);
+                  }}
+                />
+              ))
+            )
+          ) : debtAccounts.length === 0 && transferAccounts.length === 0 && expenseCategories.length === 0 ? (
+            <EmptyState
+              icon={Tag}
+              heading="No categories yet"
+              body="Create an expense category first"
+              action={{ label: "Go to Categories", onClick: onNavigateToCategories }}
+            />
           ) : (
             <>
               {debtAccounts.map((acc) => (
@@ -2221,6 +2298,9 @@ export default function TransactionInput() {
     }
   }, [step, isEdit, navigate]);
 
+  const handleNavigateToCategories = useCallback(() => navigate('/categories'), [navigate]);
+  const handleNavigateToAccounts = useCallback(() => navigate('/accounts'), [navigate]);
+
   // Escape key: close form (inner overlays handle Escape via capture-phase listeners)
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -2542,6 +2622,8 @@ export default function TransactionInput() {
         onFromAccountSelect={handleFromAccountSelect}
         onFromIncomeCategorySelect={handleFromIncomeCategorySelect}
         onBack={handleBack}
+        onNavigateToCategories={handleNavigateToCategories}
+        onNavigateToAccounts={handleNavigateToAccounts}
       />
     );
   }
@@ -2558,6 +2640,8 @@ export default function TransactionInput() {
         onToDebtAccountSelect={handleDebtAccountSelect}
         onToIncomeAccountSelect={handleToIncomeAccountSelect}
         onBack={handleBack}
+        onNavigateToCategories={handleNavigateToCategories}
+        onNavigateToAccounts={handleNavigateToAccounts}
       />
     );
   }
@@ -2595,6 +2679,8 @@ export default function TransactionInput() {
         isDebtPaymentMode={isDebtPaymentMode}
         paymentType={paymentType}
         onPaymentTypeChange={setPaymentType}
+        onNavigateToCategories={handleNavigateToCategories}
+        onNavigateToAccounts={handleNavigateToAccounts}
       />
     </div>
   );

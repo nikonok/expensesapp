@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Plus, Trash2, Wallet } from "lucide-react";
+import { Archive, Plus, Wallet } from "lucide-react";
 import { useAccounts } from "../../hooks/use-accounts";
 import { useTotalBalance } from "../../hooks/use-total-balance";
 import type { Account, AccountType } from "../../db/models";
@@ -77,7 +77,7 @@ export default function AccountList() {
             color: "var(--color-text-secondary)",
           }}
         >
-          <Trash2 size={20} strokeWidth={1.5} />
+          <Archive size={20} strokeWidth={1.5} />
         </button>
       </div>
 

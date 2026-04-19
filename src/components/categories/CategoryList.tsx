@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Plus, Tag, Trash2 } from 'lucide-react';
+import { Archive, Plus, Tag } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { format } from 'date-fns';
 import {
@@ -236,7 +236,7 @@ export default function CategoryList() {
           {categoriesEditMode && (
             <button
               onClick={() => navigate('/categories/trash')}
-              aria-label="View trash"
+              aria-label="View archived categories"
               style={{
                 minWidth: '44px',
                 minHeight: '44px',
@@ -249,7 +249,7 @@ export default function CategoryList() {
                 color: 'var(--color-text-secondary)',
               }}
             >
-              <Trash2 size={20} strokeWidth={1.5} />
+              <Archive size={20} strokeWidth={1.5} />
             </button>
           )}
 
