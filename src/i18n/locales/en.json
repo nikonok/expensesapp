@@ -264,19 +264,14 @@
     },
     "categories": {
       "title": "Choose your categories",
-      "subtitle": "Select the ones you want to track.",
-      "acceptAll": "Accept all"
-    },
-    "complete": {
-      "title": "You're all set!",
-      "subtitle": "Start tracking your expenses.",
-      "cta": "Go to App"
+      "subtitle": "Select the ones you want to track."
     },
     "install": {
       "title": "Install App",
       "subtitle": "Add to your home screen for the best experience.",
-      "cta": "Install App",
-      "skip": "Not now"
+      "cta": "Install",
+      "skip": "Maybe later",
+      "countdown": "Closing in {{seconds}}s…"
     }
   },
   "errors": {
