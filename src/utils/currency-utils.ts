@@ -28,3 +28,19 @@ export function getCurrencySymbol(currency: string, locale?: string): string {
     .find((part) => part.type === 'currency');
   return formatted?.value ?? currency;
 }
+
+const _decimalPlacesCache = new Map<string, number>();
+
+export function getCurrencyDecimalPlaces(currency: string): number {
+  if (_decimalPlacesCache.has(currency)) {
+    return _decimalPlacesCache.get(currency)!;
+  }
+  try {
+    const dp = new Intl.NumberFormat('en-US', { style: 'currency', currency })
+      .resolvedOptions().minimumFractionDigits ?? 2;
+    _decimalPlacesCache.set(currency, dp);
+    return dp;
+  } catch {
+    return 2;
+  }
+}

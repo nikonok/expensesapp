@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatAmount, formatAmountNoSymbol, convertAmount, getCurrencySymbol } from '../currency-utils';
+import { formatAmount, formatAmountNoSymbol, convertAmount, getCurrencySymbol, getCurrencyDecimalPlaces } from '../currency-utils';
 
 describe('formatAmount', () => {
   it('formats USD with dollar sign and comma thousands separator', () => {
@@ -58,5 +58,27 @@ describe('getCurrencySymbol', () => {
 
   it('returns zł for PLN (pl-PL locale)', () => {
     expect(getCurrencySymbol('PLN', 'pl-PL')).toBe('zł');
+  });
+});
+
+describe('getCurrencyDecimalPlaces', () => {
+  it('returns 2 for USD', () => {
+    expect(getCurrencyDecimalPlaces('USD')).toBe(2);
+  });
+
+  it('returns 2 for EUR', () => {
+    expect(getCurrencyDecimalPlaces('EUR')).toBe(2);
+  });
+
+  it('returns 0 for JPY', () => {
+    expect(getCurrencyDecimalPlaces('JPY')).toBe(0);
+  });
+
+  it('returns 3 for KWD', () => {
+    expect(getCurrencyDecimalPlaces('KWD')).toBe(3);
+  });
+
+  it('returns 2 for an invalid currency code (fallback)', () => {
+    expect(getCurrencyDecimalPlaces('INVALID')).toBe(2);
   });
 });

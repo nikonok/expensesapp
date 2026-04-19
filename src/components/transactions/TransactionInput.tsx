@@ -28,6 +28,7 @@ import {
 } from "@/services/debt-payment.service";
 import { CalendarPicker } from "@/components/shared/CalendarPicker";
 import { Numpad } from "@/components/shared/Numpad";
+import { NumpadDisplay } from "@/components/shared/NumpadDisplay";
 import { ComingSoonStub } from "@/components/shared/ComingSoonStub";
 import { useToast } from "@/components/shared/Toast";
 import { useTranslation } from "@/hooks/use-translation";
@@ -951,53 +952,58 @@ function Step3({
           style={{
             paddingInline: "var(--space-4)",
             paddingBottom: "var(--space-2)",
-            textAlign: "right",
             cursor: hasMultipleAmountFields ? "pointer" : undefined,
             borderBottom:
               hasMultipleAmountFields && focusedField === "primary"
                 ? "2px solid var(--color-primary)"
                 : "2px solid transparent",
+            display: "flex",
+            alignItems: "baseline",
+            justifyContent: "flex-end",
+            gap: "var(--space-2)",
           }}
         >
-          <span
-            style={{
-              fontFamily: '"JetBrains Mono", monospace',
-              fontWeight: 600,
-              fontSize: "var(--text-amount-lg)",
-              color:
-                txType === "income"
-                  ? "var(--color-income)"
-                  : txType === "expense"
-                    ? "var(--color-expense)"
-                    : "var(--color-transfer)",
-              textShadow:
-                txType === "income"
-                  ? "0 0 12px oklch(73% 0.23 160 / 45%)"
-                  : txType === "expense"
-                    ? "0 0 12px oklch(62% 0.28 18 / 45%)"
-                    : undefined,
-            }}
-          >
-            {formatNumpadDisplay(numpadValue)}
-            {numpadValue && evaluatedAmount !== null && numpadValue.match(/[+\-×÷]/) && (
-              <span
-                style={{
-                  fontSize: "var(--text-body)",
-                  color: "var(--color-text-secondary)",
-                  marginLeft: "var(--space-2)",
-                }}
-              >
-                = {formatNumpadDisplay(String(evaluatedAmount ?? ""))}
-              </span>
-            )}
-          </span>
+          <NumpadDisplay
+            value={numpadValue}
+            isActive={true}
+            color={
+              txType === "income"
+                ? "var(--color-income)"
+                : txType === "expense"
+                  ? "var(--color-expense)"
+                  : "var(--color-transfer)"
+            }
+            textShadow={
+              txType === "income"
+                ? "0 0 12px oklch(73% 0.23 160 / 45%)"
+                : txType === "expense"
+                  ? "0 0 12px oklch(62% 0.28 18 / 45%)"
+                  : undefined
+            }
+            align="right"
+            style={{ flex: 1 }}
+          />
+          {numpadValue && evaluatedAmount !== null && numpadValue.match(/[+\-×÷]/) && (
+            <span
+              style={{
+                fontFamily: '"JetBrains Mono", monospace',
+                fontWeight: 500,
+                fontSize: "var(--text-body)",
+                color: "var(--color-text-secondary)",
+                flexShrink: 0,
+                whiteSpace: "nowrap",
+              }}
+            >
+              = {formatNumpadDisplay(String(evaluatedAmount ?? ""))}
+            </span>
+          )}
           {account && (
             <span
               style={{
                 fontFamily: '"JetBrains Mono", monospace',
                 fontSize: "var(--text-caption)",
                 color: "var(--color-text-secondary)",
-                marginLeft: "var(--space-2)",
+                flexShrink: 0,
               }}
             >
               {fromCurrency}
@@ -1518,6 +1524,13 @@ function Step3({
           onCalendarPress={() => setShowDatePicker(true)}
           variant="transaction"
           isTransfer={isTransfer}
+          currencyCode={
+            focusedField === "secondary"
+              ? mainCurrency
+              : focusedField === "destination"
+                ? (toAccount?.currency ?? mainCurrency)
+                : fromCurrency
+          }
         />
 
         {/* Repeat stub */}

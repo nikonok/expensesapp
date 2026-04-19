@@ -8,6 +8,7 @@ import { ColorPicker } from "../shared/ColorPicker";
 import { IconPicker } from "../shared/IconPicker";
 import { CurrencyPicker } from "../shared/CurrencyPicker";
 import { Numpad } from "../shared/Numpad";
+import { NumpadDisplay } from "../shared/NumpadDisplay";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 import { useToast } from "../shared/Toast";
 import { COLOR_PALETTE } from "../../utils/constants";
@@ -52,6 +53,7 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [activeNumpadField, setActiveNumpadField] = useState<
     | "startingBalance"
+    | "savingsGoal"
     | "debtOriginalAmount"
     | "alreadyPaid"
     | "mortgageTermYears"
@@ -186,6 +188,7 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
     startingBalance: {
       label: type === "DEBT" ? `Current Balance (${currency})` : `Starting Balance (${currency})`,
     },
+    savingsGoal: { label: `Savings Goal (${currency})` },
     debtOriginalAmount: { label: `Original Amount (${currency})` },
     alreadyPaid: { label: `Already Paid (${currency})` },
     mortgageTermYears: { label: "Term (years)" },
@@ -198,6 +201,9 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
     switch (activeNumpadField) {
       case "startingBalance":
         setStartingBalance(strVal);
+        break;
+      case "savingsGoal":
+        setSavingsGoal(strVal);
         break;
       case "debtOriginalAmount":
         setDebtOriginalAmount(strVal);
@@ -578,18 +584,23 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
             {/* Savings-specific */}
             {type === "SAVINGS" && (
               <div style={sectionStyle}>
-                <label htmlFor="savings-goal" style={labelStyle}>
-                  Savings Goal (optional)
-                </label>
-                <input
-                  id="savings-goal"
-                  type="number"
-                  value={savingsGoal}
-                  min="0"
-                  onChange={(e) => setSavingsGoal(e.target.value)}
-                  placeholder="e.g. 10000"
-                  style={inputStyle}
-                />
+                <span style={labelStyle}>Savings Goal (optional)</span>
+                <button
+                  onClick={() => {
+                    setNumpadValue(savingsGoal);
+                    setActiveNumpadField("savingsGoal");
+                  }}
+                  style={{
+                    ...inputStyle,
+                    textAlign: "left",
+                    cursor: "pointer",
+                    background: "var(--color-surface-raised)",
+                    fontFamily: '"JetBrains Mono", monospace',
+                    fontWeight: 500,
+                  }}
+                >
+                  {formatNumpadDisplay(savingsGoal) || "0.00"}
+                </button>
               </div>
             )}
 
@@ -923,23 +934,24 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
               }}
             >
               <span style={labelStyle}>{activeConfig?.label}</span>
-              <span
-                style={{
-                  fontFamily: '"JetBrains Mono", monospace',
-                  fontWeight: 600,
-                  fontSize: "var(--text-amount-lg)",
-                  color: "var(--color-text)",
-                }}
-              >
-                {formatNumpadDisplay(numpadValue)}
-                {activeConfig?.suffix ?? ""}
-              </span>
+              <NumpadDisplay
+                value={numpadValue}
+                isActive={true}
+                suffix={activeConfig?.suffix}
+                align="center"
+              />
             </div>
             <Numpad
               value={numpadValue}
               onChange={setNumpadValue}
               onSave={handleNumpadSave}
               variant="budget"
+              currencyCode={
+                activeNumpadField === "mortgageTermYears" ||
+                activeNumpadField === "mortgageInterestRate"
+                  ? undefined
+                  : currency
+              }
             />
           </div>
         )}

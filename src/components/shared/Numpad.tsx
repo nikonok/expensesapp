@@ -1,5 +1,6 @@
 import { Delete, Calendar, BarChart2 } from "lucide-react";
 import { evaluateExpression } from "@/services/math-parser";
+import { getCurrencyDecimalPlaces } from "@/utils/currency-utils";
 
 export interface NumpadProps {
   value: string;
@@ -9,6 +10,7 @@ export interface NumpadProps {
   variant: "transaction" | "budget";
   onStatsPress?: () => void;
   isTransfer?: boolean;
+  currencyCode?: string;
 }
 
 type KeyDef =
@@ -96,11 +98,24 @@ export function Numpad({
   variant,
   onStatsPress,
   isTransfer = false,
+  currencyCode,
 }: NumpadProps) {
   const showOperators = variant === "transaction" && !isTransfer;
   const pressHandlers = useKeyPress();
 
   const handleChar = (char: string) => {
+    if (currencyCode) {
+      const dp = getCurrencyDecimalPlaces(currencyCode);
+      const segments = value.split(/[+\u2212\-×÷]/);
+      const current = segments[segments.length - 1];
+      if (char === ".") {
+        if (dp === 0) return;
+        if (current.includes(".")) return;
+      } else if (/^\d$/.test(char) && current.includes(".")) {
+        const after = current.split(".")[1] ?? "";
+        if (after.length >= dp) return;
+      }
+    }
     onChange(value + char);
   };
 

@@ -999,6 +999,97 @@ describe("secondaryManual reset fix (Bug #1)", () => {
   });
 });
 
+// ── Evaluated expression display ───────────────────────────────────────────────
+//
+// The condition in Step3 that controls the inline "= <result>" span:
+//   numpadValue && evaluatedAmount !== null && numpadValue.match(/[+\-×÷]/)
+//
+// Positive path (numpadValue contains an operator → span appears) cannot be driven
+// through the current Numpad mock, which only emits "99" (no operator character).
+// TODO e2e: verify "= 15" appears after typing "10+5" in the amount field.
+
+describe("evaluated expression display", () => {
+  it("simple number without operator does not show evaluated span", async () => {
+    const accountA = makeAccount({ id: 1, name: "Checking" });
+    const foodCat = makeCategory({ id: 10, name: "Food", type: "EXPENSE" });
+
+    vi.mocked(useAccounts).mockReturnValue([accountA]);
+    vi.mocked(useCategories).mockReturnValue([foodCat]);
+
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/transactions/new?accountId=1&categoryId=10"]}>
+          <TransactionInput />
+        </MemoryRouter>,
+      );
+    });
+
+    await waitFor(() => expect(screen.getByText("Save")).toBeTruthy());
+
+    // Type "99" via numpad mock — no operator → condition false → span absent
+    await act(async () => {
+      fireEvent.click(screen.getByText("Type 99"));
+    });
+
+    // The "= " prefix is only rendered inside the evaluated span
+    expect(screen.queryByText(/^= /)).toBeNull();
+  });
+
+  it("empty numpadValue does not show evaluated span", async () => {
+    const accountA = makeAccount({ id: 1, name: "Checking" });
+    const foodCat = makeCategory({ id: 10, name: "Food", type: "EXPENSE" });
+
+    vi.mocked(useAccounts).mockReturnValue([accountA]);
+    vi.mocked(useCategories).mockReturnValue([foodCat]);
+
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/transactions/new?accountId=1&categoryId=10"]}>
+          <TransactionInput />
+        </MemoryRouter>,
+      );
+    });
+
+    await waitFor(() => expect(screen.getByText("Save")).toBeTruthy());
+
+    // numpadValue starts as "" → first condition (numpadValue) is falsy → span absent
+    expect(screen.queryByText(/^= /)).toBeNull();
+  });
+
+  it("null evaluatedAmount does not show evaluated span", async () => {
+    const { evaluateExpression } = await import("@/services/math-parser");
+    vi.mocked(evaluateExpression).mockReturnValue(null);
+
+    const accountA = makeAccount({ id: 1, name: "Checking" });
+    const foodCat = makeCategory({ id: 10, name: "Food", type: "EXPENSE" });
+
+    vi.mocked(useAccounts).mockReturnValue([accountA]);
+    vi.mocked(useCategories).mockReturnValue([foodCat]);
+
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/transactions/new?accountId=1&categoryId=10"]}>
+          <TransactionInput />
+        </MemoryRouter>,
+      );
+    });
+
+    await waitFor(() => expect(screen.getByText("Save")).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Type 99"));
+    });
+
+    // evaluatedAmount is null → second condition false → span absent
+    expect(screen.queryByText(/^= /)).toBeNull();
+
+    // Restore default mock behaviour for subsequent tests
+    vi.mocked(evaluateExpression).mockImplementation((v: string) =>
+      v ? Math.round(parseFloat(v) * 100) : null,
+    );
+  });
+});
+
 // ── Mortgage overpayment features ─────────────────────────────────────────────
 
 describe("mortgage overpayment features", () => {

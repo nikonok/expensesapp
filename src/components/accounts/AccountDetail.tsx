@@ -10,7 +10,7 @@ import { Numpad } from "../shared/Numpad";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 import { getLucideIcon } from "../shared/IconPicker";
 import { useToast } from "../shared/Toast";
-import { formatNumpadDisplay } from "../../utils/numpad-utils";
+import { NumpadDisplay } from "../shared/NumpadDisplay";
 import { calculateMortgagePayment, getMonthlyRate } from "../../services/debt-payment.service";
 
 interface AccountDetailProps {
@@ -437,18 +437,12 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
               >
                 New Balance ({account.currency})
               </span>
-              <span
-                style={{
-                  fontFamily: '"JetBrains Mono", monospace',
-                  fontWeight: 600,
-                  fontSize: "var(--text-amount-lg)",
-                  color: "var(--color-text)",
-                  textAlign: "center",
-                  padding: "var(--space-3)",
-                }}
-              >
-                {formatNumpadDisplay(adjustValue)}
-              </span>
+              <NumpadDisplay
+                value={adjustValue}
+                isActive={true}
+                align="center"
+                style={{ padding: "var(--space-3)" }}
+              />
               <Numpad
                 value={adjustValue}
                 onChange={setAdjustValue}
@@ -463,6 +457,7 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
                   }
                 }}
                 variant="budget"
+                currencyCode={account.currency}
               />
               <button
                 onClick={() => {

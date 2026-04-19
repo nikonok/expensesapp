@@ -4,13 +4,13 @@ import { useTranslation } from 'react-i18next';
 import { ChevronLeft } from 'lucide-react';
 import { CurrencyPicker } from '../components/shared/CurrencyPicker';
 import { Numpad } from '../components/shared/Numpad';
+import { NumpadDisplay } from '../components/shared/NumpadDisplay';
 import { getLucideIcon } from '../components/shared/IconPicker';
 import { useSettingsStore } from '../stores/settings-store';
 import { db } from '../db/database';
 import { DEFAULT_CATEGORY_PRESETS } from '../db/seed';
 import type { CategoryPreset } from '../db/seed';
 import { evaluateExpression } from '../services/math-parser';
-import { formatNumpadDisplay } from '../utils/numpad-utils';
 import { getCanInstall } from '../sw-register';
 import { useUIStore } from '../stores/ui-store';
 
@@ -247,6 +247,7 @@ function StepAccount({
   numpadValue,
   onNumpadChange,
   onNumpadSave,
+  currencyCode,
   onNext,
   onSkip,
 }: {
@@ -255,6 +256,7 @@ function StepAccount({
   numpadValue: string;
   onNumpadChange: (v: string) => void;
   onNumpadSave: (result: number) => void;
+  currencyCode: string;
   onNext: () => void;
   onSkip: () => void;
 }) {
@@ -304,25 +306,20 @@ function StepAccount({
           marginBottom: 'var(--space-4)',
         }}
       />
-      <div
-        style={{
-          fontFamily: '"JetBrains Mono", monospace',
-          fontWeight: 600,
-          fontSize: 'var(--text-amount-lg)',
-          color: numpadValue ? 'var(--color-income)' : 'var(--color-text-disabled)',
-          textAlign: 'center',
-          padding: 'var(--space-3) 0',
-          minHeight: '3rem',
-        }}
-      >
-        {formatNumpadDisplay(numpadValue)}
-      </div>
+      <NumpadDisplay
+        value={numpadValue}
+        isActive={true}
+        align="center"
+        color={numpadValue ? 'var(--color-income)' : 'var(--color-text-disabled)'}
+        style={{ padding: 'var(--space-3) 0', minHeight: '3rem' }}
+      />
       <div style={{ flex: 1 }}>
         <Numpad
           value={numpadValue}
           onChange={onNumpadChange}
           onSave={onNumpadSave}
           variant="budget"
+          currencyCode={currencyCode}
         />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', paddingTop: 'var(--space-2)' }}>
@@ -612,6 +609,7 @@ export default function OnboardingFlow() {
                 numpadValue={numpadValue}
                 onNumpadChange={setNumpadValue}
                 onNumpadSave={handleNumpadSave}
+                currencyCode={currency}
                 onNext={() => {
                   const result = evaluateExpression(numpadValue);
                   if (result !== null) {

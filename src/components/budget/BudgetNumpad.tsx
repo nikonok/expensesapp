@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { Numpad } from '../shared/Numpad';
 import BottomSheet from '../layout/BottomSheet';
 import { BudgetStats } from './BudgetStats';
+import { NumpadDisplay } from '../shared/NumpadDisplay';
 import { db } from '../../db/database';
 import { getUTCISOString } from '../../utils/date-utils';
 import { budgetSchema } from '../../utils/validation';
 import { useToast } from '../shared/Toast';
-import { formatNumpadDisplay } from '../../utils/numpad-utils';
 
 interface BudgetNumpadProps {
   categoryId?: number;
@@ -14,6 +14,7 @@ interface BudgetNumpadProps {
   currentMonth: string; // "YYYY-MM"
   currentPlanned?: number;
   itemName: string;
+  currency?: string;
   onClose: () => void;
 }
 
@@ -23,6 +24,7 @@ export function BudgetNumpad({
   currentMonth,
   currentPlanned,
   itemName,
+  currency,
   onClose,
 }: BudgetNumpadProps) {
   const [value, setValue] = useState(
@@ -102,21 +104,12 @@ export function BudgetNumpad({
           {itemName}
         </span>
         {/* Display */}
-        <div
-          style={{
-            fontFamily: '"JetBrains Mono", monospace',
-            fontWeight: 600,
-            fontSize: 'var(--text-amount-lg)',
-            color: 'var(--color-text)',
-            minHeight: '3rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 'var(--space-2) 0',
-          }}
-        >
-          {formatNumpadDisplay(value)}
-        </div>
+        <NumpadDisplay
+          value={value}
+          isActive={true}
+          align="center"
+          style={{ minHeight: '3rem', padding: 'var(--space-2) 0' }}
+        />
       </div>
 
       <Numpad
@@ -125,6 +118,7 @@ export function BudgetNumpad({
         onSave={handleSave}
         variant="budget"
         onStatsPress={() => setStatsOpen(true)}
+        currencyCode={currency}
       />
 
       <BottomSheet
