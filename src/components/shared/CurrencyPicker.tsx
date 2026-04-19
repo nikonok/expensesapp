@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
 import { DEFAULT_CURRENCIES } from '../../db/seed';
+import { filterCurrencies } from '../../utils/currency-search';
 
 interface CurrencyPickerProps {
   value: string;
@@ -33,15 +34,10 @@ function CurrencyList({
   query: string;
   onSelect: (code: string) => void;
 }) {
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return DEFAULT_CURRENCIES;
-    return DEFAULT_CURRENCIES.filter(
-      (code) =>
-        code.toLowerCase().includes(q) ||
-        getCurrencyName(code).toLowerCase().includes(q),
-    );
-  }, [query]);
+  const filtered = useMemo(
+    () => filterCurrencies(DEFAULT_CURRENCIES, query, getCurrencyName),
+    [query],
+  );
 
   const selectedRef = useRef<HTMLButtonElement | null>(null);
 
