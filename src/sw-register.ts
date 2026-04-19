@@ -1,3 +1,5 @@
+import { registerSW as registerSWVite } from 'virtual:pwa-register';
+
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
@@ -26,8 +28,7 @@ let _registered = false;
 export function registerSW() {
   if (_registered) return;
   _registered = true;
-  // Service worker registration is handled by vite-plugin-pwa's injected registerSW.js.
-  // This function only wires up the install prompt events.
+
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e as BeforeInstallPromptEvent;
@@ -36,6 +37,15 @@ export function registerSW() {
   window.addEventListener('appinstalled', () => {
     setCanInstall(false);
     deferredPrompt = null;
+  });
+
+  // Register SW via vite-plugin-pwa. With registerType "prompt" no auto-reload
+  // happens on controllerchange — the update applies silently on next app launch.
+  registerSWVite({
+    onNeedRefresh() {
+      window.dispatchEvent(new CustomEvent('sw-update-available'));
+    },
+    onOfflineReady() {},
   });
 }
 

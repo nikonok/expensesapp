@@ -46,9 +46,14 @@ registerRoute(
   }),
 );
 
-// ── Lifecycle: skip waiting + claim clients (required with injectManifest) ───
-self.addEventListener('install', () => {
-  self.skipWaiting();
+// ── Lifecycle ────────────────────────────────────────────────────────────────
+// Skip waiting only on explicit SKIP_WAITING message (sent by vite-plugin-pwa
+// when the user acknowledges the update). Without this guard, autoUpdate would
+// silently reload the page the moment the user returns from a background switch.
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('activate', (event) => {

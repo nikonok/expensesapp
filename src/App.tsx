@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-route
 import { useSettingsStore } from "./stores/settings-store";
 import { scheduleDailyReminder, cancelDailyReminder } from "./services/notification.service";
 import { registerPeriodicSync, unregisterPeriodicSync } from "./sw-register";
-import { ToastProvider } from "./components/shared/Toast";
+import { ToastProvider, useToast } from "./components/shared/Toast";
 import { checkDatabaseIntegrity } from "./services/integrity.service";
 import { checkAndRunAutoBackup, setAutoBackupSchedule } from "./services/backup.service";
 import { logger } from "./services/log.service";
@@ -69,6 +69,13 @@ function AppRoutes() {
     return () => window.removeEventListener("backup-restored", handleBackupRestored);
   }, []);
 
+  const { show: showToast } = useToast();
+  useEffect(() => {
+    const handleUpdate = () => showToast("App updated — restart to apply", "info", 6000);
+    window.addEventListener("sw-update-available", handleUpdate);
+    return () => window.removeEventListener("sw-update-available", handleUpdate);
+  }, [showToast]);
+
   useEffect(() => {
     if (!isLoaded) return;
     if (notificationEnabled) {
@@ -109,13 +116,45 @@ function AppRoutes() {
           justifyContent: "center",
           background: "var(--color-bg)",
         }}
-      />
+      >
+        <div
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: "50%",
+            border: "2px solid var(--color-border)",
+            borderTopColor: "var(--color-primary)",
+            animation: "spin 0.75s linear infinite",
+          }}
+        />
+      </div>
     );
   }
 
   const startupPath = `/${startupScreen}`;
 
-  const lazySuspenseFallback = <div style={{ background: "var(--color-bg)", height: "100vh" }} />;
+  const lazySuspenseFallback = (
+    <div
+      style={{
+        display: "flex",
+        height: "100dvh",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "var(--color-bg)",
+      }}
+    >
+      <div
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: "50%",
+          border: "2px solid var(--color-border)",
+          borderTopColor: "var(--color-primary)",
+          animation: "spin 0.75s linear infinite",
+        }}
+      />
+    </div>
+  );
 
   return (
     <Suspense fallback={lazySuspenseFallback}>
