@@ -39,7 +39,7 @@ async function getAccounts(page: import('@playwright/test').Page) {
 // the MouseEvent to be received as `skipAccount`. Since a MouseEvent is truthy,
 // `!skipAccount` evaluated to false and the account was silently never created.
 
-test('onboarding: "Go to App" saves the first account to IndexedDB', async ({ page }) => {
+test('onboarding: completing the flow saves the first account to IndexedDB', async ({ page }) => {
   await clearDB(page);
   await page.waitForURL(/\/onboarding/);
 
@@ -52,13 +52,8 @@ test('onboarding: "Go to App" saves the first account to IndexedDB', async ({ pa
   // Step 2 — account (keep default name "Cash", balance 0)
   await page.getByRole('button', { name: 'Next' }).click();
 
-  // Step 3 — categories (accept all)
-  await page.getByRole('button', { name: 'Accept all' }).click();
-
-  // Step 4 — complete
-  await page.waitForURL(/\/onboarding/);
-  await expect(page.getByRole('heading', { name: "You're all set!" })).toBeVisible();
-  await page.getByRole('button', { name: 'Go to App' }).click();
+  // Step 3 — categories (proceed)
+  await page.getByRole('button', { name: 'Next' }).click();
 
   await page.waitForURL(/\/transactions/);
 
@@ -76,8 +71,7 @@ test('onboarding: transaction form shows account in step 1 after onboarding', as
   await page.getByRole('button', { name: 'Get Started' }).click();
   await page.getByRole('button', { name: 'Next' }).click(); // currency
   await page.getByRole('button', { name: 'Next' }).click(); // account
-  await page.getByRole('button', { name: 'Accept all' }).click(); // categories → complete
-  await page.getByRole('button', { name: 'Go to App' }).click();
+  await page.getByRole('button', { name: 'Next' }).click(); // categories → navigates directly
   await page.waitForURL(/\/transactions/);
 
   // Open new transaction form
@@ -98,8 +92,7 @@ test('overview: loads all sections after first transaction is added', async ({ p
   await page.getByRole('button', { name: 'Get Started' }).click();
   await page.getByRole('button', { name: 'Next' }).click();
   await page.getByRole('button', { name: 'Next' }).click();
-  await page.getByRole('button', { name: 'Accept all' }).click();
-  await page.getByRole('button', { name: 'Go to App' }).click();
+  await page.getByRole('button', { name: 'Next' }).click(); // categories → navigates directly
   await page.waitForURL(/\/transactions/);
 
   // Add an expense: Cash → Food, amount 50
@@ -132,4 +125,43 @@ test('overview: loads all sections after first transaction is added', async ({ p
   // Category breakdown section
   await expect(page.getByText('Categories', { exact: true })).toBeVisible();
   await expect(page.getByText('Food')).toBeVisible();
+});
+
+// ── Regression: starting balance not multiplied by 100 on back navigation ─────
+
+test('onboarding: starting balance is not multiplied by 100 on back navigation', async ({
+  page,
+}) => {
+  await clearDB(page);
+  await page.waitForURL(/\/onboarding/);
+
+  // Welcome step
+  await page.getByRole('button', { name: 'Get Started' }).click();
+
+  // Currency step — keep default
+  await page.getByRole('button', { name: 'Next' }).click();
+
+  // Account step — enter starting balance of 100
+  for (const ch of '100') {
+    await page.locator(`button[aria-label="${ch}"]`).click();
+  }
+  await page.locator('button[aria-label="save"]').click();
+
+  // Now on categories step — go back
+  await page.getByRole('button', { name: 'Back' }).click();
+
+  // Back on account step — numpad display must show "100", not "10000"
+  await expect(page.getByText('10000')).not.toBeVisible();
+  await expect(page.locator('button[aria-label="1"]')).toBeVisible(); // numpad still rendered
+
+  // Advance through account step → categories step → finish
+  await page.getByRole('button', { name: 'Next' }).click(); // account → categories
+  await page.getByRole('button', { name: 'Next' }).click(); // categories → navigates directly
+  await page.waitForURL(/\/transactions|\/accounts/);
+
+  // Account must have balance = 10000 minor units ($100.00), not 1000000 ($10000.00)
+  const accounts = await getAccounts(page);
+  expect(accounts).toHaveLength(1);
+  expect(accounts[0].balance).toBe(10000);
+  expect(accounts[0].startingBalance).toBe(10000);
 });

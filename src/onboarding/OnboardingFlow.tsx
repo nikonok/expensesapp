@@ -485,7 +485,7 @@ export default function OnboardingFlow() {
 
   const handleNumpadSave = (result: number) => {
     setStartingBalance(result);
-    setNumpadValue(String(result));
+    setNumpadValue(String(result / 100));
     goToStep(3);
   };
 
@@ -614,7 +614,7 @@ export default function OnboardingFlow() {
                   const result = evaluateExpression(numpadValue);
                   if (result !== null) {
                     setStartingBalance(result);
-                    setNumpadValue(String(result));
+                    setNumpadValue(String(result / 100));
                   } else {
                     setStartingBalance(0);
                     setNumpadValue('');
