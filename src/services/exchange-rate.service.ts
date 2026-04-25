@@ -46,57 +46,66 @@ function deriveRate(
 
 export const exchangeRateService = {
   async fetchAndCacheRates(baseCurrency: string): Promise<void> {
-    if (!/^[A-Z]{3}$/.test(baseCurrency)) {
-      throw new Error(`Invalid currency code: ${baseCurrency}`);
-    }
-    const response = await fetch(`${API_BASE}/${baseCurrency}`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch exchange rates: ${response.status}`);
-    }
-    const json = (await response.json()) as { rates?: Record<string, number> };
-    if (!json.rates) {
-      throw new Error('Invalid exchange rate API response: missing rates');
-    }
-
-    const rawRates = json.rates;
-    const rates: Record<string, number> = {};
-    for (const [k, v] of Object.entries(rawRates)) {
-      if (typeof v === 'number' && isFinite(v) && v > 0) {
-        rates[k] = v;
+    try {
+      if (!/^[A-Z]{3}$/.test(baseCurrency)) {
+        throw new Error(`Invalid currency code: ${baseCurrency}`);
       }
-    }
+      const response = await fetch(`${API_BASE}/${baseCurrency}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch exchange rates: ${response.status}`);
+      }
+      const json = (await response.json()) as { rates?: Record<string, number> };
+      if (!json.rates) {
+        throw new Error('Invalid exchange rate API response: missing rates');
+      }
 
-    const today = getLocalDateString();
-    const now = getUTCISOString();
+      const rawRates = json.rates;
+      const rates: Record<string, number> = {};
+      for (const [k, v] of Object.entries(rawRates)) {
+        if (typeof v === 'number' && isFinite(v) && v > 0) {
+          rates[k] = v;
+        }
+      }
 
-    // Upsert using the unique index [baseCurrency+date]
-    const existing = await db.exchangeRates
-      .where('[baseCurrency+date]')
-      .equals([baseCurrency, today])
-      .first();
+      const today = getLocalDateString();
+      const now = getUTCISOString();
 
-    if (existing?.id != null) {
-      await db.exchangeRates.update(existing.id, {
-        rates,
-        fetchedAt: now,
-      });
-    } else {
-      await db.exchangeRates.add({
+      // Upsert using the unique index [baseCurrency+date]
+      const existing = await db.exchangeRates
+        .where('[baseCurrency+date]')
+        .equals([baseCurrency, today])
+        .first();
+
+      if (existing?.id != null) {
+        await db.exchangeRates.update(existing.id, {
+          rates,
+          fetchedAt: now,
+        });
+      } else {
+        await db.exchangeRates.add({
+          baseCurrency,
+          date: today,
+          rates,
+          fetchedAt: now,
+        });
+      }
+
+      // Prune entries older than 90 days
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - PRUNE_DAYS);
+      const cutoffDate = cutoff.toISOString().slice(0, 10);
+      await db.exchangeRates
+        .where('date')
+        .below(cutoffDate)
+        .delete();
+      logger.info('exchangeRate.fetch.ok', { baseCurrency });
+    } catch (err) {
+      logger.error('exchangeRate.fetch.failed', {
         baseCurrency,
-        date: today,
-        rates,
-        fetchedAt: now,
+        error: err instanceof Error ? err.message : String(err),
       });
+      throw err;
     }
-
-    // Prune entries older than 90 days
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - PRUNE_DAYS);
-    const cutoffDate = cutoff.toISOString().slice(0, 10);
-    await db.exchangeRates
-      .where('date')
-      .below(cutoffDate)
-      .delete();
   },
 
   async getRate(from: string, to: string): Promise<number | null> {
@@ -121,8 +130,7 @@ export const exchangeRateService = {
             .where('[baseCurrency+date]')
             .equals([base, today])
             .first();
-        } catch (err) {
-          logger.error('exchangeRate.fetch.failed', err instanceof Error ? err : { message: String(err) });
+        } catch {
           // Fetch failed — fall through to use stale entry already loaded
         }
       }
@@ -134,8 +142,7 @@ export const exchangeRateService = {
           .where('[baseCurrency+date]')
           .equals([base, today])
           .first();
-      } catch (err) {
-        logger.error('exchangeRate.fetch.failed', err instanceof Error ? err : { message: String(err) });
+      } catch {
         // Fetch failed — try to find any cached entry for this base
         entry = await db.exchangeRates
           .where('baseCurrency')
@@ -175,84 +182,96 @@ export const exchangeRateService = {
     newMainCurrency: string,
     onProgress?: (done: number, total: number) => void,
   ): Promise<void> {
-    // Fetch fresh rates for the new main currency first
-    await exchangeRateService.fetchAndCacheRates(newMainCurrency);
+    try {
+      // Fetch fresh rates for the new main currency first
+      await exchangeRateService.fetchAndCacheRates(newMainCurrency);
 
-    const transactions = await db.transactions.toArray();
-    const total = transactions.length;
+      const transactions = await db.transactions.toArray();
+      const total = transactions.length;
 
-    if (total === 0) {
-      onProgress?.(0, 0);
-      return;
-    }
+      logger.info('exchangeRate.recalc.start', { newMainCurrency, total });
 
-    // Collect unique (currency, date) pairs needed for the rate lookup
-    const pairs = new Map<string, string[]>(); // currency -> unique dates
-    for (const tx of transactions) {
-      if (tx.currency === newMainCurrency) continue;
-      if (!pairs.has(tx.currency)) pairs.set(tx.currency, []);
-      pairs.get(tx.currency)!.push(tx.date);
-    }
+      if (total === 0) {
+        onProgress?.(0, 0);
+        logger.info('exchangeRate.recalc.complete', { newMainCurrency, total: 0 });
+        return;
+      }
 
-    // Pre-fetch all required rates OUTSIDE of any db transaction
-    // Key: "currency:date", Value: rate (number)
-    const rateMap = new Map<string, number>();
-    const missingCurrencies: string[] = [];
+      // Collect unique (currency, date) pairs needed for the rate lookup
+      const pairs = new Map<string, string[]>(); // currency -> unique dates
+      for (const tx of transactions) {
+        if (tx.currency === newMainCurrency) continue;
+        if (!pairs.has(tx.currency)) pairs.set(tx.currency, []);
+        pairs.get(tx.currency)!.push(tx.date);
+      }
 
-    for (const [currency, dates] of pairs) {
-      const uniqueDates = [...new Set(dates)];
-      let hasMissing = false;
-      for (const date of uniqueDates) {
-        const rate = await exchangeRateService.getHistoricalRate(
-          currency,
-          newMainCurrency,
-          date,
-        );
-        if (rate == null) {
-          hasMissing = true;
-        } else {
-          rateMap.set(`${currency}:${date}`, rate);
+      // Pre-fetch all required rates OUTSIDE of any db transaction
+      // Key: "currency:date", Value: rate (number)
+      const rateMap = new Map<string, number>();
+      const missingCurrencies: string[] = [];
+
+      for (const [currency, dates] of pairs) {
+        const uniqueDates = [...new Set(dates)];
+        let hasMissing = false;
+        for (const date of uniqueDates) {
+          const rate = await exchangeRateService.getHistoricalRate(
+            currency,
+            newMainCurrency,
+            date,
+          );
+          if (rate == null) {
+            hasMissing = true;
+          } else {
+            rateMap.set(`${currency}:${date}`, rate);
+          }
+        }
+        if (hasMissing && !missingCurrencies.includes(currency)) {
+          missingCurrencies.push(currency);
         }
       }
-      if (hasMissing && !missingCurrencies.includes(currency)) {
-        missingCurrencies.push(currency);
+
+      if (missingCurrencies.length > 0) {
+        throw new Error(
+          `No exchange rate available for: ${missingCurrencies.join(', ')}`,
+        );
       }
-    }
 
-    if (missingCurrencies.length > 0) {
-      throw new Error(
-        `No exchange rate available for: ${missingCurrencies.join(', ')}`,
-      );
-    }
+      // Now open the db transaction — only db.transactions is accessed here,
+      // and we use only the pre-built rateMap (no db.exchangeRates reads inside).
+      const BATCH_SIZE = 50;
+      let done = 0;
 
-    // Now open the db transaction — only db.transactions is accessed here,
-    // and we use only the pre-built rateMap (no db.exchangeRates reads inside).
-    const BATCH_SIZE = 50;
-    let done = 0;
+      await db.transaction('rw', db.transactions, async () => {
+        for (let i = 0; i < total; i += BATCH_SIZE) {
+          const batch = transactions.slice(i, i + BATCH_SIZE);
 
-    await db.transaction('rw', db.transactions, async () => {
-      for (let i = 0; i < total; i += BATCH_SIZE) {
-        const batch = transactions.slice(i, i + BATCH_SIZE);
+          for (const tx of batch) {
+            let newRate: number;
+            if (tx.currency === newMainCurrency) {
+              newRate = 1;
+            } else {
+              // Rate is guaranteed to be in the map (verified above)
+              newRate = rateMap.get(`${tx.currency}:${tx.date}`)!;
+            }
 
-        for (const tx of batch) {
-          let newRate: number;
-          if (tx.currency === newMainCurrency) {
-            newRate = 1;
-          } else {
-            // Rate is guaranteed to be in the map (verified above)
-            newRate = rateMap.get(`${tx.currency}:${tx.date}`)!;
+            await db.transactions.update(tx.id!, {
+              exchangeRate: newRate,
+              amountMainCurrency: Math.round(tx.amount * newRate),
+            });
+
+            done++;
           }
 
-          await db.transactions.update(tx.id!, {
-            exchangeRate: newRate,
-            amountMainCurrency: Math.round(tx.amount * newRate),
-          });
-
-          done++;
+          onProgress?.(done, total);
         }
-
-        onProgress?.(done, total);
-      }
-    });
+      });
+      logger.info('exchangeRate.recalc.complete', { newMainCurrency });
+    } catch (err) {
+      logger.error('exchangeRate.recalc.failed', {
+        newMainCurrency,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
+    }
   },
 };

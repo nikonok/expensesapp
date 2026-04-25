@@ -1,7 +1,13 @@
 import 'fake-indexeddb/auto';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '@/db/database';
 import type { Account, Transaction } from '@/db/models';
+
+vi.mock('./log.service', () => ({
+  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+import { logger } from './log.service';
 import {
   adjustBalance,
   applyTransaction,
@@ -54,6 +60,7 @@ function makeTx(
 }
 
 beforeEach(async () => {
+  vi.clearAllMocks();
   await db.accounts.clear();
   await db.transactions.clear();
 });
@@ -314,5 +321,33 @@ describe('DEBT account exceptions', () => {
     await revertTransaction(saved!);
     const account = await db.accounts.get(id as number);
     expect(account!.balance).toBe(500);
+  });
+});
+
+describe('error paths', () => {
+  it('applyTransaction rejects and calls logger.error with tx.apply.failed when account does not exist', async () => {
+    const tx = makeTx(99999, { type: 'EXPENSE', amount: 100 });
+    await expect(applyTransaction(tx)).rejects.toThrow();
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+      'tx.apply.failed',
+      expect.objectContaining({ accountId: 99999 }),
+    );
+  });
+
+  it('revertTransaction rejects and calls logger.error with tx.delete.failed when account does not exist', async () => {
+    const tx = makeTx(99999, { type: 'EXPENSE', amount: 100, id: 99999 } as Partial<Transaction>);
+    await expect(revertTransaction(tx)).rejects.toThrow();
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+      'tx.delete.failed',
+      expect.objectContaining({ id: 99999 }),
+    );
+  });
+
+  it('adjustBalance rejects and calls logger.error with account.balance.adjust.failed when account does not exist', async () => {
+    await expect(adjustBalance(99999, 1000)).rejects.toThrow();
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+      'account.balance.adjust.failed',
+      expect.objectContaining({ accountId: 99999 }),
+    );
   });
 });

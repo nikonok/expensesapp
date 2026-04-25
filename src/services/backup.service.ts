@@ -83,18 +83,28 @@ class BackupService {
   }
 
   async restoreFromBackup(backupId: number): Promise<void> {
-    const record = await db.backups.get(backupId);
-    if (!record) throw new Error(`Backup ${backupId} not found`);
-    let parsed: BackupJSON;
     try {
-      parsed = JSON.parse(record.data);
-    } catch {
-      throw new Error('Backup data is corrupted and cannot be parsed');
+      const record = await db.backups.get(backupId);
+      if (!record) throw new Error(`Backup ${backupId} not found`);
+      let parsed: BackupJSON;
+      try {
+        parsed = JSON.parse(record.data);
+      } catch {
+        throw new Error('Backup data is corrupted and cannot be parsed');
+      }
+      if (!this.validateBackupStructure(parsed)) {
+        throw new Error('Backup data has invalid structure');
+      }
+      await this._restoreData(parsed);
+      logger.info('backup.restored', { source: 'in-db', backupId });
+    } catch (err) {
+      logger.error('backup.restore.failed', {
+        source: 'in-db',
+        backupId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
     }
-    if (!this.validateBackupStructure(parsed)) {
-      throw new Error('Backup data has invalid structure');
-    }
-    await this._restoreData(parsed);
   }
 
   async exportToFile(): Promise<void> {
@@ -157,7 +167,7 @@ class BackupService {
           void (async () => {
             await this.createBackup(true);
             await db.settings.put({ key: 'lastAutoBackupAt', value: new Date().toISOString() });
-          })().catch(err => console.error('[AutoBackup] periodic check failed:', err)),
+          })().catch(err => logger.error('backup.auto.interval.failed', { error: err instanceof Error ? err.message : String(err) })),
         intervalHours * 3_600_000,
       );
     }
@@ -175,7 +185,10 @@ class BackupService {
         ? intervalSetting.value
         : null;
 
-    if (intervalHours === null) return;
+    if (intervalHours === null) {
+      logger.info('backup.auto.skip', { reason: 'disabled' });
+      return;
+    }
 
     const lastAt =
       lastAtSetting != null && typeof lastAtSetting.value === 'string'
@@ -187,8 +200,11 @@ class BackupService {
     const lastMs = lastAt ? new Date(lastAt).getTime() : 0;
 
     if (now - lastMs > threshold) {
+      logger.info('backup.auto.run', { intervalHours });
       await this.createBackup(true);
       await db.settings.put({ key: 'lastAutoBackupAt', value: new Date().toISOString() });
+    } else {
+      logger.info('backup.auto.skip', { reason: 'too-soon', intervalHours });
     }
   }
 

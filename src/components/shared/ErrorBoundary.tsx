@@ -1,4 +1,5 @@
-import { Component, ReactNode } from 'react';
+import { Component, ErrorInfo, ReactNode } from 'react';
+import { logger } from '@/services/log.service';
 
 interface Props { children: ReactNode; }
 interface State { hasError: boolean; error?: Error; }
@@ -7,6 +8,14 @@ export class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false };
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    logger.error('react.uncaught', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      componentStack: info.componentStack,
+    });
   }
   render() {
     if (this.state.hasError) {
