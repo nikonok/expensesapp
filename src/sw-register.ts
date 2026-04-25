@@ -8,20 +8,48 @@ interface BeforeInstallPromptEvent extends Event {
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
 
 let _canInstall = false;
-const _listeners = new Set<(v: boolean) => void>();
+const _installListeners = new Set<(v: boolean) => void>();
 
 export function onCanInstallChange(fn: (v: boolean) => void): () => void {
-  _listeners.add(fn);
-  return () => { _listeners.delete(fn); };
+  _installListeners.add(fn);
+  return () => { _installListeners.delete(fn); };
 }
 
 function setCanInstall(v: boolean) {
   _canInstall = v;
-  _listeners.forEach((fn) => fn(v));
+  _installListeners.forEach((fn) => fn(v));
 }
 
 export function getCanInstall() {
   return _canInstall;
+}
+
+// ── SW update state ───────────────────────────────────────────────────────────
+
+let _updateAvailable = false;
+let _doUpdate: ((reloadPage?: boolean) => Promise<void>) | null = null;
+const _updateListeners = new Set<(v: boolean) => void>();
+
+export function onUpdateAvailableChange(fn: (v: boolean) => void): () => void {
+  _updateListeners.add(fn);
+  return () => { _updateListeners.delete(fn); };
+}
+
+function setUpdateAvailable(v: boolean) {
+  _updateAvailable = v;
+  _updateListeners.forEach((fn) => fn(v));
+}
+
+export function getUpdateAvailable() {
+  return _updateAvailable;
+}
+
+export async function triggerUpdate() {
+  if (_doUpdate) await _doUpdate(true);
+}
+
+export function dismissUpdate() {
+  setUpdateAvailable(false);
 }
 
 let _registered = false;
@@ -39,11 +67,10 @@ export function registerSW() {
     deferredPrompt = null;
   });
 
-  // Register SW via vite-plugin-pwa. With registerType "prompt" no auto-reload
-  // happens on controllerchange — the update applies silently on next app launch.
-  registerSWVite({
+  const updateSW = registerSWVite({
     onNeedRefresh() {
-      window.dispatchEvent(new CustomEvent('sw-update-available'));
+      _doUpdate = updateSW;
+      setUpdateAvailable(true);
     },
     onOfflineReady() {},
   });
