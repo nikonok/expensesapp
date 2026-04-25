@@ -1,4 +1,4 @@
-import { Trash2, RotateCcw } from 'lucide-react';
+import { Archive, RotateCcw } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useCategories } from '../../hooks/use-categories';
 import { db } from '../../db/database';
@@ -55,7 +55,7 @@ export default function TrashedCategories() {
             margin: 0,
           }}
         >
-          Trash
+          Archive
         </h2>
         <div style={{ minWidth: '44px' }} />
       </div>
@@ -63,9 +63,9 @@ export default function TrashedCategories() {
       {/* Content */}
       {trashed.length === 0 ? (
         <EmptyState
-          icon={Trash2}
-          heading="Trash is empty"
-          body="Removed categories will appear here and can be restored."
+          icon={Archive}
+          heading="Archive is empty"
+          body="Archived categories will appear here and can be restored."
         />
       ) : (
         <div

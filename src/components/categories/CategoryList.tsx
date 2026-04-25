@@ -153,7 +153,7 @@ export default function CategoryList() {
       setConfirmTrash(null);
     } catch (err) {
       console.error('Failed to trash category:', err);
-      showToast('Failed to move category to trash', 'error');
+      showToast('Failed to archive category', 'error');
     }
   }
 
@@ -400,9 +400,9 @@ export default function CategoryList() {
       {/* Confirm trash dialog */}
       <ConfirmDialog
         isOpen={confirmTrash !== null}
-        title="Move to Trash?"
-        body={`"${confirmCategory?.name ?? 'This category'}" will be moved to trash. Existing transactions will keep their category.`}
-        confirmLabel="Move to Trash"
+        title="Archive Category?"
+        body={`"${confirmCategory?.name ?? 'This category'}" will be archived. Existing transactions will keep their category.`}
+        confirmLabel="Archive"
         variant="destructive"
         onConfirm={handleConfirmTrash}
         onCancel={() => setConfirmTrash(null)}
