@@ -1,6 +1,5 @@
 import { GripVertical, ArrowLeftRight, Check } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import type { Transaction } from '../../db/models';
 import type { Account } from '../../db/models';
 import type { Category } from '../../db/models';
@@ -85,7 +84,7 @@ export default function TransactionRow({
     <div
       ref={setNodeRef}
       style={{
-        transform: CSS.Transform.toString(transform),
+        transform: transform ? `translate3d(0px, ${transform.y}px, 0) scaleX(${transform.scaleX}) scaleY(${transform.scaleY})` : undefined,
         display: 'flex',
         alignItems: 'center',
         gap: 'var(--space-3)',

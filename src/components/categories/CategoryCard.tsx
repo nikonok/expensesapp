@@ -1,6 +1,5 @@
 import { GripVertical, X } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import type { Category } from '../../db/models';
 import { getLucideIcon } from '../shared/IconPicker';
 
@@ -45,7 +44,7 @@ export default function CategoryCard({
     <div
       ref={setNodeRef}
       style={{
-        transform: CSS.Transform.toString(transform),
+        transform: transform ? `translate3d(0px, ${transform.y}px, 0) scaleX(${transform.scaleX}) scaleY(${transform.scaleY})` : undefined,
         position: 'relative',
         display: 'flex',
         alignItems: 'center',
