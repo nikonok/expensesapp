@@ -10,6 +10,7 @@ import { MainCurrencySetting } from './MainCurrencySetting';
 import { BackupSettings } from './BackupSettings';
 import { ExportSettings } from './ExportSettings';
 import { LogSettings } from './LogSettings';
+import { ResetAppSetting } from './ResetAppSetting';
 import { ComingSoonStub } from '../shared/ComingSoonStub';
 import { InstallSetting } from './InstallSetting';
 
@@ -154,6 +155,22 @@ export function SettingsView() {
         <BackupSettings />
         <ExportSettings />
         <LogSettings />
+
+        {/* Danger Zone section */}
+        <div
+          style={{
+            padding: 'var(--space-2) var(--space-4) var(--space-1)',
+            fontFamily: '"Syne", sans-serif',
+            fontWeight: 700,
+            fontSize: 'var(--text-caption)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            color: 'var(--color-expense)',
+          }}
+        >
+          {t('settings.sections.dangerZone')}
+        </div>
+        <ResetAppSetting />
 
         {/* Bottom safe area padding */}
         <div style={{ height: 'calc(var(--space-8) + env(safe-area-inset-bottom))' }} />

@@ -6,6 +6,7 @@ interface ConfirmDialogProps {
   body: string;
   confirmLabel: string;
   cancelLabel?: string;
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
   variant: 'default' | 'destructive';
@@ -17,6 +18,7 @@ export function ConfirmDialog({
   body,
   confirmLabel,
   cancelLabel = 'Cancel',
+  confirmDisabled = false,
   onConfirm,
   onCancel,
   variant,
@@ -115,6 +117,7 @@ export function ConfirmDialog({
           </button>
           <button
             onClick={onConfirm}
+            disabled={confirmDisabled}
             style={{
               minHeight: '44px',
               padding: '0 var(--space-4)',
@@ -125,7 +128,8 @@ export function ConfirmDialog({
               fontFamily: '"DM Sans", sans-serif',
               fontWeight: 500,
               fontSize: 'var(--text-body)',
-              cursor: 'pointer',
+              opacity: confirmDisabled ? 0.5 : 1,
+              cursor: confirmDisabled ? 'not-allowed' : 'pointer',
             }}
           >
             {confirmLabel}

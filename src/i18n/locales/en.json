@@ -178,7 +178,8 @@
     "sections": {
       "general": "General",
       "notifications": "Notifications",
-      "data": "Data"
+      "data": "Data",
+      "dangerZone": "Danger Zone"
     },
     "language": {
       "label": "Language",
@@ -248,6 +249,12 @@
       "clearConfirm": "This will delete all stored log entries.",
       "cleared": "Logs cleared",
       "exported": "Logs exported"
+    },
+    "reset": {
+      "label": "Reset App",
+      "confirmTitle": "Reset App?",
+      "confirmBody": "This permanently deletes all accounts, transactions, categories, budgets, settings, and backups. This cannot be undone.",
+      "confirmAction": "Reset"
     }
   },
   "onboarding": {
