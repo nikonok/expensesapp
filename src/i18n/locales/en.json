@@ -229,8 +229,12 @@
     },
     "export": {
       "label": "Export data",
-      "button": "Export",
-      "complete": "Export complete. Your file has been downloaded."
+      "complete": "Export complete. Your file has been downloaded.",
+      "sheetTitle": "Export to XLSX",
+      "cta": "Export",
+      "exporting": "Exporting…",
+      "error": "Export failed. Please check your storage and try again.",
+      "inProgress": "Export in progress, please wait…"
     },
     "log": {
       "label": "Logs",

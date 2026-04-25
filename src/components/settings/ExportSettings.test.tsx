@@ -20,13 +20,17 @@ vi.mock('@/stores/settings-store', () => ({
   ),
 }));
 
-vi.mock('@/utils/date-utils', () => ({
-  getLocalDateString: vi.fn(() => '2026-04-12'),
-  parsePeriodFilter: vi.fn(() => ({
-    start: new Date('2026-04-01'),
-    end: new Date('2026-04-30'),
-  })),
-}));
+vi.mock(import('@/utils/date-utils'), async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    getLocalDateString: vi.fn(() => '2026-04-12'),
+    parsePeriodFilter: vi.fn(() => ({
+      start: new Date('2026-04-01'),
+      end: new Date('2026-04-30'),
+    })),
+  };
+});
 
 const mockShow = vi.fn();
 vi.mock('@/components/shared/Toast', () => ({
@@ -38,8 +42,12 @@ vi.mock('react-i18next', () => ({
     t: (key: string) => {
       const translations: Record<string, string> = {
         'settings.export.label': 'Export data',
-        'settings.export.button': 'Export',
         'settings.export.complete': 'Export complete. Your file has been downloaded.',
+        'settings.export.error': 'Export failed. Please check your storage and try again.',
+        'settings.export.sheetTitle': 'Export to XLSX',
+        'settings.export.cta': 'Export',
+        'settings.export.exporting': 'Exporting…',
+        'settings.export.inProgress': 'Export in progress, please wait…',
         'errors.generic': 'Something went wrong. Please try again.',
       };
       return translations[key] ?? key;
@@ -62,6 +70,30 @@ function renderComponent() {
   return render(<ExportSettings />);
 }
 
+/** Opens the export bottom sheet by clicking the row trigger button. */
+async function openSheet() {
+  const trigger = screen.getByRole('button', { name: /export data/i });
+  await act(async () => {
+    fireEvent.click(trigger);
+  });
+  // Wait for the sheet's portal + animation frames to render the CTA button
+  await waitFor(() => {
+    expect(screen.getByRole('button', { name: /^export$/i })).toBeTruthy();
+  });
+}
+
+/** Returns the Export CTA button inside the sheet (matches both idle and loading states). */
+function getExportCta() {
+  // The button label changes to "Exporting…" during loading, so match
+  // the dialog container and pick the only non-trigger button inside it.
+  const dialog = screen.queryByRole('dialog');
+  if (dialog) {
+    const btn = dialog.querySelector('button');
+    if (btn) return btn;
+  }
+  return screen.getByRole('button', { name: /^export$/i });
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -71,23 +103,31 @@ beforeEach(() => {
 
 describe('ExportSettings', () => {
   describe('rendering', () => {
-    it('renders the export button', () => {
+    it('renders the row trigger button', () => {
       renderComponent();
-      expect(screen.getByRole('button', { name: /export/i })).toBeTruthy();
+      expect(screen.getByRole('button', { name: /export data/i })).toBeTruthy();
     });
 
-    it('button is enabled by default (not loading)', () => {
+    it('renders the Export CTA inside the sheet after opening', async () => {
       renderComponent();
-      expect((screen.getByRole('button', { name: /export/i }) as HTMLButtonElement).disabled).toBe(false);
+      await openSheet();
+      expect(getExportCta()).toBeTruthy();
+    });
+
+    it('Export CTA is enabled by default (not loading)', async () => {
+      renderComponent();
+      await openSheet();
+      expect((getExportCta() as HTMLButtonElement).disabled).toBe(false);
     });
   });
 
   describe('successful export', () => {
-    it('calls exportService.exportTransactions when the button is clicked', async () => {
+    it('calls exportService.exportTransactions when the CTA is clicked', async () => {
       renderComponent();
+      await openSheet();
 
       await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: /export/i }));
+        fireEvent.click(getExportCta());
       });
 
       expect(mockExportTransactions).toHaveBeenCalledTimes(1);
@@ -95,9 +135,10 @@ describe('ExportSettings', () => {
 
     it('passes formatted start date, end date, and mainCurrency to the service', async () => {
       renderComponent();
+      await openSheet();
 
       await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: /export/i }));
+        fireEvent.click(getExportCta());
       });
 
       // parsePeriodFilter returns { start: 2026-04-01, end: 2026-04-30 }
@@ -107,9 +148,10 @@ describe('ExportSettings', () => {
 
     it('shows a success toast after successful export', async () => {
       renderComponent();
+      await openSheet();
 
       await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: /export/i }));
+        fireEvent.click(getExportCta());
       });
 
       expect(mockShow).toHaveBeenCalledWith(
@@ -124,13 +166,14 @@ describe('ExportSettings', () => {
       mockExportTransactions.mockRejectedValue(new Error('Download failed'));
 
       renderComponent();
+      await openSheet();
 
       await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: /export/i }));
+        fireEvent.click(getExportCta());
       });
 
       expect(mockShow).toHaveBeenCalledWith(
-        'Something went wrong. Please try again.',
+        'Export failed. Please check your storage and try again.',
         'error',
       );
     });
@@ -139,9 +182,10 @@ describe('ExportSettings', () => {
       mockExportTransactions.mockRejectedValue(new Error('Network error'));
 
       renderComponent();
+      await openSheet();
 
       await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: /export/i }));
+        fireEvent.click(getExportCta());
       });
 
       expect(mockShow).not.toHaveBeenCalledWith(
@@ -152,7 +196,7 @@ describe('ExportSettings', () => {
   });
 
   describe('loading state', () => {
-    it('disables the button while export is in progress', async () => {
+    it('disables the CTA while export is in progress', async () => {
       let resolveExport!: () => void;
       mockExportTransactions.mockReturnValue(
         new Promise<void>((resolve) => {
@@ -161,14 +205,15 @@ describe('ExportSettings', () => {
       );
 
       renderComponent();
+      await openSheet();
 
       act(() => {
-        fireEvent.click(screen.getByRole('button', { name: /export/i }));
+        fireEvent.click(getExportCta());
       });
 
       // Button should be disabled while the promise is pending
       await waitFor(() => {
-        expect((screen.getByRole('button', { name: /export/i }) as HTMLButtonElement).disabled).toBe(true);
+        expect((getExportCta() as HTMLButtonElement).disabled).toBe(true);
       });
 
       // Clean up — resolve the promise so the component finishes
@@ -177,26 +222,28 @@ describe('ExportSettings', () => {
       });
     });
 
-    it('re-enables the button after export completes', async () => {
+    it('re-enables the CTA after export completes', async () => {
       renderComponent();
+      await openSheet();
 
       await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: /export/i }));
+        fireEvent.click(getExportCta());
       });
 
-      expect((screen.getByRole('button', { name: /export/i }) as HTMLButtonElement).disabled).toBe(false);
+      expect((getExportCta() as HTMLButtonElement).disabled).toBe(false);
     });
 
-    it('re-enables the button after a failed export', async () => {
+    it('re-enables the CTA after a failed export', async () => {
       mockExportTransactions.mockRejectedValue(new Error('oops'));
 
       renderComponent();
+      await openSheet();
 
       await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: /export/i }));
+        fireEvent.click(getExportCta());
       });
 
-      expect((screen.getByRole('button', { name: /export/i }) as HTMLButtonElement).disabled).toBe(false);
+      expect((getExportCta() as HTMLButtonElement).disabled).toBe(false);
     });
   });
 });
