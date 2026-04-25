@@ -4,9 +4,7 @@ module.exports = {
     browser: true,
     es2022: true,
   },
-  extends: [
-    "eslint:recommended",
-  ],
+  extends: ["eslint:recommended"],
   parser: "@typescript-eslint/parser",
   parserOptions: {
     ecmaVersion: "latest",

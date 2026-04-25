@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect } from "react";
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -9,7 +9,7 @@ interface ConfirmDialogProps {
   confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
-  variant: 'default' | 'destructive';
+  variant: "default" | "destructive";
 }
 
 export function ConfirmDialog({
@@ -17,7 +17,7 @@ export function ConfirmDialog({
   title,
   body,
   confirmLabel,
-  cancelLabel = 'Cancel',
+  cancelLabel = "Cancel",
   confirmDisabled = false,
   onConfirm,
   onCancel,
@@ -26,10 +26,10 @@ export function ConfirmDialog({
   useEffect(() => {
     if (!isOpen) return;
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') onCancel();
+      if (e.key === "Escape") onCancel();
     }
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onCancel]);
 
   if (!isOpen) return null;
@@ -40,13 +40,13 @@ export function ConfirmDialog({
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"
       style={{
-        position: 'fixed',
+        position: "fixed",
         inset: 0,
-        zIndex: 'var(--z-dialog)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 'var(--space-4)',
+        zIndex: "var(--z-dialog)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "var(--space-4)",
       }}
     >
       {/* Backdrop */}
@@ -54,34 +54,34 @@ export function ConfirmDialog({
         aria-hidden="true"
         onClick={onCancel}
         style={{
-          position: 'absolute',
+          position: "absolute",
           inset: 0,
-          background: 'oklch(0% 0 0 / 60%)',
+          background: "oklch(0% 0 0 / 60%)",
         }}
       />
 
       {/* Panel */}
       <div
         style={{
-          position: 'relative',
-          background: 'var(--color-surface-raised)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-card)',
-          padding: 'var(--space-6)',
-          width: '100%',
-          maxWidth: '320px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 'var(--space-4)',
+          position: "relative",
+          background: "var(--color-surface-raised)",
+          border: "1px solid var(--color-border)",
+          borderRadius: "var(--radius-card)",
+          padding: "var(--space-6)",
+          width: "100%",
+          maxWidth: "320px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "var(--space-4)",
         }}
       >
         <h2
           id="confirm-dialog-title"
           style={{
-            fontFamily: 'Syne, sans-serif',
+            fontFamily: "Syne, sans-serif",
             fontWeight: 700,
-            fontSize: 'var(--text-heading)',
-            color: 'var(--color-text)',
+            fontSize: "var(--text-heading)",
+            color: "var(--color-text)",
             margin: 0,
           }}
         >
@@ -90,27 +90,27 @@ export function ConfirmDialog({
         <p
           style={{
             fontFamily: '"DM Sans", sans-serif',
-            fontSize: 'var(--text-body)',
-            color: 'var(--color-text-secondary)',
+            fontSize: "var(--text-body)",
+            color: "var(--color-text-secondary)",
             margin: 0,
           }}
         >
           {body}
         </p>
-        <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end' }}>
+        <div style={{ display: "flex", gap: "var(--space-3)", justifyContent: "flex-end" }}>
           <button
             onClick={onCancel}
             style={{
-              minHeight: '44px',
-              padding: '0 var(--space-4)',
-              background: 'var(--color-surface-raised)',
-              color: 'var(--color-text)',
-              border: '1px solid var(--color-border-strong)',
-              borderRadius: 'var(--radius-btn)',
+              minHeight: "44px",
+              padding: "0 var(--space-4)",
+              background: "var(--color-surface-raised)",
+              color: "var(--color-text)",
+              border: "1px solid var(--color-border-strong)",
+              borderRadius: "var(--radius-btn)",
               fontFamily: '"DM Sans", sans-serif',
               fontWeight: 500,
-              fontSize: 'var(--text-body)',
-              cursor: 'pointer',
+              fontSize: "var(--text-body)",
+              cursor: "pointer",
             }}
           >
             {cancelLabel}
@@ -119,17 +119,18 @@ export function ConfirmDialog({
             onClick={onConfirm}
             disabled={confirmDisabled}
             style={{
-              minHeight: '44px',
-              padding: '0 var(--space-4)',
-              background: variant === 'destructive' ? 'var(--color-expense-dim)' : 'var(--color-primary)',
-              color: variant === 'destructive' ? 'var(--color-expense)' : 'var(--color-bg)',
-              border: variant === 'destructive' ? '1px solid oklch(62% 0.28 18 / 50%)' : 'none',
-              borderRadius: 'var(--radius-btn)',
+              minHeight: "44px",
+              padding: "0 var(--space-4)",
+              background:
+                variant === "destructive" ? "var(--color-expense-dim)" : "var(--color-primary)",
+              color: variant === "destructive" ? "var(--color-expense)" : "var(--color-bg)",
+              border: variant === "destructive" ? "1px solid oklch(62% 0.28 18 / 50%)" : "none",
+              borderRadius: "var(--radius-btn)",
               fontFamily: '"DM Sans", sans-serif',
               fontWeight: 500,
-              fontSize: 'var(--text-body)',
+              fontSize: "var(--text-body)",
               opacity: confirmDisabled ? 0.5 : 1,
-              cursor: confirmDisabled ? 'not-allowed' : 'pointer',
+              cursor: confirmDisabled ? "not-allowed" : "pointer",
             }}
           >
             {confirmLabel}

@@ -1,6 +1,6 @@
-import { useTranslation } from 'react-i18next';
-import { useSettingsStore } from '../../stores/settings-store';
-import { useToast } from '../shared/Toast';
+import { useTranslation } from "react-i18next";
+import { useSettingsStore } from "../../stores/settings-store";
+import { useToast } from "../shared/Toast";
 
 export function NotificationSetting() {
   const { t } = useTranslation();
@@ -10,38 +10,35 @@ export function NotificationSetting() {
   async function handleToggle() {
     if (!notificationEnabled) {
       // Enabling — request permission
-      if (typeof Notification !== 'undefined') {
+      if (typeof Notification !== "undefined") {
         let permission = Notification.permission;
-        if (permission === 'default') {
+        if (permission === "default") {
           permission = await Notification.requestPermission();
         }
-        if (permission === 'denied') {
-          show(
-            'Notification permission denied. Please enable it in browser settings.',
-            'error',
-          );
+        if (permission === "denied") {
+          show("Notification permission denied. Please enable it in browser settings.", "error");
           return;
         }
       }
       try {
-        await update('notificationEnabled', true);
+        await update("notificationEnabled", true);
       } catch {
-        show('Failed to save setting', 'error');
+        show("Failed to save setting", "error");
       }
     } else {
       try {
-        await update('notificationEnabled', false);
+        await update("notificationEnabled", false);
       } catch {
-        show('Failed to save setting', 'error');
+        show("Failed to save setting", "error");
       }
     }
   }
 
   async function handleTimeChange(time: string) {
     try {
-      await update('notificationTime', time);
+      await update("notificationTime", time);
     } catch {
-      show('Failed to save setting', 'error');
+      show("Failed to save setting", "error");
     }
   }
 
@@ -50,50 +47,50 @@ export function NotificationSetting() {
       {/* Toggle row */}
       <div
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          minHeight: '52px',
-          padding: '0 var(--space-4)',
-          borderBottom: '1px solid var(--color-border)',
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          minHeight: "52px",
+          padding: "0 var(--space-4)",
+          borderBottom: "1px solid var(--color-border)",
         }}
       >
         <span
           style={{
             fontFamily: '"DM Sans", sans-serif',
             fontWeight: 500,
-            fontSize: 'var(--text-body)',
-            color: 'var(--color-text)',
+            fontSize: "var(--text-body)",
+            color: "var(--color-text)",
           }}
         >
-          {t('settings.notification.label')}
+          {t("settings.notification.label")}
         </span>
         <button
           role="switch"
           aria-checked={notificationEnabled}
           onClick={handleToggle}
           style={{
-            position: 'relative',
-            width: '48px',
-            height: '26px',
-            borderRadius: '13px',
-            background: notificationEnabled ? 'var(--color-primary)' : 'var(--color-border)',
-            border: 'none',
-            cursor: 'pointer',
-            transition: 'background 150ms ease-out',
+            position: "relative",
+            width: "48px",
+            height: "26px",
+            borderRadius: "13px",
+            background: notificationEnabled ? "var(--color-primary)" : "var(--color-border)",
+            border: "none",
+            cursor: "pointer",
+            transition: "background 150ms ease-out",
             flexShrink: 0,
           }}
         >
           <span
             style={{
-              position: 'absolute',
-              top: '3px',
-              left: notificationEnabled ? '24px' : '3px',
-              width: '20px',
-              height: '20px',
-              borderRadius: '50%',
-              background: 'var(--color-bg)',
-              transition: 'left 150ms ease-out',
+              position: "absolute",
+              top: "3px",
+              left: notificationEnabled ? "24px" : "3px",
+              width: "20px",
+              height: "20px",
+              borderRadius: "50%",
+              background: "var(--color-bg)",
+              transition: "left 150ms ease-out",
             }}
           />
         </button>
@@ -104,58 +101,58 @@ export function NotificationSetting() {
         <>
           <div
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              minHeight: '52px',
-              padding: '0 var(--space-4)',
-              borderBottom: '1px solid var(--color-border)',
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              minHeight: "52px",
+              padding: "0 var(--space-4)",
+              borderBottom: "1px solid var(--color-border)",
             }}
           >
             <span
               style={{
                 fontFamily: '"DM Sans", sans-serif',
                 fontWeight: 500,
-                fontSize: 'var(--text-body)',
-                color: 'var(--color-text)',
+                fontSize: "var(--text-body)",
+                color: "var(--color-text)",
               }}
             >
-              {t('settings.notification.time')}
+              {t("settings.notification.time")}
             </span>
             <input
               type="time"
               value={notificationTime}
               onChange={(e) => handleTimeChange(e.target.value)}
               style={{
-                minHeight: '36px',
-                padding: '0 var(--space-3)',
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-input)',
-                color: 'var(--color-text)',
+                minHeight: "36px",
+                padding: "0 var(--space-3)",
+                background: "var(--color-surface)",
+                border: "1px solid var(--color-border)",
+                borderRadius: "var(--radius-input)",
+                color: "var(--color-text)",
                 fontFamily: '"JetBrains Mono", monospace',
                 fontWeight: 500,
-                fontSize: 'var(--text-body)',
-                colorScheme: 'dark',
+                fontSize: "var(--text-body)",
+                colorScheme: "dark",
               }}
             />
           </div>
           <div
             style={{
-              padding: 'var(--space-3) var(--space-4)',
-              borderBottom: '1px solid var(--color-border)',
+              padding: "var(--space-3) var(--space-4)",
+              borderBottom: "1px solid var(--color-border)",
             }}
           >
             <span
               style={{
                 fontFamily: '"DM Sans", sans-serif',
                 fontWeight: 400,
-                fontSize: 'var(--text-caption)',
-                color: 'var(--color-text-muted)',
+                fontSize: "var(--text-caption)",
+                color: "var(--color-text-muted)",
                 lineHeight: 1.4,
               }}
             >
-              {t('settings.notification.caveat')}
+              {t("settings.notification.caveat")}
             </span>
           </div>
         </>

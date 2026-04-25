@@ -66,7 +66,7 @@ sudo chmod 440 /etc/sudoers.d/deploy-docker
 sudo visudo -cf /etc/sudoers.d/deploy-docker
 ```
 
-> **Security note — docker compose and privilege escalation:** The sudoers rules above restrict `docker compose` to a hardcoded file path, but they do **not** restrict the *contents* of that file. Because `deploy` owns the git repo (and therefore `docker-compose.yml`), a compromised deploy user can rewrite the file to mount the host filesystem and gain root. This is an inherent limitation of any docker-compose-over-sudo setup — `docker` access is effectively root-equivalent when the user controls the compose file.
+> **Security note — docker compose and privilege escalation:** The sudoers rules above restrict `docker compose` to a hardcoded file path, but they do **not** restrict the _contents_ of that file. Because `deploy` owns the git repo (and therefore `docker-compose.yml`), a compromised deploy user can rewrite the file to mount the host filesystem and gain root. This is an inherent limitation of any docker-compose-over-sudo setup — `docker` access is effectively root-equivalent when the user controls the compose file.
 >
 > For a personal home server this is an acceptable trade-off: the deploy user has no shell password, SSH is key-only, and no public ports are exposed. If you want to harden further, move `docker-compose.yml` to a root-owned path outside the git repo (e.g. `/etc/expensesapp/docker-compose.yml`) and update the sudoers rules and deploy workflow to point there. The `git pull` in the deploy workflow would then only update source code, and compose changes would require manual root intervention.
 
@@ -79,6 +79,7 @@ ssh-keygen -t ed25519 -C "github-actions-expensesapp" -f ~/.ssh/expensesapp_depl
 ```
 
 This produces two files:
+
 - `expensesapp_deploy` — **private key** → goes into GitHub Secrets
 - `expensesapp_deploy.pub` — **public key** → goes onto the server
 
@@ -103,6 +104,7 @@ sudo chown deploy:deploy /home/deploy/.ssh/authorized_keys
 > **Critical:** The `authorized_keys` file must be owned by `deploy`, not `root`. If you run `sudo tee` to write this file, it will be owned by `root` and sshd will silently refuse to read it — key authentication will fail with no useful error on the client side. The sshd log will show: `Could not open user 'deploy' authorized keys: Permission denied`. Always run `chown` after writing the file.
 >
 > Verify ownership is correct:
+>
 > ```bash
 > sudo ls -la /home/deploy/.ssh/
 > # authorized_keys must show: -rw------- deploy deploy
@@ -162,12 +164,12 @@ The `.env` file (containing the Cloudflare tunnel token) is written automaticall
 
 Still in the tunnel creation wizard (or later via the tunnel's **Public Hostname** tab):
 
-| Field | Value |
-|---|---|
-| Subdomain | your subdomain (e.g. `expenses`) |
-| Domain | your Cloudflare-managed domain |
-| Service type | `HTTP` |
-| URL | `http://app:80` |
+| Field        | Value                            |
+| ------------ | -------------------------------- |
+| Subdomain    | your subdomain (e.g. `expenses`) |
+| Domain       | your Cloudflare-managed domain   |
+| Service type | `HTTP`                           |
+| URL          | `http://app:80`                  |
 
 > **Important**: the URL must be `http://app:80` — `app` is the Docker service name, resolved via Docker internal DNS. Do not use `localhost` or `127.0.0.1`.
 
@@ -177,12 +179,12 @@ Click **Save tunnel**.
 
 In the tunnel's **Public Hostname** tab → **Add a public hostname**:
 
-| Field | Value |
-|---|---|
-| Subdomain | `ssh-expenses` (or any name you prefer) |
-| Domain | your Cloudflare-managed domain |
-| Service type | `SSH` |
-| URL | `host-gateway:22` |
+| Field        | Value                                   |
+| ------------ | --------------------------------------- |
+| Subdomain    | `ssh-expenses` (or any name you prefer) |
+| Domain       | your Cloudflare-managed domain          |
+| Service type | `SSH`                                   |
+| URL          | `host-gateway:22`                       |
 
 Save. The cloudflared container on the server will now route connections to this hostname into the host's SSH daemon.
 
@@ -199,6 +201,7 @@ echo "ssh-expenses.yourdomain.com $(awk '{print $1, $2}' /etc/ssh/ssh_host_ed255
 ```
 
 The output looks like:
+
 ```
 ssh-expenses.yourdomain.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA...
 ```
@@ -220,7 +223,7 @@ This gates the SSH hostname with a policy — only requests presenting a valid s
 
 7. Under **Configure rules**, add an **Include** rule:
    - Selector: **Service Token**
-   - Value: *(leave blank for now — you will fill this in after step 7f)*
+   - Value: _(leave blank for now — you will fill this in after step 7f)_
 8. Click **Next** → **Add application**
 
 ### 7f. Create a Cloudflare Access service token
@@ -248,16 +251,16 @@ In the Cloudflare dashboard, go to your domain → **SSL/TLS** → set mode to *
 
 In the GitHub repository: **Settings** → **Secrets and variables** → **Actions** → **New repository secret**.
 
-| Secret name | Value |
-|---|---|
-| `SSH_HOST` | The Cloudflare SSH hostname — e.g. `ssh-expenses.yourdomain.com` |
-| `SSH_USER` | `deploy` |
-| `SSH_KEY` | Full contents of `~/.ssh/expensesapp_deploy` (private key, including `-----BEGIN` and `-----END` lines) |
-| `SSH_KNOWN_HOST` | The host key line from step 7d — `ssh-expenses.yourdomain.com ssh-ed25519 AAAA...` |
-| `APP_DIR` | `/home/deploy/expensesapp` |
-| `CLOUDFLARE_TUNNEL_TOKEN` | The `eyJhIjoiY...` token from step 7a |
-| `CF_ACCESS_CLIENT_ID` | Client ID from step 7f |
-| `CF_ACCESS_CLIENT_SECRET` | Client Secret from step 7f |
+| Secret name               | Value                                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `SSH_HOST`                | The Cloudflare SSH hostname — e.g. `ssh-expenses.yourdomain.com`                                        |
+| `SSH_USER`                | `deploy`                                                                                                |
+| `SSH_KEY`                 | Full contents of `~/.ssh/expensesapp_deploy` (private key, including `-----BEGIN` and `-----END` lines) |
+| `SSH_KNOWN_HOST`          | The host key line from step 7d — `ssh-expenses.yourdomain.com ssh-ed25519 AAAA...`                      |
+| `APP_DIR`                 | `/home/deploy/expensesapp`                                                                              |
+| `CLOUDFLARE_TUNNEL_TOKEN` | The `eyJhIjoiY...` token from step 7a                                                                   |
+| `CF_ACCESS_CLIENT_ID`     | Client ID from step 7f                                                                                  |
+| `CF_ACCESS_CLIENT_SECRET` | Client Secret from step 7f                                                                              |
 
 ---
 
@@ -323,12 +326,12 @@ cloudflared access ssh \
 
 Expected outputs and what they mean:
 
-| Output | Meaning |
-|---|---|
-| `SSH-2.0-OpenSSH_...` then `Invalid SSH identification string` | **Success** — tunnel and auth work; the error is just cloudflared receiving no SSH client on stdin |
-| `websocket: bad handshake` | Cloudflare Access rejected the connection — check service token, policy action (must be **Service Auth**), and that the SSH hostname route points to `host-gateway:22` not `localhost:22` |
-| `dial tcp ... connection refused` | Tunnel auth works but sshd is unreachable — check the hostname route URL in Cloudflare dashboard |
-| Password prompt | Key auth failed — check `authorized_keys` ownership (`deploy:deploy`) and that `SSH_KEY` secret matches the public key on the server |
+| Output                                                         | Meaning                                                                                                                                                                                   |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SSH-2.0-OpenSSH_...` then `Invalid SSH identification string` | **Success** — tunnel and auth work; the error is just cloudflared receiving no SSH client on stdin                                                                                        |
+| `websocket: bad handshake`                                     | Cloudflare Access rejected the connection — check service token, policy action (must be **Service Auth**), and that the SSH hostname route points to `host-gateway:22` not `localhost:22` |
+| `dial tcp ... connection refused`                              | Tunnel auth works but sshd is unreachable — check the hostname route URL in Cloudflare dashboard                                                                                          |
+| Password prompt                                                | Key auth failed — check `authorized_keys` ownership (`deploy:deploy`) and that `SSH_KEY` secret matches the public key on the server                                                      |
 
 To also test the SSH key authentication end-to-end:
 
@@ -388,7 +391,7 @@ Run a deployment with `--no-cache` (already the default in the workflow) to pick
 For `cloudflared`, the `docker-compose.yml` currently uses `:latest`. It is recommended to pin this to a specific version tag for reproducible, auditable deploys:
 
 ```yaml
-image: cloudflare/cloudflared:2025.x.x  # replace with the current release
+image: cloudflare/cloudflared:2025.x.x # replace with the current release
 ```
 
 Check the current release at https://github.com/cloudflare/cloudflared/releases, update the tag in `docker-compose.yml`, and run a deployment. Update this tag whenever you rotate the tunnel token or on your regular maintenance schedule.

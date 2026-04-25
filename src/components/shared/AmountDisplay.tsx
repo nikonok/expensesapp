@@ -1,36 +1,36 @@
 interface AmountDisplayProps {
   amount: number;
   currency: string;
-  type: 'income' | 'expense' | 'transfer' | 'neutral';
-  size: 'lg' | 'md' | 'sm';
+  type: "income" | "expense" | "transfer" | "neutral";
+  size: "lg" | "md" | "sm";
 }
 
 const SIZE_MAP = {
-  lg: 'var(--text-amount-lg)',
-  md: 'var(--text-amount-md)',
-  sm: 'var(--text-amount-sm)',
+  lg: "var(--text-amount-lg)",
+  md: "var(--text-amount-md)",
+  sm: "var(--text-amount-sm)",
 } as const;
 
 const STYLE_MAP: Record<
-  AmountDisplayProps['type'],
+  AmountDisplayProps["type"],
   { color: string; textShadow?: string; prefix?: string; opacity?: number }
 > = {
   income: {
-    color: 'var(--color-income)',
-    textShadow: '0 0 12px oklch(73% 0.23 160 / 45%)',
-    prefix: '+',
+    color: "var(--color-income)",
+    textShadow: "0 0 12px oklch(73% 0.23 160 / 45%)",
+    prefix: "+",
   },
   expense: {
-    color: 'var(--color-expense)',
-    textShadow: '0 0 12px oklch(62% 0.28 18 / 45%)',
-    prefix: '−',
+    color: "var(--color-expense)",
+    textShadow: "0 0 12px oklch(62% 0.28 18 / 45%)",
+    prefix: "−",
   },
   transfer: {
-    color: 'var(--color-transfer)',
-    prefix: '⇄',
+    color: "var(--color-transfer)",
+    prefix: "⇄",
   },
   neutral: {
-    color: 'var(--color-text)',
+    color: "var(--color-text)",
   },
 };
 
@@ -38,23 +38,30 @@ export function AmountDisplay({ amount, currency, type, size }: AmountDisplayPro
   const style = STYLE_MAP[type];
   const fontSize = SIZE_MAP[size];
 
-  const isNegativeNeutral = type === 'neutral' && amount < 0;
+  const isNegativeNeutral = type === "neutral" && amount < 0;
 
-  const displayColor = isNegativeNeutral ? 'var(--color-expense)' : style.color;
-  const displayTextShadow = isNegativeNeutral
-    ? STYLE_MAP.expense.textShadow
-    : style.textShadow;
-  const displayPrefix = isNegativeNeutral ? '\u2212' : style.prefix;
+  const displayColor = isNegativeNeutral ? "var(--color-expense)" : style.color;
+  const displayTextShadow = isNegativeNeutral ? STYLE_MAP.expense.textShadow : style.textShadow;
+  const displayPrefix = isNegativeNeutral ? "\u2212" : style.prefix;
   const displayOpacity = style.opacity;
 
-  const formatted = new Intl.NumberFormat('en-US', {
-    style: 'currency',
+  const formatted = new Intl.NumberFormat("en-US", {
+    style: "currency",
     currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(Math.abs(amount) / 100);
 
-  const typeLabel = type === 'income' ? 'income' : type === 'expense' ? 'expense' : type === 'transfer' ? 'transfer' : isNegativeNeutral ? 'negative' : undefined;
+  const typeLabel =
+    type === "income"
+      ? "income"
+      : type === "expense"
+        ? "expense"
+        : type === "transfer"
+          ? "transfer"
+          : isNegativeNeutral
+            ? "negative"
+            : undefined;
   const accessibleLabel = typeLabel ? `${typeLabel} ${formatted}` : formatted;
 
   return (
@@ -67,9 +74,9 @@ export function AmountDisplay({ amount, currency, type, size }: AmountDisplayPro
         color: displayColor,
         textShadow: displayTextShadow,
         opacity: displayOpacity,
-        display: 'inline-flex',
-        alignItems: 'baseline',
-        gap: '0.1em',
+        display: "inline-flex",
+        alignItems: "baseline",
+        gap: "0.1em",
       }}
     >
       {displayPrefix && (

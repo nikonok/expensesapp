@@ -239,12 +239,12 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
             <p
               style={{
                 fontFamily: '"DM Sans", sans-serif',
-                fontSize: 'var(--text-body)',
-                color: 'var(--color-text-secondary)',
+                fontSize: "var(--text-body)",
+                color: "var(--color-text-secondary)",
                 lineHeight: 1.4,
                 margin: 0,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
               }}
             >
               {account.description}

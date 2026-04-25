@@ -1,7 +1,7 @@
-import { GripVertical, X } from 'lucide-react';
-import { useSortable } from '@dnd-kit/sortable';
-import type { Category } from '../../db/models';
-import { getLucideIcon } from '../shared/IconPicker';
+import { GripVertical, X } from "lucide-react";
+import { useSortable } from "@dnd-kit/sortable";
+import type { Category } from "../../db/models";
+import { getLucideIcon } from "../shared/IconPicker";
 
 interface CategoryCardProps {
   category: Category;
@@ -23,16 +23,12 @@ export default function CategoryCard({
   const isOverBudget = budget !== null && spent > budget;
   const progress = budget !== null && budget > 0 ? Math.min(spent / budget, 1) : 0;
 
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    isDragging,
-  } = useSortable({ id: category.id! });
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
+    id: category.id!,
+  });
 
   const Icon = getLucideIcon(category.icon);
-  const isEmoji = !Icon && category.icon !== '';
+  const isEmoji = !Icon && category.icon !== "";
 
   function handleClick() {
     if (!editMode && onClick) {
@@ -44,30 +40,32 @@ export default function CategoryCard({
     <div
       ref={setNodeRef}
       style={{
-        transform: transform ? `translate3d(0px, ${transform.y}px, 0) scaleX(${transform.scaleX}) scaleY(${transform.scaleY})` : undefined,
-        position: 'relative',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--space-3)',
-        padding: 'var(--space-3) var(--space-4)',
-        paddingBottom: '16px', // room for bar
+        transform: transform
+          ? `translate3d(0px, ${transform.y}px, 0) scaleX(${transform.scaleX}) scaleY(${transform.scaleY})`
+          : undefined,
+        position: "relative",
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--space-3)",
+        padding: "var(--space-3) var(--space-4)",
+        paddingBottom: "16px", // room for bar
         background: isDragging
-          ? 'var(--color-surface-raised)'
+          ? "var(--color-surface-raised)"
           : isOverBudget
-            ? 'var(--color-expense-dim)'
-            : 'var(--color-surface)',
-        borderRadius: 'var(--radius-card)',
+            ? "var(--color-expense-dim)"
+            : "var(--color-surface)",
+        borderRadius: "var(--radius-card)",
         borderLeft: `3px solid var(--card-color)`,
-        cursor: editMode ? 'default' : 'pointer',
-        userSelect: 'none',
+        cursor: editMode ? "default" : "pointer",
+        userSelect: "none",
         // Set the --card-color CSS variable
-        ['--card-color' as string]: category.color,
-        overflow: 'hidden',
-        boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.5)' : 'none',
-        scale: isDragging ? '1.03' : '1',
+        ["--card-color" as string]: category.color,
+        overflow: "hidden",
+        boxShadow: isDragging ? "0 8px 24px rgba(0,0,0,0.5)" : "none",
+        scale: isDragging ? "1.03" : "1",
         opacity: isDragging ? 0.95 : 1,
-        zIndex: isDragging ? 'var(--z-sheet)' : 'auto',
-        transition: isDragging ? 'none' : 'background 120ms ease-out',
+        zIndex: isDragging ? "var(--z-sheet)" : "auto",
+        transition: isDragging ? "none" : "background 120ms ease-out",
       }}
       onClick={handleClick}
     >
@@ -78,15 +76,15 @@ export default function CategoryCard({
           {...attributes}
           aria-label={`Reorder ${category.name}`}
           style={{
-            width: '44px',
-            height: '44px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--color-text-disabled)',
+            width: "44px",
+            height: "44px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "var(--color-text-disabled)",
             flexShrink: 0,
-            cursor: 'grab',
-            touchAction: 'none',
+            cursor: "grab",
+            touchAction: "none",
           }}
         >
           <GripVertical size={18} strokeWidth={1.5} />
@@ -96,54 +94,54 @@ export default function CategoryCard({
       {/* Icon */}
       <div
         style={{
-          width: '36px',
-          height: '36px',
-          borderRadius: 'var(--radius-icon)',
-          background: 'var(--color-surface-raised)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          width: "36px",
+          height: "36px",
+          borderRadius: "var(--radius-icon)",
+          background: "var(--color-surface-raised)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
           flexShrink: 0,
           color: category.color,
         }}
       >
         {isEmoji ? (
-          <span style={{ fontSize: '18px', lineHeight: 1 }}>{category.icon}</span>
+          <span style={{ fontSize: "18px", lineHeight: 1 }}>{category.icon}</span>
         ) : Icon ? (
           <Icon size={18} strokeWidth={1.5} />
         ) : null}
       </div>
 
       {/* Text */}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "2px" }}>
         <span
           style={{
             fontFamily: '"DM Sans", sans-serif',
             fontWeight: 500,
-            fontSize: 'var(--text-body)',
-            color: 'var(--color-text)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            fontSize: "var(--text-body)",
+            color: "var(--color-text)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
           }}
         >
           {category.name}
         </span>
         <div
           style={{
-            display: 'flex',
-            gap: 'var(--space-3)',
+            display: "flex",
+            gap: "var(--space-3)",
             fontFamily: '"JetBrains Mono", monospace',
             fontWeight: 500,
-            fontSize: 'var(--text-amount-sm)',
+            fontSize: "var(--text-amount-sm)",
           }}
         >
-          <span style={{ color: 'var(--color-text-secondary)' }}>
-            Budget: {budget !== null ? (budget / 100).toFixed(2) : '—'}
+          <span style={{ color: "var(--color-text-secondary)" }}>
+            Budget: {budget !== null ? (budget / 100).toFixed(2) : "—"}
           </span>
           <span
             style={{
-              color: isOverBudget ? 'var(--color-expense)' : 'var(--color-text)',
+              color: isOverBudget ? "var(--color-expense)" : "var(--color-text)",
             }}
           >
             Spent: {(spent / 100).toFixed(2)}
@@ -160,17 +158,17 @@ export default function CategoryCard({
           }}
           aria-label={`Remove ${category.name}`}
           style={{
-            width: '32px',
-            height: '32px',
-            minWidth: '32px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'var(--color-expense-dim)',
-            border: '1px solid oklch(62% 0.28 18 / 30%)',
-            borderRadius: '50%',
-            cursor: 'pointer',
-            color: 'var(--color-expense)',
+            width: "32px",
+            height: "32px",
+            minWidth: "32px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "var(--color-expense-dim)",
+            border: "1px solid oklch(62% 0.28 18 / 30%)",
+            borderRadius: "50%",
+            cursor: "pointer",
+            color: "var(--color-expense)",
             flexShrink: 0,
           }}
         >
@@ -182,20 +180,20 @@ export default function CategoryCard({
       {budget !== null && (
         <div
           style={{
-            position: 'absolute',
+            position: "absolute",
             bottom: 0,
             left: 0,
             right: 0,
-            height: '4px',
-            background: 'var(--color-border)',
+            height: "4px",
+            background: "var(--color-border)",
           }}
         >
           <div
             style={{
-              height: '100%',
+              height: "100%",
               width: `${progress * 100}%`,
-              background: isOverBudget ? 'var(--color-expense)' : 'var(--card-color)',
-              transition: 'width 300ms ease-out',
+              background: isOverBudget ? "var(--color-expense)" : "var(--card-color)",
+              transition: "width 300ms ease-out",
             }}
           />
         </div>
@@ -208,20 +206,23 @@ export function CategoryCardSkeleton() {
   return (
     <div
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--space-3)',
-        padding: 'var(--space-3) var(--space-4)',
-        paddingBottom: '16px',
-        background: 'var(--color-surface)',
-        borderRadius: 'var(--radius-card)',
-        borderLeft: '3px solid var(--color-border)',
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--space-3)",
+        padding: "var(--space-3) var(--space-4)",
+        paddingBottom: "16px",
+        background: "var(--color-surface)",
+        borderRadius: "var(--radius-card)",
+        borderLeft: "3px solid var(--color-border)",
       }}
     >
-      <div className="skeleton" style={{ width: '36px', height: '36px', borderRadius: 'var(--radius-icon)', flexShrink: 0 }} />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        <div className="skeleton" style={{ height: '15px', width: '45%', borderRadius: '4px' }} />
-        <div className="skeleton" style={{ height: '12px', width: '65%', borderRadius: '4px' }} />
+      <div
+        className="skeleton"
+        style={{ width: "36px", height: "36px", borderRadius: "var(--radius-icon)", flexShrink: 0 }}
+      />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
+        <div className="skeleton" style={{ height: "15px", width: "45%", borderRadius: "4px" }} />
+        <div className="skeleton" style={{ height: "12px", width: "65%", borderRadius: "4px" }} />
       </div>
     </div>
   );

@@ -33,9 +33,7 @@ describe("NumpadDisplay", () => {
   });
 
   it("renders evaluatedDisplay text when provided", () => {
-    render(
-      <NumpadDisplay value="10+5" isActive={false} evaluatedDisplay="= 15" />
-    );
+    render(<NumpadDisplay value="10+5" isActive={false} evaluatedDisplay="= 15" />);
     expect(screen.getByText("= 15")).toBeTruthy();
   });
 
@@ -47,14 +45,7 @@ describe("NumpadDisplay", () => {
   // TODO e2e — jsdom reports scrollWidth=0 for all elements so the shrink
   // loop never triggers; verify auto-shrink behaviour in a real browser.
   it.skip("auto-shrink: font size drops toward minFontSize when text overflows", () => {
-    render(
-      <NumpadDisplay
-        value="123456789"
-        isActive={false}
-        maxFontSize={40}
-        minFontSize={16}
-      />
-    );
+    render(<NumpadDisplay value="123456789" isActive={false} maxFontSize={40} minFontSize={16} />);
     const textSpan = document.querySelector("span[style]") as HTMLElement;
     Object.defineProperty(textSpan, "scrollWidth", {
       value: 9999,

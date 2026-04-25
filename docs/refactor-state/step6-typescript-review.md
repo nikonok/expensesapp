@@ -22,34 +22,38 @@ All issues are **real, not style preferences** and pose maintenance or runtime r
 ## 1. Unsafe Type Assertions
 
 ### Issue 1.1: Unvalidated string cast in `getMainCurrency()`
+
 **File:** `/home/anton/Project/expensesapp/src/services/exchange-rate.service.ts:10`  
 **Severity:** Medium  
 **Type:** Unvalidated type assertion
 
 ```typescript
 // Line 10
-return (setting?.value as string) ?? 'USD';
+return (setting?.value as string) ?? "USD";
 ```
 
 **Problem:**  
 `setting?.value` is typed as `unknown` (from Setting interface where `value: unknown`). The cast to `string` is unsafe—no validation ensures the stored value is actually a string. If a non-string value was persisted (e.g., from a bug), this will silently pass and cause downstream errors in exchange-rate calculations.
 
-**Risk:**  
+**Risk:**
+
 - Subtle bugs in rate calculations if mainCurrency is not a string
 - Type narrowing gap: should validate `typeof setting?.value === 'string'`
 
-**Recommendation:**  
+**Recommendation:**
+
 ```typescript
-const setting = await db.settings.get('mainCurrency');
-if (setting && typeof setting.value === 'string') {
+const setting = await db.settings.get("mainCurrency");
+if (setting && typeof setting.value === "string") {
   return setting.value;
 }
-return 'USD';
+return "USD";
 ```
 
 ---
 
 ### Issue 1.2: Unvalidated type assertions in `backup.service.ts:240–250`
+
 **File:** `/home/anton/Project/expensesapp/src/services/backup.service.ts:240–250`  
 **Severity:** Medium  
 **Type:** Unsafe bulk operation casts
@@ -66,12 +70,14 @@ if (validCategories.length)
 **Problem:**  
 These casts rely on the filtering logic above (via `.safeParse().success`) to guarantee type safety, but the cast is opaque to TypeScript. Future changes to validation logic could break the invariant without compiler warnings.
 
-**Risk:**  
+**Risk:**
+
 - Restoration of corrupted data if validation is weakened
 - Maintenance burden: developers may not understand why the cast is safe
 
 **Recommendation:**  
 Extract a type guard function that narrows the type:
+
 ```typescript
 function assertValidAccount(row: unknown): row is Account {
   return accountSchema.safeParse(row).success;
@@ -84,11 +90,13 @@ const validAccounts = (data.tables.accounts as unknown[]).filter(assertValidAcco
 ## 2. Non-Null Assertions in Tests
 
 ### Issue 2.1: Non-null assertions in service tests lack prior null checks
+
 **File:** `/home/anton/Project/expensesapp/src/services/balance.service.test.ts` (multiple lines)  
 **Severity:** Low (test code only)  
 **Type:** Non-null assertions without null guards
 
 **Examples:**
+
 - Line 67: `expect(account!.balance).toBe(700);` — account fetched without null check
 - Line 143: `const origOrder = saved!.displayOrder;` — saved transaction not checked
 - Line 188: `expect(src!.balance).toBe(800);` — accounts retrieved but not validated
@@ -98,6 +106,7 @@ While test code is less critical, these assertions indicate a pattern: assumptio
 
 **Recommendation:**  
 Add assertions before using non-null assertions:
+
 ```typescript
 const account = await db.accounts.get(id as number);
 expect(account).toBeDefined();
@@ -109,6 +118,7 @@ expect(account!.balance).toBe(700);
 ## 3. Unhandled Promise Rejections in React Components
 
 ### Issue 3.1: Fire-and-forget database queries in `TransactionInput.tsx`
+
 **File:** `/home/anton/Project/expensesapp/src/components/transactions/TransactionInput.tsx:1898–1900`  
 **Severity:** High  
 **Type:** Unhandled promise rejection
@@ -123,7 +133,8 @@ db.accounts.get(existingTx.toAccountId).then((dest) => {
 **Problem:**  
 Promise chain has no `.catch()` handler. If the database query fails, the rejection is unhandled. No error is logged, and the component state is inconsistent (user sees blank destination account).
 
-**Risk:**  
+**Risk:**
+
 - Silent failures in editing debt payments
 - Unhandled rejection warnings in dev console
 - User confusion: form shows incomplete data
@@ -131,6 +142,7 @@ Promise chain has no `.catch()` handler. If the database query fails, the reject
 ---
 
 ### Issue 3.2: Promise chain without error handling at lines 1915–1921
+
 **File:** `/home/anton/Project/expensesapp/src/components/transactions/TransactionInput.tsx:1911–1921`  
 **Severity:** High  
 **Type:** Unhandled promise rejection
@@ -153,13 +165,15 @@ db.transactions
 **Problem:**  
 Loading the transfer partner account has no error handler. If the database query fails, the UI inconsistency is silent.
 
-**Risk:**  
+**Risk:**
+
 - Form renders incomplete when editing transfers
 - No error feedback to user
 
 ---
 
 ### Issue 3.3: Empty catch block swallows errors at line 1999
+
 **File:** `/home/anton/Project/expensesapp/src/components/transactions/TransactionInput.tsx:1998–1999`  
 **Severity:** Medium  
 **Type:** Silent error swallowing
@@ -172,12 +186,14 @@ Loading the transfer partner account has no error handler. If the database query
 **Problem:**  
 Exchange rate fetch failure is silently ignored. The `toSecondaryAmount` field is not updated, leaving it stale or blank. No error is logged or communicated.
 
-**Risk:**  
+**Risk:**
+
 - Silent data inconsistency
 - User doesn't know conversion rate is unavailable
 - Difficult to debug rate-related issues
 
-**Recommendation:**  
+**Recommendation:**
+
 ```typescript
 .catch((err) => {
   console.warn('Failed to fetch exchange rate:', err);
@@ -189,6 +205,7 @@ Exchange rate fetch failure is silently ignored. The `toSecondaryAmount` field i
 ---
 
 ### Issue 3.4: Unsafe async callback in `setAutoBackupSchedule`
+
 **File:** `/home/anton/Project/expensesapp/src/services/backup.service.ts:134–141`  
 **Severity:** Medium  
 **Type:** Unhandled async operation errors
@@ -199,7 +216,7 @@ this._autoBackupIntervalId = setInterval(
   () =>
     void (async () => {
       await this.createBackup(true);
-      await db.settings.put({ key: 'lastAutoBackupAt', value: new Date().toISOString() });
+      await db.settings.put({ key: "lastAutoBackupAt", value: new Date().toISOString() });
     })(),
   intervalHours * 3_600_000,
 );
@@ -208,27 +225,30 @@ this._autoBackupIntervalId = setInterval(
 **Problem:**  
 The async IIFE has no `.catch()` handler. If `createBackup()` or the settings update fails, the error is unhandled and periodic backup silently fails. No logging or retry mechanism.
 
-**Risk:**  
+**Risk:**
+
 - Silent backup failures (user unaware)
 - No audit trail of when backups succeeded/failed
 
-**Recommendation:**  
+**Recommendation:**
+
 ```typescript
 () =>
   void (async () => {
     try {
       await this.createBackup(true);
-      await db.settings.put({ key: 'lastAutoBackupAt', value: new Date().toISOString() });
+      await db.settings.put({ key: "lastAutoBackupAt", value: new Date().toISOString() });
     } catch (err) {
-      console.error('Auto backup failed:', err);
+      console.error("Auto backup failed:", err);
       // Optionally emit event or log to analytics
     }
-  })()
+  })();
 ```
 
 ---
 
 ### Issue 3.5: Promise chains in `TransactionInput.tsx` useEffect (lines 1945–1959, 1992–1999)
+
 **File:** `/home/anton/Project/expensesapp/src/components/transactions/TransactionInput.tsx:1945–1959, 1992–1999`  
 **Severity:** Medium  
 **Type:** Race conditions and unhandled rejections in effects
@@ -247,16 +267,18 @@ exchangeRateService
 **Problem:**  
 The promise is not cancelled if the component unmounts or dependencies change before the promise resolves. This causes state updates on unmounted components (memory leak + warning in dev).
 
-**Risk:**  
+**Risk:**
+
 - React warnings: "Can't perform a React state update on an unmounted component"
 - Memory leaks if many promise chains are created but never cleaned up
 
 **Recommendation:**  
 Use an abort controller or mutable ref to cancel pending requests:
+
 ```typescript
 useEffect(() => {
   let isMounted = true;
-  
+
   exchangeRateService
     .getRate(account.currency, mainCurrency)
     .then((rate) => {
@@ -267,7 +289,7 @@ useEffect(() => {
       if (!isMounted) return;
       // handle error
     });
-    
+
   return () => {
     isMounted = false;
   };
@@ -279,6 +301,7 @@ useEffect(() => {
 ## 4. Missing Error Context in Services
 
 ### Issue 4.1: Generic catch-all in `integrity.service.ts`
+
 **File:** `/home/anton/Project/expensesapp/src/services/integrity.service.ts:15–17`  
 **Severity:** Low  
 **Type:** Loss of error context
@@ -295,6 +318,7 @@ The catch block loses the error stack trace. Debugging database corruption becom
 
 **Recommendation:**  
 Preserve more context for dev debugging:
+
 ```typescript
 catch (err) {
   const message = err instanceof Error ? err.message : 'Unknown database error';
@@ -306,6 +330,7 @@ catch (err) {
 ---
 
 ### Issue 4.2: Generic error message in export service
+
 **File:** `/home/anton/Project/expensesapp/src/services/export.service.ts:121–124`  
 **Severity:** Low  
 **Type:** Silent error swallowing
@@ -323,6 +348,7 @@ Error is logged in dev but original error message is re-thrown. If this happens 
 
 **Recommendation:**  
 Wrap the error with context:
+
 ```typescript
 catch (err) {
   const message = err instanceof Error ? err.message : 'Unknown error';
@@ -336,6 +362,7 @@ catch (err) {
 ## 5. Test-Only Type Assertions
 
 ### Issue 5.1: `as any` casts in test files
+
 **File:** `/home/anton/Project/expensesapp/src/services/export.service.test.ts:76, 266`  
 **Severity:** Low (test only)  
 **Type:** Type unsafety in mocks
@@ -345,7 +372,7 @@ catch (err) {
 vi.mocked(db.transactions.where).mockReturnValue(mockTxQuery as any);
 
 // Line 266
-expect(vi.mocked(document.createElement as any).mock.results[0].value.click)
+expect(vi.mocked(document.createElement as any).mock.results[0].value.click);
 ```
 
 **Problem:**  
@@ -353,8 +380,11 @@ expect(vi.mocked(document.createElement as any).mock.results[0].value.click)
 
 **Recommendation:**  
 Use proper mock types or `satisfies` constraint:
+
 ```typescript
-vi.mocked(db.transactions.where).mockReturnValue(mockTxQuery as ReturnType<typeof db.transactions.where>);
+vi.mocked(db.transactions.where).mockReturnValue(
+  mockTxQuery as ReturnType<typeof db.transactions.where>,
+);
 ```
 
 ---
@@ -362,13 +392,15 @@ vi.mocked(db.transactions.where).mockReturnValue(mockTxQuery as ReturnType<typeo
 ## 6. Type Narrowing Gaps
 
 ### Issue 6.1: String comparison for transaction types without narrowing
+
 **File:** Multiple component and service files  
 **Severity:** Low  
 **Type:** Type narrowing opportunity
 
 **Pattern observed:**
+
 ```typescript
-if (tx.type === 'TRANSFER' && tx.transferGroupId) {
+if (tx.type === "TRANSFER" && tx.transferGroupId) {
   // use tx.transferGroupId
 }
 ```
@@ -378,9 +410,10 @@ While this works, it doesn't establish a type guard. TypeScript doesn't narrow `
 
 **Recommendation:**  
 Create a discriminated union type guard:
+
 ```typescript
 function isTransfer(tx: Transaction): tx is Transaction & { transferGroupId: string } {
-  return tx.type === 'TRANSFER' && tx.transferGroupId != null;
+  return tx.type === "TRANSFER" && tx.transferGroupId != null;
 }
 
 if (isTransfer(tx)) {
@@ -393,14 +426,14 @@ if (isTransfer(tx)) {
 
 ## 7. Error Handling Consistency Summary
 
-| Service | Throws Typed Errors | Returns Result Objects | Logs Errors | Re-throws w/ Context |
-|---------|-------------------|------------------------|------------|----------------------|
-| balance.service.ts | ✅ (Error with message) | ❌ | ❌ | ❌ (wrapped via wrapQuotaError) |
-| backup.service.ts | ✅ (Error with context) | ❌ | ❌ | ❌ |
-| export.service.ts | ✅ (Error) | ❌ | ⚠️ (DEV only) | ⚠️ (re-throws original) |
-| integrity.service.ts | ❌ | ✅ (ok/error object) | ⚠️ (DEV only) | N/A |
-| notification.service.ts | ❌ (silent fail on permission) | ❌ | ❌ | N/A |
-| exchange-rate.service.ts | ✅ (Error) | ❌ | ❌ | ✅ (graceful fallback) |
+| Service                  | Throws Typed Errors            | Returns Result Objects | Logs Errors   | Re-throws w/ Context            |
+| ------------------------ | ------------------------------ | ---------------------- | ------------- | ------------------------------- |
+| balance.service.ts       | ✅ (Error with message)        | ❌                     | ❌            | ❌ (wrapped via wrapQuotaError) |
+| backup.service.ts        | ✅ (Error with context)        | ❌                     | ❌            | ❌                              |
+| export.service.ts        | ✅ (Error)                     | ❌                     | ⚠️ (DEV only) | ⚠️ (re-throws original)         |
+| integrity.service.ts     | ❌                             | ✅ (ok/error object)   | ⚠️ (DEV only) | N/A                             |
+| notification.service.ts  | ❌ (silent fail on permission) | ❌                     | ❌            | N/A                             |
+| exchange-rate.service.ts | ✅ (Error)                     | ❌                     | ❌            | ✅ (graceful fallback)          |
 
 **Pattern:** Services throw errors, but React components sometimes don't handle them properly.
 
@@ -409,17 +442,20 @@ if (isTransfer(tx)) {
 ## Recommendations (Prioritized)
 
 ### P0 (High Priority - Fix Soon)
+
 1. **Add `.catch()` handlers** to fire-and-forget database queries in TransactionInput.tsx (lines 1898, 1915)
 2. **Cancel pending promises** on unmount in useEffect hooks to prevent state-update-on-unmounted-component warnings
 3. **Add error logging** to `setAutoBackupSchedule` async callback in backup.service.ts
 
 ### P1 (Medium Priority - Fix in Next Sprint)
+
 4. Add type guard for `mainCurrency` setting in exchange-rate.service.ts
 5. Implement proper type-guarded validation for backup restoration casts
 6. Replace empty `.catch(() => {})` with proper error handling or logging
 7. Add dev-only logging to integrity checks
 
 ### P2 (Low Priority - Refactoring)
+
 8. Create type guards for discriminated unions (Transaction type narrowing)
 9. Extract validation functions with type guards for safer casts
 10. Audit remaining `.then()/.catch()` chains for proper error boundaries
@@ -429,6 +465,7 @@ if (isTransfer(tx)) {
 ## Conclusion
 
 The codebase is **generally well-typed** with strict mode enabled. The main issues are:
+
 - **Unhandled promise rejections** in React components (higher risk)
 - **Unsafe type assertions** in settings and backup restoration (medium risk)
 - **Missing error context** in some catch blocks (lower risk)

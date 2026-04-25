@@ -1,6 +1,6 @@
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db/database';
-import type { Account } from '../db/models';
+import { useLiveQuery } from "dexie-react-hooks";
+import { db } from "../db/database";
+import type { Account } from "../db/models";
 
 export function useAccounts(includeTrashed = false): Account[] {
   return (

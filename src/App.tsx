@@ -36,19 +36,21 @@ function AppRoutes() {
 
   useEffect(() => {
     (async () => {
-      logger.info('app.boot');
+      logger.info("app.boot");
       const integrity = await checkDatabaseIntegrity();
       if (!integrity.ok) {
-        if (import.meta.env.DEV) console.error('Database integrity check failed:', integrity.error);
-        logger.error('app.integrity.failed', { error: String(integrity.error) });
+        if (import.meta.env.DEV) console.error("Database integrity check failed:", integrity.error);
+        logger.error("app.integrity.failed", { error: String(integrity.error) });
         setIntegrityError(true);
         return;
       }
       try {
         await load();
-        logger.info('app.startup');
+        logger.info("app.startup");
       } catch (err) {
-        logger.error('app.settings.load.failed', { error: err instanceof Error ? err.message : String(err) });
+        logger.error("app.settings.load.failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
         useSettingsStore.setState({ isLoaded: true });
       }
     })();
@@ -56,29 +58,35 @@ function AppRoutes() {
 
   useEffect(() => {
     const DEXIE_ERRORS = new Set([
-      'DexieError', 'OpenFailedError', 'VersionError',
-      'InvalidStateError', 'QuotaExceededError', 'UpgradeError',
+      "DexieError",
+      "OpenFailedError",
+      "VersionError",
+      "InvalidStateError",
+      "QuotaExceededError",
+      "UpgradeError",
     ]);
     const onUnhandled = (e: PromiseRejectionEvent) => {
       const reason = e.reason;
       if (reason?.name && DEXIE_ERRORS.has(reason.name)) {
-        logger.error('db.error', {
+        logger.error("db.error", {
           name: reason.name,
           message: String(reason.message ?? reason),
         });
       }
     };
-    window.addEventListener('unhandledrejection', onUnhandled);
-    return () => window.removeEventListener('unhandledrejection', onUnhandled);
+    window.addEventListener("unhandledrejection", onUnhandled);
+    return () => window.removeEventListener("unhandledrejection", onUnhandled);
   }, []);
 
   useEffect(() => {
     if (!isLoaded || integrityError) return;
     checkAndRunAutoBackup().catch((err) => {
-      logger.error('backup.auto.startup.failed', { error: err instanceof Error ? err.message : String(err) });
+      logger.error("backup.auto.startup.failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     });
     logger.trimOldLogs().catch((err) => {
-      logger.error('log.trim.failed', { error: err instanceof Error ? err.message : String(err) });
+      logger.error("log.trim.failed", { error: err instanceof Error ? err.message : String(err) });
     });
     const intervalHours = useSettingsStore.getState().autoBackupIntervalHours;
     setAutoBackupSchedule(intervalHours);

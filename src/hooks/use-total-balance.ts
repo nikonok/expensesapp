@@ -1,16 +1,13 @@
-import { useLiveQuery } from 'dexie-react-hooks';
-import { useEffect, useMemo, useState } from 'react';
-import { db } from '../db/database';
-import { exchangeRateService } from '../services/exchange-rate.service';
-import { useSettingsStore } from '../stores/settings-store';
+import { useLiveQuery } from "dexie-react-hooks";
+import { useEffect, useMemo, useState } from "react";
+import { db } from "../db/database";
+import { exchangeRateService } from "../services/exchange-rate.service";
+import { useSettingsStore } from "../stores/settings-store";
 
 export function useTotalBalance(): { netWorth: number | null; mainCurrency: string } {
   const mainCurrency = useSettingsStore((s) => s.mainCurrency);
 
-  const accounts = useLiveQuery(
-    () => db.accounts.filter((a) => !a.isTrashed).toArray(),
-    [],
-  ) ?? [];
+  const accounts = useLiveQuery(() => db.accounts.filter((a) => !a.isTrashed).toArray(), []) ?? [];
 
   const [netWorth, setNetWorth] = useState<number | null>(null);
 
@@ -23,7 +20,7 @@ export function useTotalBalance(): { netWorth: number | null; mainCurrency: stri
         grouped[acc.currency] = { currency: acc.currency, assets: 0, debts: 0 };
         result.push(grouped[acc.currency]);
       }
-      if (acc.type === 'DEBT') {
+      if (acc.type === "DEBT") {
         grouped[acc.currency].debts += Math.abs(acc.balance);
       } else {
         grouped[acc.currency].assets += acc.balance;
@@ -40,7 +37,9 @@ export function useTotalBalance(): { netWorth: number | null; mainCurrency: stri
     let cancelled = false;
     async function calc() {
       const currencies = [...new Set(groups.map((g) => g.currency))];
-      const rates = await Promise.all(currencies.map((c) => exchangeRateService.getRate(c, mainCurrency)));
+      const rates = await Promise.all(
+        currencies.map((c) => exchangeRateService.getRate(c, mainCurrency)),
+      );
       const rateMap = Object.fromEntries(currencies.map((c, i) => [c, rates[i]]));
       let totalAssets = 0;
       let totalDebts = 0;
@@ -52,7 +51,9 @@ export function useTotalBalance(): { netWorth: number | null; mainCurrency: stri
       if (!cancelled) setNetWorth(totalAssets - totalDebts);
     }
     void calc();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [groups, mainCurrency]);
 
   return { netWorth, mainCurrency };

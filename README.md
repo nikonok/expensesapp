@@ -33,20 +33,20 @@ A personal finance tracking **Progressive Web App** built with React 19, TypeScr
 
 ## Tech Stack
 
-| Layer       | Library                        |
-| ----------- | ------------------------------ |
-| UI          | React 19 + TypeScript 6        |
-| Build       | Vite 8 + Tailwind CSS 4        |
-| Routing     | React Router 7                 |
-| Database    | Dexie 4 (IndexedDB)            |
-| State       | Zustand 5                      |
+| Layer       | Library                             |
+| ----------- | ----------------------------------- |
+| UI          | React 19 + TypeScript 6             |
+| Build       | Vite 8 + Tailwind CSS 4             |
+| Routing     | React Router 7                      |
+| Database    | Dexie 4 (IndexedDB)                 |
+| State       | Zustand 5                           |
 | Charts      | Recharts 3 (bar) + custom SVG donut |
-| Drag & drop | dnd-kit 6/10                   |
-| i18n        | i18next 26 (English only)      |
-| Validation  | Zod 4                          |
-| PWA         | vite-plugin-pwa 1 + Workbox 7  |
-| Unit tests  | Vitest 4 + Testing Library     |
-| E2E tests   | Playwright (Pixel 7 device)    |
+| Drag & drop | dnd-kit 6/10                        |
+| i18n        | i18next 26 (English only)           |
+| Validation  | Zod 4                               |
+| PWA         | vite-plugin-pwa 1 + Workbox 7       |
+| Unit tests  | Vitest 4 + Testing Library          |
+| E2E tests   | Playwright (Pixel 7 device)         |
 
 ## Getting Started
 
@@ -66,20 +66,20 @@ The app opens to the configured startup tab (default: Transactions). On first la
 
 ## Scripts
 
-| Command                 | Description                                        |
-| ----------------------- | -------------------------------------------------- |
-| `npm run dev`           | Development server with HMR (http://localhost:5173) |
-| `npm run build`         | TypeScript check + production build → `dist/`      |
-| `npm run preview`       | Serve production build locally (http://localhost:4173) |
-| `npm test`              | Vitest unit tests                                  |
-| `npm run test:e2e`      | Playwright end-to-end tests (auto-starts dev server) |
-| `npm run lint`          | ESLint                                             |
-| `npm run format`        | Prettier (auto-fix)                                |
-| `npm run screenshots`   | Regenerate PWA screenshot assets                   |
-| `task ci`               | Full CI pass: lint → test → build                  |
-| `task format:check`     | Check formatting without writing                   |
-| `task clean`            | Remove dist/, test-results/, e2e/screenshots/      |
-| `task docker:up`        | Run in Docker (nginx, http://localhost:80)         |
+| Command               | Description                                            |
+| --------------------- | ------------------------------------------------------ |
+| `npm run dev`         | Development server with HMR (http://localhost:5173)    |
+| `npm run build`       | TypeScript check + production build → `dist/`          |
+| `npm run preview`     | Serve production build locally (http://localhost:4173) |
+| `npm test`            | Vitest unit tests                                      |
+| `npm run test:e2e`    | Playwright end-to-end tests (auto-starts dev server)   |
+| `npm run lint`        | ESLint                                                 |
+| `npm run format`      | Prettier (auto-fix)                                    |
+| `npm run screenshots` | Regenerate PWA screenshot assets                       |
+| `task ci`             | Full CI pass: lint → test → build                      |
+| `task format:check`   | Check formatting without writing                       |
+| `task clean`          | Remove dist/, test-results/, e2e/screenshots/          |
+| `task docker:up`      | Run in Docker (nginx, http://localhost:80)             |
 
 ## Architecture Overview
 
@@ -116,6 +116,7 @@ Full-screen routes (no BottomNav): `/transactions/new`, `/transactions/:id/edit`
 ### Startup sequence
 
 On every cold start the app:
+
 1. Runs `checkDatabaseIntegrity()` — shows a recovery screen on failure
 2. Loads settings from DB into Zustand
 3. Redirects to `/onboarding` if not yet completed, otherwise to the configured startup tab
@@ -167,12 +168,12 @@ The nginx config is in `nginx/nginx.conf`. The `docker-compose.yml` is in the pr
 
 ## Docs
 
-| File                                                   | Contents                                           |
-| ------------------------------------------------------ | -------------------------------------------------- |
-| [`docs/test-plan.md`](docs/test-plan.md)               | 77 manual smoke test cases (TC-001–TC-077)         |
-| [`docs/deployment-setup.md`](docs/deployment-setup.md) | Cloudflare Tunnel + Docker deployment guide        |
-| [`docs/archive/`](docs/archive/)                       | Initial planning specs (may be outdated)           |
-| [`CLAUDE.md`](CLAUDE.md)                               | Agent context: conventions, constraints, patterns  |
+| File                                                   | Contents                                          |
+| ------------------------------------------------------ | ------------------------------------------------- |
+| [`docs/test-plan.md`](docs/test-plan.md)               | 77 manual smoke test cases (TC-001–TC-077)        |
+| [`docs/deployment-setup.md`](docs/deployment-setup.md) | Cloudflare Tunnel + Docker deployment guide       |
+| [`docs/archive/`](docs/archive/)                       | Initial planning specs (may be outdated)          |
+| [`CLAUDE.md`](CLAUDE.md)                               | Agent context: conventions, constraints, patterns |
 
 ## Built with Claude Code
 

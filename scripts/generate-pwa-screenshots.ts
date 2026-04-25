@@ -271,20 +271,16 @@ const DEMO_BUDGETS = [
   },
 ];
 
-async function seedDatabase(page: Awaited<ReturnType<typeof chromium.launch>>["contexts"][0]["pages"][0]) {
+async function seedDatabase(
+  page: Awaited<ReturnType<typeof chromium.launch>>["contexts"][0]["pages"][0],
+) {
   await page.evaluate(
     ({ accounts, categories, transactions, budgets, currentMonth: month }) => {
       return new Promise<void>((resolve, reject) => {
         const req = indexedDB.open("expenses-app-db");
         req.onsuccess = () => {
           const db = req.result;
-          const storeNames = [
-            "settings",
-            "accounts",
-            "categories",
-            "transactions",
-            "budgets",
-          ];
+          const storeNames = ["settings", "accounts", "categories", "transactions", "budgets"];
           const tx = db.transaction(storeNames, "readwrite");
 
           tx.objectStore("settings").put({
@@ -302,8 +298,7 @@ async function seedDatabase(page: Awaited<ReturnType<typeof chromium.launch>>["c
 
           for (const acc of accounts) tx.objectStore("accounts").add(acc);
           for (const cat of categories) tx.objectStore("categories").add(cat);
-          for (const txn of transactions)
-            tx.objectStore("transactions").add(txn);
+          for (const txn of transactions) tx.objectStore("transactions").add(txn);
           for (const b of budgets) tx.objectStore("budgets").add(b);
 
           tx.oncomplete = () => {
@@ -321,14 +316,14 @@ async function seedDatabase(page: Awaited<ReturnType<typeof chromium.launch>>["c
       transactions: DEMO_TRANSACTIONS,
       budgets: DEMO_BUDGETS,
       currentMonth,
-    }
+    },
   );
 }
 
 async function takeScreenshot(
   page: Awaited<ReturnType<typeof chromium.launch>>["contexts"][0]["pages"][0],
   route: string,
-  filename: string
+  filename: string,
 ) {
   await page.goto(`${BASE_URL}${route}`);
   await page.waitForLoadState("networkidle");

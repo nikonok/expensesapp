@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import BottomSheet from '../layout/BottomSheet';
-import { BudgetNumpad } from './BudgetNumpad';
-import { getLucideIcon } from '../shared/IconPicker';
+import { useState } from "react";
+import BottomSheet from "../layout/BottomSheet";
+import { BudgetNumpad } from "./BudgetNumpad";
+import { getLucideIcon } from "../shared/IconPicker";
 
 export interface BudgetCardData {
   id: number;
@@ -14,7 +14,7 @@ export interface BudgetCardData {
 
 interface BudgetCardProps {
   item: BudgetCardData;
-  type: 'category' | 'account';
+  type: "category" | "account";
   month: string; // "YYYY-MM"
 }
 
@@ -24,16 +24,14 @@ export function BudgetCard({ item, type, month }: BudgetCardProps) {
 
   const isOverBudget = item.planned != null && item.planned > 0 && item.spent > item.planned;
   const progressPct =
-    item.planned != null && item.planned > 0
-      ? Math.min(100, (item.spent / item.planned) * 100)
-      : 0;
+    item.planned != null && item.planned > 0 ? Math.min(100, (item.spent / item.planned) * 100) : 0;
   const showProgress = item.planned != null && item.planned > 0;
 
-  const cardBg = isOverBudget ? 'var(--color-expense-dim)' : 'var(--color-surface)';
+  const cardBg = isOverBudget ? "var(--color-expense-dim)" : "var(--color-surface)";
 
   const formatAmt = (n: number | null) => {
-    if (n == null) return '—';
-    return new Intl.NumberFormat('en-US', {
+    if (n == null) return "—";
+    return new Intl.NumberFormat("en-US", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(n / 100);
@@ -46,65 +44,65 @@ export function BudgetCard({ item, type, month }: BudgetCardProps) {
         aria-label={`Edit budget for ${item.name}`}
         style={
           {
-            '--card-color': item.color,
-            display: 'block',
-            width: '100%',
+            "--card-color": item.color,
+            display: "block",
+            width: "100%",
             background: cardBg,
-            border: 'none',
-            borderLeft: '3px solid var(--card-color)',
-            borderRadius: 'var(--radius-card)',
-            cursor: 'pointer',
-            textAlign: 'left',
+            border: "none",
+            borderLeft: "3px solid var(--card-color)",
+            borderRadius: "var(--radius-card)",
+            cursor: "pointer",
+            textAlign: "left",
             padding: 0,
-            overflow: 'hidden',
-            transition: 'background 150ms ease-out',
+            overflow: "hidden",
+            transition: "background 150ms ease-out",
             boxShadow:
-              'inset 3px 0 0 var(--card-color), 0 0 8px color-mix(in oklch, var(--card-color) 15%, transparent)',
+              "inset 3px 0 0 var(--card-color), 0 0 8px color-mix(in oklch, var(--card-color) 15%, transparent)",
           } as React.CSSProperties
         }
       >
         {/* Card body */}
         <div
           style={{
-            padding: 'var(--space-3) var(--space-4)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--space-2)',
+            padding: "var(--space-3) var(--space-4)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "var(--space-2)",
           }}
         >
           {/* Top row: icon + name */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
             <div
               style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '9999px',
-                background: 'color-mix(in oklch, var(--card-color) 20%, transparent)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                width: "36px",
+                height: "36px",
+                borderRadius: "9999px",
+                background: "color-mix(in oklch, var(--card-color) 20%, transparent)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
                 flexShrink: 0,
-                fontSize: '1.125rem',
-                color: 'var(--card-color)',
+                fontSize: "1.125rem",
+                color: "var(--card-color)",
               }}
               aria-hidden="true"
             >
               {Icon ? (
                 <Icon size={18} strokeWidth={1.5} />
               ) : (
-                <span style={{ fontSize: '18px', lineHeight: 1 }}>{item.icon}</span>
+                <span style={{ fontSize: "18px", lineHeight: 1 }}>{item.icon}</span>
               )}
             </div>
             <span
               style={{
                 fontFamily: '"DM Sans", sans-serif',
                 fontWeight: 500,
-                fontSize: 'var(--text-body)',
-                color: 'var(--color-text)',
+                fontSize: "var(--text-body)",
+                color: "var(--color-text)",
                 flex: 1,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
               }}
             >
               {item.name}
@@ -114,29 +112,29 @@ export function BudgetCard({ item, type, month }: BudgetCardProps) {
           {/* Bottom row: Budget + Spent */}
           <div
             style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'baseline',
-              gap: 'var(--space-2)',
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: "var(--space-2)",
             }}
           >
             <span
               style={{
                 fontFamily: '"DM Sans", sans-serif',
-                fontSize: 'var(--text-caption)',
-                color: 'var(--color-text-secondary)',
-                display: 'flex',
-                gap: '4px',
-                alignItems: 'baseline',
+                fontSize: "var(--text-caption)",
+                color: "var(--color-text-secondary)",
+                display: "flex",
+                gap: "4px",
+                alignItems: "baseline",
               }}
             >
-              Budget:{' '}
+              Budget:{" "}
               <span
                 style={{
                   fontFamily: '"JetBrains Mono", monospace',
                   fontWeight: 600,
-                  fontSize: 'var(--text-amount-sm)',
-                  color: 'var(--color-text)',
+                  fontSize: "var(--text-amount-sm)",
+                  color: "var(--color-text)",
                 }}
               >
                 {formatAmt(item.planned)}
@@ -145,21 +143,21 @@ export function BudgetCard({ item, type, month }: BudgetCardProps) {
             <span
               style={{
                 fontFamily: '"DM Sans", sans-serif',
-                fontSize: 'var(--text-caption)',
-                color: 'var(--color-text-secondary)',
-                display: 'flex',
-                gap: '4px',
-                alignItems: 'baseline',
+                fontSize: "var(--text-caption)",
+                color: "var(--color-text-secondary)",
+                display: "flex",
+                gap: "4px",
+                alignItems: "baseline",
               }}
             >
-              Spent:{' '}
+              Spent:{" "}
               <span
                 style={{
                   fontFamily: '"JetBrains Mono", monospace',
                   fontWeight: 600,
-                  fontSize: 'var(--text-amount-sm)',
-                  color: isOverBudget ? 'var(--color-expense)' : 'var(--color-text)',
-                  textShadow: isOverBudget ? '0 0 12px oklch(62% 0.28 18 / 45%)' : undefined,
+                  fontSize: "var(--text-amount-sm)",
+                  color: isOverBudget ? "var(--color-expense)" : "var(--color-text)",
+                  textShadow: isOverBudget ? "0 0 12px oklch(62% 0.28 18 / 45%)" : undefined,
                 }}
               >
                 {formatAmt(item.spent)}
@@ -173,31 +171,27 @@ export function BudgetCard({ item, type, month }: BudgetCardProps) {
           <div
             aria-hidden="true"
             style={{
-              height: '4px',
-              background: 'var(--color-border)',
-              width: '100%',
+              height: "4px",
+              background: "var(--color-border)",
+              width: "100%",
             }}
           >
             <div
               style={{
-                height: '100%',
+                height: "100%",
                 width: `${progressPct}%`,
-                background: isOverBudget ? 'var(--color-expense)' : 'var(--card-color)',
-                transition: 'width 300ms ease-out',
+                background: isOverBudget ? "var(--color-expense)" : "var(--card-color)",
+                transition: "width 300ms ease-out",
               }}
             />
           </div>
         )}
       </button>
 
-      <BottomSheet
-        isOpen={sheetOpen}
-        onClose={() => setSheetOpen(false)}
-        title={item.name}
-      >
+      <BottomSheet isOpen={sheetOpen} onClose={() => setSheetOpen(false)} title={item.name}>
         <BudgetNumpad
-          categoryId={type === 'category' ? item.id : undefined}
-          accountId={type === 'account' ? item.id : undefined}
+          categoryId={type === "category" ? item.id : undefined}
+          accountId={type === "account" ? item.id : undefined}
           currentMonth={month}
           currentPlanned={item.planned ?? undefined}
           itemName={item.name}

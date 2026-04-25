@@ -1,9 +1,9 @@
-import { useLiveQuery } from 'dexie-react-hooks';
-import { format } from 'date-fns';
-import { db } from '../db/database';
-import type { Transaction } from '../db/models';
-import type { PeriodFilter } from '../types';
-import { parsePeriodFilter } from '../utils/date-utils';
+import { useLiveQuery } from "dexie-react-hooks";
+import { format } from "date-fns";
+import { db } from "../db/database";
+import type { Transaction } from "../db/models";
+import type { PeriodFilter } from "../types";
+import { parsePeriodFilter } from "../utils/date-utils";
 
 interface UseTransactionsOptions {
   filter: PeriodFilter;
@@ -18,11 +18,11 @@ export function useTransactions(opts: UseTransactionsOptions): Transaction[] {
   return (
     useLiveQuery(async () => {
       const { start, end } = parsePeriodFilter(filter);
-      const startStr = format(start, 'yyyy-MM-dd');
-      const endStr = format(end, 'yyyy-MM-dd');
+      const startStr = format(start, "yyyy-MM-dd");
+      const endStr = format(end, "yyyy-MM-dd");
 
       let results = await db.transactions
-        .where('date')
+        .where("date")
         .between(startStr, endStr, true, true)
         .toArray();
 
@@ -34,7 +34,7 @@ export function useTransactions(opts: UseTransactionsOptions): Transaction[] {
         results = results.filter((t) => t.categoryId === categoryId);
       }
 
-      if (noteContains && noteContains.trim() !== '') {
+      if (noteContains && noteContains.trim() !== "") {
         const lower = noteContains.toLowerCase();
         results = results.filter((t) => t.note.toLowerCase().includes(lower));
       }

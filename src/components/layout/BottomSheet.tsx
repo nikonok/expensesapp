@@ -4,8 +4,8 @@ import {
   useState,
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
-} from 'react';
-import { createPortal } from 'react-dom';
+} from "react";
+import { createPortal } from "react-dom";
 
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
@@ -32,14 +32,14 @@ function handleGlobalPopState() {
   if (intercepted) {
     // close() handled an inner layer (e.g. numpad) — re-push so the next
     // back press still finds this sheet's entry.
-    history.pushState(null, '', window.location.href);
+    history.pushState(null, "", window.location.href);
   } else {
     closeStack.pop();
   }
 }
 
-if (typeof window !== 'undefined') {
-  window.addEventListener('popstate', handleGlobalPopState);
+if (typeof window !== "undefined") {
+  window.addEventListener("popstate", handleGlobalPopState);
 }
 
 interface BottomSheetProps {
@@ -95,7 +95,7 @@ export default function BottomSheet({
         return false;
       },
     });
-    history.pushState(null, '', window.location.href);
+    history.pushState(null, "", window.location.href);
 
     return () => {
       const idx = closeStack.findIndex((e) => e.id === id);
@@ -103,7 +103,7 @@ export default function BottomSheet({
         // Normal programmatic close (button/save) — pop our stack entry and
         // neutralise the history entry we pushed in-place (no popstate fired).
         closeStack.splice(idx, 1);
-        history.replaceState(null, '', window.location.href);
+        history.replaceState(null, "", window.location.href);
       }
       // If idx === -1, hardware back already popped the entry and consumed
       // the history entry — nothing to do here.
@@ -128,11 +128,11 @@ export default function BottomSheet({
   useEffect(() => {
     if (!isOpen) return;
     const handleTab = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab') return;
+      if (e.key !== "Tab") return;
       const sheet = sheetRef.current;
       if (!sheet) return;
       const focusables = Array.from(sheet.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
-        (el) => !el.hasAttribute('disabled') && el.tabIndex !== -1,
+        (el) => !el.hasAttribute("disabled") && el.tabIndex !== -1,
       );
       if (focusables.length === 0) return;
       const first = focusables[0];
@@ -149,21 +149,21 @@ export default function BottomSheet({
         }
       }
     };
-    document.addEventListener('keydown', handleTab);
-    return () => document.removeEventListener('keydown', handleTab);
+    document.addEventListener("keydown", handleTab);
+    return () => document.removeEventListener("keydown", handleTab);
   }, [isOpen]);
 
   // Escape key closes the sheet (with intercept support)
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         if (onInterceptCloseRef.current?.()) return;
         onCloseRef.current();
       }
     };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [isOpen]);
 
   // Open/close animation
@@ -202,8 +202,8 @@ export default function BottomSheet({
         sheetEl.style.bottom = `${Math.max(0, keyboardHeight)}px`;
         // Scroll the focused input into view in case the keyboard height
         // calculation leaves it partially obscured
-        const focused = sheetEl.querySelector(':focus') as HTMLElement | null;
-        focused?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        const focused = sheetEl.querySelector(":focus") as HTMLElement | null;
+        focused?.scrollIntoView({ block: "nearest", behavior: "smooth" });
       }
     };
 
@@ -212,17 +212,17 @@ export default function BottomSheet({
     // Run handleResize() immediately after the delay to catch keyboards that
     // opened during the animation window (e.g. via autoFocus).
     const delayTimer = setTimeout(() => {
-      vv.addEventListener('resize', handleResize);
-      vv.addEventListener('scroll', handleResize);
+      vv.addEventListener("resize", handleResize);
+      vv.addEventListener("scroll", handleResize);
       handleResize();
     }, 300);
 
     return () => {
       clearTimeout(delayTimer);
-      vv.removeEventListener('resize', handleResize);
-      vv.removeEventListener('scroll', handleResize);
+      vv.removeEventListener("resize", handleResize);
+      vv.removeEventListener("scroll", handleResize);
       if (sheetEl) {
-        sheetEl.style.bottom = '';
+        sheetEl.style.bottom = "";
       }
     };
   }, [isOpen]);
@@ -237,22 +237,22 @@ export default function BottomSheet({
     const handleFocusIn = (e: FocusEvent) => {
       if (!active) return;
       const target = e.target as HTMLElement;
-      if (sheetRef.current?.contains(target) && target.tagName !== 'BUTTON') {
+      if (sheetRef.current?.contains(target) && target.tagName !== "BUTTON") {
         setTimeout(() => {
-          target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          target.scrollIntoView({ block: "nearest", behavior: "smooth" });
         }, 350);
       }
     };
 
-    document.addEventListener('focusin', handleFocusIn);
+    document.addEventListener("focusin", handleFocusIn);
     const cancelTimer = setTimeout(() => {
       active = false;
-      document.removeEventListener('focusin', handleFocusIn);
+      document.removeEventListener("focusin", handleFocusIn);
     }, 650);
 
     return () => {
       clearTimeout(cancelTimer);
-      document.removeEventListener('focusin', handleFocusIn);
+      document.removeEventListener("focusin", handleFocusIn);
     };
   }, [isOpen]);
 
@@ -289,7 +289,7 @@ export default function BottomSheet({
 
   if (!isVisible) return null;
 
-  const sheetTranslateY = isAnimatingIn ? translateY : '100%';
+  const sheetTranslateY = isAnimatingIn ? translateY : "100%";
 
   return createPortal(
     <>
@@ -298,14 +298,14 @@ export default function BottomSheet({
         aria-hidden="true"
         onClick={onBackdropClick ?? onClose}
         style={{
-          position: 'fixed',
+          position: "fixed",
           inset: 0,
-          background: 'rgba(0,0,0,0.7)',
-          backdropFilter: 'blur(4px)',
-          WebkitBackdropFilter: 'blur(4px)',
-          zIndex: 'var(--z-overlay)',
+          background: "rgba(0,0,0,0.7)",
+          backdropFilter: "blur(4px)",
+          WebkitBackdropFilter: "blur(4px)",
+          zIndex: "var(--z-overlay)",
           opacity: isAnimatingIn ? 1 : 0,
-          transition: 'opacity 200ms ease-out',
+          transition: "opacity 200ms ease-out",
         }}
       />
 
@@ -314,26 +314,26 @@ export default function BottomSheet({
         ref={sheetRef}
         role="dialog"
         aria-modal="true"
-        aria-label={title ?? 'Dialog'}
+        aria-label={title ?? "Dialog"}
         style={{
-          position: 'fixed',
+          position: "fixed",
           left: 0,
           right: 0,
           bottom: 0,
-          zIndex: 'var(--z-sheet)',
-          background: 'var(--color-surface-raised)',
-          borderRadius: 'var(--radius-sheet) var(--radius-sheet) 0 0',
-          transform: `translateY(${typeof sheetTranslateY === 'number' ? `${sheetTranslateY}px` : sheetTranslateY})`,
+          zIndex: "var(--z-sheet)",
+          background: "var(--color-surface-raised)",
+          borderRadius: "var(--radius-sheet) var(--radius-sheet) 0 0",
+          transform: `translateY(${typeof sheetTranslateY === "number" ? `${sheetTranslateY}px` : sheetTranslateY})`,
           transition: isDragging.current
-            ? 'none'
+            ? "none"
             : isAnimatingIn
-              ? 'transform 300ms cubic-bezier(0.32, 0.72, 0, 1)'
-              : 'transform 220ms ease-in',
-          maxWidth: '480px',
-          marginInline: 'auto',
-          maxHeight: '90dvh',
-          display: 'flex',
-          flexDirection: 'column',
+              ? "transform 300ms cubic-bezier(0.32, 0.72, 0, 1)"
+              : "transform 220ms ease-in",
+          maxWidth: "480px",
+          marginInline: "auto",
+          maxHeight: "90dvh",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
         {/* Drag handle */}
@@ -342,21 +342,21 @@ export default function BottomSheet({
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           style={{
-            paddingTop: '12px',
-            paddingBottom: '8px',
-            display: 'flex',
-            justifyContent: 'center',
+            paddingTop: "12px",
+            paddingBottom: "8px",
+            display: "flex",
+            justifyContent: "center",
             flexShrink: 0,
-            cursor: 'grab',
-            touchAction: 'none',
+            cursor: "grab",
+            touchAction: "none",
           }}
         >
           <div
             style={{
-              width: '36px',
-              height: '4px',
-              borderRadius: '9999px',
-              background: 'var(--color-border-strong)',
+              width: "36px",
+              height: "4px",
+              borderRadius: "9999px",
+              background: "var(--color-border-strong)",
             }}
           />
         </div>
@@ -365,17 +365,17 @@ export default function BottomSheet({
         {title && (
           <div
             style={{
-              paddingInline: 'var(--space-4)',
-              paddingBottom: 'var(--space-3)',
+              paddingInline: "var(--space-4)",
+              paddingBottom: "var(--space-3)",
               flexShrink: 0,
             }}
           >
             <h2
               style={{
-                fontFamily: 'Syne, sans-serif',
+                fontFamily: "Syne, sans-serif",
                 fontWeight: 700,
-                fontSize: 'var(--text-heading)',
-                color: 'var(--color-text)',
+                fontSize: "var(--text-heading)",
+                color: "var(--color-text)",
                 margin: 0,
               }}
             >
@@ -385,7 +385,7 @@ export default function BottomSheet({
         )}
 
         {/* Content */}
-        <div style={{ overflowY: 'auto', flex: 1 }}>{children}</div>
+        <div style={{ overflowY: "auto", flex: 1 }}>{children}</div>
       </div>
     </>,
     document.body,

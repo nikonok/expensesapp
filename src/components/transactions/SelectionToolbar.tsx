@@ -1,4 +1,4 @@
-import { Edit2, Trash2, X } from 'lucide-react';
+import { Edit2, Trash2, X } from "lucide-react";
 
 interface SelectionToolbarProps {
   selectedIds: Set<number>;
@@ -24,23 +24,23 @@ export default function SelectionToolbar({
       role="toolbar"
       aria-label="Selection actions"
       style={{
-        position: 'fixed',
+        position: "fixed",
         bottom: 0,
         left: 0,
         right: 0,
-        height: 'calc(56px + env(safe-area-inset-bottom))',
-        background: 'var(--color-surface-raised)',
-        borderTop: '1px solid var(--color-border-strong)',
+        height: "calc(56px + env(safe-area-inset-bottom))",
+        background: "var(--color-surface-raised)",
+        borderTop: "1px solid var(--color-border-strong)",
         zIndex: 200,
-        display: 'flex',
-        alignItems: 'center',
-        paddingInline: 'var(--space-4)',
-        paddingBottom: 'env(safe-area-inset-bottom)',
-        gap: 'var(--space-3)',
-        maxWidth: '480px',
-        marginInline: 'auto',
-        transform: count > 0 ? 'translateY(0)' : 'translateY(100%)',
-        transition: 'transform 200ms ease-out',
+        display: "flex",
+        alignItems: "center",
+        paddingInline: "var(--space-4)",
+        paddingBottom: "env(safe-area-inset-bottom)",
+        gap: "var(--space-3)",
+        maxWidth: "480px",
+        marginInline: "auto",
+        transform: count > 0 ? "translateY(0)" : "translateY(100%)",
+        transition: "transform 200ms ease-out",
       }}
     >
       {/* Clear / count */}
@@ -48,15 +48,15 @@ export default function SelectionToolbar({
         aria-label="Clear selection"
         onClick={onClear}
         style={{
-          minWidth: '44px',
-          minHeight: '44px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          color: 'var(--color-text-secondary)',
+          minWidth: "44px",
+          minHeight: "44px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          color: "var(--color-text-secondary)",
           padding: 0,
         }}
       >
@@ -68,8 +68,8 @@ export default function SelectionToolbar({
           flex: 1,
           fontFamily: '"DM Sans", sans-serif',
           fontWeight: 500,
-          fontSize: 'var(--text-body)',
-          color: 'var(--color-text)',
+          fontSize: "var(--text-body)",
+          color: "var(--color-text)",
         }}
       >
         {count} selected
@@ -81,20 +81,20 @@ export default function SelectionToolbar({
           aria-label="Edit transaction"
           onClick={onEdit}
           style={{
-            minHeight: '44px',
-            padding: '0 var(--space-4)',
-            background: 'var(--color-primary-dim)',
-            border: '1px solid var(--color-primary)',
-            borderRadius: 'var(--radius-btn)',
-            color: 'var(--color-primary)',
+            minHeight: "44px",
+            padding: "0 var(--space-4)",
+            background: "var(--color-primary-dim)",
+            border: "1px solid var(--color-primary)",
+            borderRadius: "var(--radius-btn)",
+            color: "var(--color-primary)",
             fontFamily: '"DM Sans", sans-serif',
             fontWeight: 500,
-            fontSize: 'var(--text-body)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-2)',
-            transition: 'background 100ms ease-out',
+            fontSize: "var(--text-body)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-2)",
+            transition: "background 100ms ease-out",
           }}
         >
           <Edit2 size={16} strokeWidth={1.5} />
@@ -107,20 +107,20 @@ export default function SelectionToolbar({
         aria-label="Remove selected transactions"
         onClick={onRemove}
         style={{
-          minHeight: '44px',
-          padding: '0 var(--space-4)',
-          background: 'var(--color-expense-dim)',
-          border: '1px solid oklch(62% 0.28 18 / 50%)',
-          borderRadius: 'var(--radius-btn)',
-          color: 'var(--color-expense)',
+          minHeight: "44px",
+          padding: "0 var(--space-4)",
+          background: "var(--color-expense-dim)",
+          border: "1px solid oklch(62% 0.28 18 / 50%)",
+          borderRadius: "var(--radius-btn)",
+          color: "var(--color-expense)",
           fontFamily: '"DM Sans", sans-serif',
           fontWeight: 500,
-          fontSize: 'var(--text-body)',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-2)',
-          transition: 'background 100ms ease-out',
+          fontSize: "var(--text-body)",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--space-2)",
+          transition: "background 100ms ease-out",
         }}
       >
         <Trash2 size={16} strokeWidth={1.5} />

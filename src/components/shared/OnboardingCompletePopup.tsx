@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
-import type { CSSProperties } from 'react';
-import { useUIStore } from '@/stores/ui-store';
-import { useSettingsStore } from '@/stores/settings-store';
-import { db } from '@/db/database';
+import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import type { CSSProperties } from "react";
+import { useUIStore } from "@/stores/ui-store";
+import { useSettingsStore } from "@/stores/settings-store";
+import { db } from "@/db/database";
 
 const COUNTDOWN_START = 6;
 
@@ -38,7 +38,7 @@ export function OnboardingCompletePopup() {
     setCancelling(true);
     try {
       await db.transaction(
-        'rw',
+        "rw",
         [db.accounts, db.categories, db.transactions, db.budgets, db.settings],
         async () => {
           await db.accounts.clear();
@@ -49,19 +49,19 @@ export function OnboardingCompletePopup() {
         },
       );
       useSettingsStore.setState({
-        mainCurrency: 'USD',
-        language: 'en',
-        startupScreen: 'transactions',
+        mainCurrency: "USD",
+        language: "en",
+        startupScreen: "transactions",
         notificationEnabled: false,
-        notificationTime: '20:00',
+        notificationTime: "20:00",
         lastUsedAccountId: null,
         autoBackupIntervalHours: null,
         lastAutoBackupAt: null,
         hasCompletedOnboarding: false,
-        logLevel: 'errors',
+        logLevel: "errors",
       });
     } catch (err) {
-      console.error('Onboarding cancel failed:', err);
+      console.error("Onboarding cancel failed:", err);
     } finally {
       setShow(false);
     }
@@ -80,96 +80,98 @@ export function OnboardingCompletePopup() {
         aria-modal="true"
         aria-labelledby="onboarding-complete-title"
         aria-describedby="onboarding-complete-body"
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'oklch(8% 0.02 265 / 60%)',
-          backdropFilter: 'blur(6px)',
-          WebkitBackdropFilter: 'blur(6px)',
-          zIndex: 360,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 'var(--space-4)',
-        } as CSSProperties}
+        style={
+          {
+            position: "fixed",
+            inset: 0,
+            background: "oklch(8% 0.02 265 / 60%)",
+            backdropFilter: "blur(6px)",
+            WebkitBackdropFilter: "blur(6px)",
+            zIndex: 360,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "var(--space-4)",
+          } as CSSProperties
+        }
       >
         <div
           style={{
-            width: '100%',
+            width: "100%",
             maxWidth: 360,
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-card)',
-            padding: 'var(--space-6)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 'var(--space-4)',
-            animation: 'onboarding-complete-fade 150ms ease-out',
+            background: "var(--color-surface)",
+            border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius-card)",
+            padding: "var(--space-6)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "var(--space-4)",
+            animation: "onboarding-complete-fade 150ms ease-out",
           }}
         >
           <div
             style={{
-              textAlign: 'center',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 'var(--space-2)',
+              textAlign: "center",
+              display: "flex",
+              flexDirection: "column",
+              gap: "var(--space-2)",
             }}
           >
             <h2
               id="onboarding-complete-title"
               style={{
-                fontFamily: 'Syne, sans-serif',
+                fontFamily: "Syne, sans-serif",
                 fontWeight: 700,
-                fontSize: 'var(--text-subheading)',
-                color: 'var(--color-text)',
+                fontSize: "var(--text-subheading)",
+                color: "var(--color-text)",
                 margin: 0,
               }}
             >
-              {t('onboarding.complete.title')}
+              {t("onboarding.complete.title")}
             </h2>
             <p
               id="onboarding-complete-body"
               style={{
                 fontFamily: '"DM Sans", sans-serif',
-                fontSize: 'var(--text-body)',
-                color: 'var(--color-text-secondary)',
+                fontSize: "var(--text-body)",
+                color: "var(--color-text-secondary)",
                 margin: 0,
               }}
             >
-              {t('onboarding.complete.body')}
+              {t("onboarding.complete.body")}
             </p>
           </div>
           {countdown > 0 && (
             <p
               style={{
                 fontFamily: '"JetBrains Mono", monospace',
-                fontSize: 'var(--text-caption)',
-                color: 'var(--color-text-secondary)',
+                fontSize: "var(--text-caption)",
+                color: "var(--color-text-secondary)",
                 margin: 0,
               }}
             >
-              {t('onboarding.complete.countdown', { seconds: countdown })}
+              {t("onboarding.complete.countdown", { seconds: countdown })}
             </p>
           )}
           <button
             onClick={() => void handleCancel()}
             disabled={cancelling}
             style={{
-              width: '100%',
+              width: "100%",
               minHeight: 44,
-              background: 'var(--color-expense-dim)',
-              color: 'var(--color-expense)',
-              border: '1px solid oklch(62% 0.28 18 / 50%)',
-              borderRadius: 'var(--radius-btn)',
+              background: "var(--color-expense-dim)",
+              color: "var(--color-expense)",
+              border: "1px solid oklch(62% 0.28 18 / 50%)",
+              borderRadius: "var(--radius-btn)",
               fontFamily: '"DM Sans", sans-serif',
-              fontSize: 'var(--text-body)',
+              fontSize: "var(--text-body)",
               fontWeight: 500,
-              cursor: cancelling ? 'not-allowed' : 'pointer',
+              cursor: cancelling ? "not-allowed" : "pointer",
               opacity: cancelling ? 0.6 : 1,
             }}
           >
-            {t('onboarding.complete.cancel')}
+            {t("onboarding.complete.cancel")}
           </button>
         </div>
       </div>

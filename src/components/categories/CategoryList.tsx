@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
-import { Archive, Plus, Tag } from 'lucide-react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { format } from 'date-fns';
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router";
+import { Archive, Plus, Tag } from "lucide-react";
+import { useLiveQuery } from "dexie-react-hooks";
+import { format } from "date-fns";
 import {
   DndContext,
   PointerSensor,
@@ -11,33 +11,33 @@ import {
   useSensors,
   closestCenter,
   type DragEndEvent,
-} from '@dnd-kit/core';
+} from "@dnd-kit/core";
 import {
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
   arrayMove,
-} from '@dnd-kit/sortable';
+} from "@dnd-kit/sortable";
 
-import { useCategories } from '../../hooks/use-categories';
-import { useAccounts } from '../../hooks/use-accounts';
-import { useTransactions } from '../../hooks/use-transactions';
-import { useUIStore } from '../../stores/ui-store';
-import { db } from '../../db/database';
-import { isDebtPayment } from '../../utils/transaction-utils';
+import { useCategories } from "../../hooks/use-categories";
+import { useAccounts } from "../../hooks/use-accounts";
+import { useTransactions } from "../../hooks/use-transactions";
+import { useUIStore } from "../../stores/ui-store";
+import { db } from "../../db/database";
+import { isDebtPayment } from "../../utils/transaction-utils";
 
-import PeriodFilter from '../shared/PeriodFilter';
-import { EmptyState } from '../shared/EmptyState';
-import { ConfirmDialog } from '../shared/ConfirmDialog';
-import { useToast } from '../shared/Toast';
+import PeriodFilter from "../shared/PeriodFilter";
+import { EmptyState } from "../shared/EmptyState";
+import { ConfirmDialog } from "../shared/ConfirmDialog";
+import { useToast } from "../shared/Toast";
 
-import DonutChart from './DonutChart';
-import CategoryCard from './CategoryCard';
-import CategoryForm from './CategoryForm';
-import DebtPaymentCard from './DebtPaymentCard';
+import DonutChart from "./DonutChart";
+import CategoryCard from "./CategoryCard";
+import CategoryForm from "./CategoryForm";
+import DebtPaymentCard from "./DebtPaymentCard";
 
-import type { Category, Account } from '../../db/models';
-import { getUTCISOString, parsePeriodFilter } from '../../utils/date-utils';
+import type { Category, Account } from "../../db/models";
+import { getUTCISOString, parsePeriodFilter } from "../../utils/date-utils";
 
 export default function CategoryList() {
   const navigate = useNavigate();
@@ -66,13 +66,12 @@ export default function CategoryList() {
   // Budget for current view month (derive month from filter start date)
   const budgetMonth = useMemo(() => {
     const { start } = parsePeriodFilter(categoriesFilter);
-    return format(start, 'yyyy-MM');
+    return format(start, "yyyy-MM");
   }, [categoriesFilter]);
 
-  const budgets = useLiveQuery(
-    () => db.budgets.where('month').equals(budgetMonth).toArray(),
-    [budgetMonth],
-  ) ?? [];
+  const budgets =
+    useLiveQuery(() => db.budgets.where("month").equals(budgetMonth).toArray(), [budgetMonth]) ??
+    [];
 
   // Compute spent per category and debt account payments in period
   const { expenseById, incomeById, debtAccountTotals } = useMemo(() => {
@@ -81,24 +80,33 @@ export default function CategoryList() {
     const debtAccountTotals = new Map<number, number>();
     for (const tx of allTransactions) {
       if (isDebtPayment(tx) && tx.toAccountId != null) {
-        debtAccountTotals.set(tx.toAccountId, (debtAccountTotals.get(tx.toAccountId) ?? 0) + tx.amountMainCurrency);
+        debtAccountTotals.set(
+          tx.toAccountId,
+          (debtAccountTotals.get(tx.toAccountId) ?? 0) + tx.amountMainCurrency,
+        );
       } else if (tx.categoryId !== null) {
-        if (tx.type === 'EXPENSE') {
-          expenseById.set(tx.categoryId, (expenseById.get(tx.categoryId) ?? 0) + tx.amountMainCurrency);
-        } else if (tx.type === 'INCOME') {
-          incomeById.set(tx.categoryId, (incomeById.get(tx.categoryId) ?? 0) + tx.amountMainCurrency);
+        if (tx.type === "EXPENSE") {
+          expenseById.set(
+            tx.categoryId,
+            (expenseById.get(tx.categoryId) ?? 0) + tx.amountMainCurrency,
+          );
+        } else if (tx.type === "INCOME") {
+          incomeById.set(
+            tx.categoryId,
+            (incomeById.get(tx.categoryId) ?? 0) + tx.amountMainCurrency,
+          );
         }
       }
     }
     return { expenseById, incomeById, debtAccountTotals };
   }, [allTransactions]);
 
-  const spentMap = categoriesViewType === 'EXPENSE' ? expenseById : incomeById;
+  const spentMap = categoriesViewType === "EXPENSE" ? expenseById : incomeById;
 
   const debtAccountsWithSpend = useMemo(() => {
-    if (categoriesViewType !== 'EXPENSE') return [];
+    if (categoriesViewType !== "EXPENSE") return [];
     return allAccounts
-      .filter((a) => a.type === 'DEBT' && (debtAccountTotals.get(a.id!) ?? 0) > 0)
+      .filter((a) => a.type === "DEBT" && (debtAccountTotals.get(a.id!) ?? 0) > 0)
       .sort((a, b) => (debtAccountTotals.get(b.id!) ?? 0) - (debtAccountTotals.get(a.id!) ?? 0));
   }, [allAccounts, debtAccountTotals, categoriesViewType]);
 
@@ -106,7 +114,7 @@ export default function CategoryList() {
   const totalExpense = useMemo(
     () =>
       allTransactions
-        .filter((t) => (t.type === 'EXPENSE' && t.categoryId !== null) || isDebtPayment(t))
+        .filter((t) => (t.type === "EXPENSE" && t.categoryId !== null) || isDebtPayment(t))
         .reduce((sum, t) => sum + t.amountMainCurrency, 0),
     [allTransactions],
   );
@@ -114,14 +122,14 @@ export default function CategoryList() {
   const totalIncome = useMemo(
     () =>
       allTransactions
-        .filter((t) => t.type === 'INCOME' && t.categoryId !== null)
+        .filter((t) => t.type === "INCOME" && t.categoryId !== null)
         .reduce((sum, t) => sum + t.amountMainCurrency, 0),
     [allTransactions],
   );
 
   // Donut slices — current view type categories + debt account payments, nonzero only
   const donutSlices = useMemo(() => {
-    const map = categoriesViewType === 'EXPENSE' ? expenseById : incomeById;
+    const map = categoriesViewType === "EXPENSE" ? expenseById : incomeById;
     const catSlices = categories
       .map((cat) => ({
         id: `cat-${cat.id!}`,
@@ -137,7 +145,14 @@ export default function CategoryList() {
     }));
 
     return [...catSlices, ...debtSlices];
-  }, [categories, expenseById, incomeById, categoriesViewType, debtAccountsWithSpend, debtAccountTotals]);
+  }, [
+    categories,
+    expenseById,
+    incomeById,
+    categoriesViewType,
+    debtAccountsWithSpend,
+    debtAccountTotals,
+  ]);
 
   async function handleRemoveCategory(id: number) {
     setConfirmTrash(id);
@@ -152,15 +167,13 @@ export default function CategoryList() {
       });
       setConfirmTrash(null);
     } catch (err) {
-      console.error('Failed to trash category:', err);
-      showToast('Failed to archive category', 'error');
+      console.error("Failed to trash category:", err);
+      showToast("Failed to archive category", "error");
     }
   }
 
   function handleCardClick(category: Category) {
-    navigate(
-      `/transactions/new?type=${category.type}&categoryId=${category.id}`,
-    );
+    navigate(`/transactions/new?type=${category.type}&categoryId=${category.id}`);
   }
 
   function handleDebtCardClick(account: Account) {
@@ -206,47 +219,46 @@ export default function CategoryList() {
     try {
       await db.categories.bulkPut(updates);
     } catch (err) {
-      console.error('Failed to save category order:', err);
-      showToast('Failed to save order', 'error');
+      console.error("Failed to save category order:", err);
+      showToast("Failed to save order", "error");
     }
   }
 
-  const confirmCategory = confirmTrash !== null
-    ? categories.find((c) => c.id === confirmTrash)
-    : null;
+  const confirmCategory =
+    confirmTrash !== null ? categories.find((c) => c.id === confirmTrash) : null;
 
   const categoryIds = categories.map((c) => c.id!);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
+    <div style={{ display: "flex", flexDirection: "column" }}>
       {/* Controls row */}
       <div
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: 'var(--space-3) var(--space-4)',
-          gap: 'var(--space-3)',
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "var(--space-3) var(--space-4)",
+          gap: "var(--space-3)",
         }}
       >
         <PeriodFilter value={categoriesFilter} onChange={setCategoriesFilter} />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
           {/* Trash icon (edit mode) */}
           {categoriesEditMode && (
             <button
-              onClick={() => navigate('/categories/trash')}
+              onClick={() => navigate("/categories/trash")}
               aria-label="View archived categories"
               style={{
-                minWidth: '44px',
-                minHeight: '44px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: 'var(--color-text-secondary)',
+                minWidth: "44px",
+                minHeight: "44px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "var(--color-text-secondary)",
               }}
             >
               <Archive size={20} strokeWidth={1.5} />
@@ -257,20 +269,21 @@ export default function CategoryList() {
           <button
             onClick={() => setCategoriesEditMode(!categoriesEditMode)}
             style={{
-              minHeight: '36px',
-              padding: '0 var(--space-3)',
-              background: categoriesEditMode ? 'var(--color-primary-dim)' : 'var(--color-surface)',
-              border: `1px solid ${categoriesEditMode ? 'var(--color-primary)' : 'var(--color-border)'}`,
-              borderRadius: 'var(--radius-chip)',
-              cursor: 'pointer',
+              minHeight: "36px",
+              padding: "0 var(--space-3)",
+              background: categoriesEditMode ? "var(--color-primary-dim)" : "var(--color-surface)",
+              border: `1px solid ${categoriesEditMode ? "var(--color-primary)" : "var(--color-border)"}`,
+              borderRadius: "var(--radius-chip)",
+              cursor: "pointer",
               fontFamily: '"DM Sans", sans-serif',
               fontWeight: 500,
-              fontSize: 'var(--text-body)',
-              color: categoriesEditMode ? 'var(--color-primary)' : 'var(--color-text)',
-              transition: 'background 100ms ease-out, border-color 100ms ease-out, color 100ms ease-out',
+              fontSize: "var(--text-body)",
+              color: categoriesEditMode ? "var(--color-primary)" : "var(--color-text)",
+              transition:
+                "background 100ms ease-out, border-color 100ms ease-out, color 100ms ease-out",
             }}
           >
-            {categoriesEditMode ? 'Done' : 'Edit'}
+            {categoriesEditMode ? "Done" : "Edit"}
           </button>
         </div>
       </div>
@@ -286,42 +299,42 @@ export default function CategoryList() {
       {/* View type label */}
       <div
         style={{
-          paddingInline: 'var(--space-4)',
-          paddingBottom: 'var(--space-2)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+          paddingInline: "var(--space-4)",
+          paddingBottom: "var(--space-2)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
         }}
       >
         <span
           style={{
             fontFamily: '"DM Sans", sans-serif',
             fontWeight: 500,
-            fontSize: 'var(--text-caption)',
-            color: 'var(--color-text-secondary)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
+            fontSize: "var(--text-caption)",
+            color: "var(--color-text-secondary)",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
           }}
         >
-          {categoriesViewType === 'EXPENSE' ? 'Expenses' : 'Income'}
+          {categoriesViewType === "EXPENSE" ? "Expenses" : "Income"}
         </span>
 
         {/* Add button (edit mode) */}
         {categoriesEditMode && (
           <button
             onClick={handleAddCategory}
-            aria-label={`Add ${categoriesViewType === 'EXPENSE' ? 'expense' : 'income'} category`}
+            aria-label={`Add ${categoriesViewType === "EXPENSE" ? "expense" : "income"} category`}
             style={{
-              minWidth: '44px',
-              minHeight: '44px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'var(--color-primary)',
-              border: 'none',
-              borderRadius: '50%',
-              cursor: 'pointer',
-              color: 'var(--color-bg)',
+              minWidth: "44px",
+              minHeight: "44px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "var(--color-primary)",
+              border: "none",
+              borderRadius: "50%",
+              cursor: "pointer",
+              color: "var(--color-bg)",
             }}
           >
             <Plus size={20} strokeWidth={2} />
@@ -334,20 +347,18 @@ export default function CategoryList() {
         <EmptyState
           icon={Tag}
           heading="No categories yet"
-          body={`Add ${categoriesViewType === 'EXPENSE' ? 'expense' : 'income'} categories to track your spending.`}
+          body={`Add ${categoriesViewType === "EXPENSE" ? "expense" : "income"} categories to track your spending.`}
           action={
-            categoriesEditMode
-              ? { label: 'Add Category', onClick: handleAddCategory }
-              : undefined
+            categoriesEditMode ? { label: "Add Category", onClick: handleAddCategory } : undefined
           }
         />
       ) : (
         <div
           style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--space-2)',
-            padding: '0 var(--space-4) var(--space-4)',
+            display: "flex",
+            flexDirection: "column",
+            gap: "var(--space-2)",
+            padding: "0 var(--space-4) var(--space-4)",
           }}
         >
           <DndContext
@@ -401,7 +412,7 @@ export default function CategoryList() {
       <ConfirmDialog
         isOpen={confirmTrash !== null}
         title="Archive Category?"
-        body={`"${confirmCategory?.name ?? 'This category'}" will be archived. Existing transactions will keep their category.`}
+        body={`"${confirmCategory?.name ?? "This category"}" will be archived. Existing transactions will keep their category.`}
         confirmLabel="Archive"
         variant="destructive"
         onConfirm={handleConfirmTrash}

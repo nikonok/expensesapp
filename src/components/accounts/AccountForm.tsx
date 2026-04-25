@@ -128,8 +128,8 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       setDebtSubtype("regular");
       setDebtInputMode("original");
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  // Intentional: re-init only when account identity changes, not on every Dexie reactive re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Intentional: re-init only when account identity changes, not on every Dexie reactive re-render.
   }, [isOpen, editAccount?.id, mainCurrency]);
 
   const handleCurrencyChange = (c: string) => {
@@ -277,9 +277,8 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
   const handleSave = async () => {
     const data = validate();
     if (!data) {
-      const firstError =
-        !name.trim() ? 'Name is required' : 'Please fix the highlighted fields';
-      showToast(firstError, 'error');
+      const firstError = !name.trim() ? "Name is required" : "Please fix the highlighted fields";
+      showToast(firstError, "error");
       return;
     }
     setIsSaving(true);

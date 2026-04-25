@@ -1,14 +1,14 @@
-import { db } from '../db/database';
-import { getLocalDateString, getUTCISOString } from '../utils/date-utils';
-import { logger } from './log.service';
+import { db } from "../db/database";
+import { getLocalDateString, getUTCISOString } from "../utils/date-utils";
+import { logger } from "./log.service";
 
-const API_BASE = 'https://open.er-api.com/v6/latest';
+const API_BASE = "https://open.er-api.com/v6/latest";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const PRUNE_DAYS = 90;
 
 async function getMainCurrency(): Promise<string> {
-  const setting = await db.settings.get('mainCurrency');
-  return (setting?.value as string) ?? 'USD';
+  const setting = await db.settings.get("mainCurrency");
+  return (setting?.value as string) ?? "USD";
 }
 
 function deriveRate(
@@ -56,13 +56,13 @@ export const exchangeRateService = {
       }
       const json = (await response.json()) as { rates?: Record<string, number> };
       if (!json.rates) {
-        throw new Error('Invalid exchange rate API response: missing rates');
+        throw new Error("Invalid exchange rate API response: missing rates");
       }
 
       const rawRates = json.rates;
       const rates: Record<string, number> = {};
       for (const [k, v] of Object.entries(rawRates)) {
-        if (typeof v === 'number' && isFinite(v) && v > 0) {
+        if (typeof v === "number" && isFinite(v) && v > 0) {
           rates[k] = v;
         }
       }
@@ -72,7 +72,7 @@ export const exchangeRateService = {
 
       // Upsert using the unique index [baseCurrency+date]
       const existing = await db.exchangeRates
-        .where('[baseCurrency+date]')
+        .where("[baseCurrency+date]")
         .equals([baseCurrency, today])
         .first();
 
@@ -94,13 +94,10 @@ export const exchangeRateService = {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - PRUNE_DAYS);
       const cutoffDate = cutoff.toISOString().slice(0, 10);
-      await db.exchangeRates
-        .where('date')
-        .below(cutoffDate)
-        .delete();
-      logger.info('exchangeRate.fetch.ok', { baseCurrency });
+      await db.exchangeRates.where("date").below(cutoffDate).delete();
+      logger.info("exchangeRate.fetch.ok", { baseCurrency });
     } catch (err) {
-      logger.error('exchangeRate.fetch.failed', {
+      logger.error("exchangeRate.fetch.failed", {
         baseCurrency,
         error: err instanceof Error ? err.message : String(err),
       });
@@ -115,10 +112,7 @@ export const exchangeRateService = {
     const today = getLocalDateString();
 
     // Try today's cache entry
-    let entry = await db.exchangeRates
-      .where('[baseCurrency+date]')
-      .equals([base, today])
-      .first();
+    let entry = await db.exchangeRates.where("[baseCurrency+date]").equals([base, today]).first();
 
     if (entry) {
       const age = Date.now() - new Date(entry.fetchedAt).getTime();
@@ -126,10 +120,7 @@ export const exchangeRateService = {
         // Stale — try to refresh
         try {
           await exchangeRateService.fetchAndCacheRates(base);
-          entry = await db.exchangeRates
-            .where('[baseCurrency+date]')
-            .equals([base, today])
-            .first();
+          entry = await db.exchangeRates.where("[baseCurrency+date]").equals([base, today]).first();
         } catch {
           // Fetch failed — fall through to use stale entry already loaded
         }
@@ -138,16 +129,10 @@ export const exchangeRateService = {
       // Cache miss — try to fetch
       try {
         await exchangeRateService.fetchAndCacheRates(base);
-        entry = await db.exchangeRates
-          .where('[baseCurrency+date]')
-          .equals([base, today])
-          .first();
+        entry = await db.exchangeRates.where("[baseCurrency+date]").equals([base, today]).first();
       } catch {
         // Fetch failed — try to find any cached entry for this base
-        entry = await db.exchangeRates
-          .where('baseCurrency')
-          .equals(base)
-          .last();
+        entry = await db.exchangeRates.where("baseCurrency").equals(base).last();
       }
     }
 
@@ -157,19 +142,15 @@ export const exchangeRateService = {
     return rate;
   },
 
-  async getHistoricalRate(
-    from: string,
-    to: string,
-    date: string,
-  ): Promise<number | null> {
+  async getHistoricalRate(from: string, to: string, date: string): Promise<number | null> {
     if (from === to) return 1;
 
     const base = await getMainCurrency();
 
     // Find most recent cached entry with date <= requested date
     const entry = await db.exchangeRates
-      .where('[baseCurrency+date]')
-      .between([base, ''], [base, date], true, true)
+      .where("[baseCurrency+date]")
+      .between([base, ""], [base, date], true, true)
       .last();
 
     if (!entry) return null;
@@ -189,11 +170,11 @@ export const exchangeRateService = {
       const transactions = await db.transactions.toArray();
       const total = transactions.length;
 
-      logger.info('exchangeRate.recalc.start', { newMainCurrency, total });
+      logger.info("exchangeRate.recalc.start", { newMainCurrency, total });
 
       if (total === 0) {
         onProgress?.(0, 0);
-        logger.info('exchangeRate.recalc.complete', { newMainCurrency, total: 0 });
+        logger.info("exchangeRate.recalc.complete", { newMainCurrency, total: 0 });
         return;
       }
 
@@ -214,11 +195,7 @@ export const exchangeRateService = {
         const uniqueDates = [...new Set(dates)];
         let hasMissing = false;
         for (const date of uniqueDates) {
-          const rate = await exchangeRateService.getHistoricalRate(
-            currency,
-            newMainCurrency,
-            date,
-          );
+          const rate = await exchangeRateService.getHistoricalRate(currency, newMainCurrency, date);
           if (rate == null) {
             hasMissing = true;
           } else {
@@ -231,9 +208,7 @@ export const exchangeRateService = {
       }
 
       if (missingCurrencies.length > 0) {
-        throw new Error(
-          `No exchange rate available for: ${missingCurrencies.join(', ')}`,
-        );
+        throw new Error(`No exchange rate available for: ${missingCurrencies.join(", ")}`);
       }
 
       // Now open the db transaction — only db.transactions is accessed here,
@@ -241,7 +216,7 @@ export const exchangeRateService = {
       const BATCH_SIZE = 50;
       let done = 0;
 
-      await db.transaction('rw', db.transactions, async () => {
+      await db.transaction("rw", db.transactions, async () => {
         for (let i = 0; i < total; i += BATCH_SIZE) {
           const batch = transactions.slice(i, i + BATCH_SIZE);
 
@@ -265,9 +240,9 @@ export const exchangeRateService = {
           onProgress?.(done, total);
         }
       });
-      logger.info('exchangeRate.recalc.complete', { newMainCurrency });
+      logger.info("exchangeRate.recalc.complete", { newMainCurrency });
     } catch (err) {
-      logger.error('exchangeRate.recalc.failed', {
+      logger.error("exchangeRate.recalc.failed", {
         newMainCurrency,
         error: err instanceof Error ? err.message : String(err),
       });

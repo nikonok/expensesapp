@@ -2,11 +2,11 @@
 // Generates PWA icons from SVG source.
 // Run: node scripts/generate-icons.js
 
-const sharp = require('sharp');
-const path = require('path');
-const fs = require('fs');
+const sharp = require("sharp");
+const path = require("path");
+const fs = require("fs");
 
-const outDir = path.join(__dirname, '..', 'public', 'icons');
+const outDir = path.join(__dirname, "..", "public", "icons");
 if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
 // App icon SVG — dark background (#0A0B12) + electric cyan "E" (approx oklch 72% 0.22 210)
@@ -32,19 +32,16 @@ const svgSource = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"
 async function generate() {
   const svgBuf = Buffer.from(svgSource);
 
-  await sharp(svgBuf)
-    .resize(192, 192)
-    .png()
-    .toFile(path.join(outDir, 'icon-192.png'));
-  console.log('✓ icon-192.png');
+  await sharp(svgBuf).resize(192, 192).png().toFile(path.join(outDir, "icon-192.png"));
+  console.log("✓ icon-192.png");
 
-  await sharp(svgBuf)
-    .resize(512, 512)
-    .png()
-    .toFile(path.join(outDir, 'icon-512.png'));
-  console.log('✓ icon-512.png');
+  await sharp(svgBuf).resize(512, 512).png().toFile(path.join(outDir, "icon-512.png"));
+  console.log("✓ icon-512.png");
 
-  console.log('Icons generated successfully.');
+  console.log("Icons generated successfully.");
 }
 
-generate().catch((err) => { console.error(err); process.exit(1); });
+generate().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

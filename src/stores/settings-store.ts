@@ -1,5 +1,5 @@
-import { create } from 'zustand';
-import { db } from '../db/database';
+import { create } from "zustand";
+import { db } from "../db/database";
 
 interface SettingsStore {
   mainCurrency: string;
@@ -11,7 +11,7 @@ interface SettingsStore {
   autoBackupIntervalHours: number | null;
   lastAutoBackupAt: string | null;
   hasCompletedOnboarding: boolean;
-  logLevel: 'all' | 'errors';
+  logLevel: "all" | "errors";
   isLoaded: boolean;
 
   load: () => Promise<void>;
@@ -19,29 +19,29 @@ interface SettingsStore {
 }
 
 const VALID_SETTING_KEYS = new Set([
-  'mainCurrency',
-  'language',
-  'startupScreen',
-  'notificationEnabled',
-  'notificationTime',
-  'lastUsedAccountId',
-  'autoBackupIntervalHours',
-  'lastAutoBackupAt',
-  'hasCompletedOnboarding',
-  'logLevel',
+  "mainCurrency",
+  "language",
+  "startupScreen",
+  "notificationEnabled",
+  "notificationTime",
+  "lastUsedAccountId",
+  "autoBackupIntervalHours",
+  "lastAutoBackupAt",
+  "hasCompletedOnboarding",
+  "logLevel",
 ]);
 
-const DEFAULTS: Omit<SettingsStore, 'load' | 'update' | 'isLoaded'> = {
-  mainCurrency: 'USD',
-  language: 'en',
-  startupScreen: 'transactions',
+const DEFAULTS: Omit<SettingsStore, "load" | "update" | "isLoaded"> = {
+  mainCurrency: "USD",
+  language: "en",
+  startupScreen: "transactions",
   notificationEnabled: false,
-  notificationTime: '20:00',
+  notificationTime: "20:00",
   lastUsedAccountId: null,
   autoBackupIntervalHours: null,
   lastAutoBackupAt: null,
   hasCompletedOnboarding: false,
-  logLevel: 'errors',
+  logLevel: "errors",
 };
 
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
@@ -56,27 +56,30 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       map[row.key] = row.value;
     }
 
-    const VALID_STARTUP_SCREENS = new Set(['accounts', 'categories', 'transactions', 'budget', 'overview']);
+    const VALID_STARTUP_SCREENS = new Set([
+      "accounts",
+      "categories",
+      "transactions",
+      "budget",
+      "overview",
+    ]);
 
     set({
-      mainCurrency: (map['mainCurrency'] as string) ?? DEFAULTS.mainCurrency,
-      language: (map['language'] as string) ?? DEFAULTS.language,
-      startupScreen: VALID_STARTUP_SCREENS.has(map['startupScreen'] as string)
-        ? (map['startupScreen'] as string)
+      mainCurrency: (map["mainCurrency"] as string) ?? DEFAULTS.mainCurrency,
+      language: (map["language"] as string) ?? DEFAULTS.language,
+      startupScreen: VALID_STARTUP_SCREENS.has(map["startupScreen"] as string)
+        ? (map["startupScreen"] as string)
         : DEFAULTS.startupScreen,
-      notificationEnabled:
-        (map['notificationEnabled'] as boolean) ?? DEFAULTS.notificationEnabled,
-      notificationTime: (map['notificationTime'] as string) ?? DEFAULTS.notificationTime,
-      lastUsedAccountId:
-        (map['lastUsedAccountId'] as number | null) ?? DEFAULTS.lastUsedAccountId,
+      notificationEnabled: (map["notificationEnabled"] as boolean) ?? DEFAULTS.notificationEnabled,
+      notificationTime: (map["notificationTime"] as string) ?? DEFAULTS.notificationTime,
+      lastUsedAccountId: (map["lastUsedAccountId"] as number | null) ?? DEFAULTS.lastUsedAccountId,
       autoBackupIntervalHours:
-        (map['autoBackupIntervalHours'] as number | null) ?? DEFAULTS.autoBackupIntervalHours,
-      lastAutoBackupAt:
-        (map['lastAutoBackupAt'] as string | null) ?? DEFAULTS.lastAutoBackupAt,
+        (map["autoBackupIntervalHours"] as number | null) ?? DEFAULTS.autoBackupIntervalHours,
+      lastAutoBackupAt: (map["lastAutoBackupAt"] as string | null) ?? DEFAULTS.lastAutoBackupAt,
       hasCompletedOnboarding:
-        (map['hasCompletedOnboarding'] as boolean) ?? DEFAULTS.hasCompletedOnboarding,
-      logLevel: (['all', 'errors'] as const).includes(map['logLevel'] as 'all' | 'errors')
-        ? (map['logLevel'] as 'all' | 'errors')
+        (map["hasCompletedOnboarding"] as boolean) ?? DEFAULTS.hasCompletedOnboarding,
+      logLevel: (["all", "errors"] as const).includes(map["logLevel"] as "all" | "errors")
+        ? (map["logLevel"] as "all" | "errors")
         : DEFAULTS.logLevel,
       isLoaded: true,
     });
@@ -84,7 +87,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   update: async (key: string, value: unknown) => {
     if (!VALID_SETTING_KEYS.has(key)) {
-      console.error('Unknown setting key:', key);
+      console.error("Unknown setting key:", key);
       return;
     }
     const prev = (get() as unknown as Record<string, unknown>)[key];
@@ -93,7 +96,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     try {
       await db.settings.put({ key, value });
     } catch (err) {
-      console.error('Failed to persist setting:', key, err);
+      console.error("Failed to persist setting:", key, err);
       set({ [key]: prev } as Partial<SettingsStore>);
       throw err;
     }

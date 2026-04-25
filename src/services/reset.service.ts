@@ -1,11 +1,19 @@
-import { db } from '@/db/database';
+import { db } from "@/db/database";
 
 class ResetService {
   async resetApp(): Promise<void> {
     await db.transaction(
-      'rw',
-      [db.accounts, db.categories, db.transactions, db.budgets,
-       db.exchangeRates, db.settings, db.backups, db.logs],
+      "rw",
+      [
+        db.accounts,
+        db.categories,
+        db.transactions,
+        db.budgets,
+        db.exchangeRates,
+        db.settings,
+        db.backups,
+        db.logs,
+      ],
       async () => {
         await db.accounts.clear();
         await db.categories.clear();
@@ -17,7 +25,7 @@ class ResetService {
         await db.logs.clear();
       },
     );
-    window.dispatchEvent(new CustomEvent('backup-restored'));
+    window.dispatchEvent(new CustomEvent("backup-restored"));
   }
 }
 

@@ -1,10 +1,10 @@
-import { BudgetCard, type BudgetCardData } from './BudgetCard';
+import { BudgetCard, type BudgetCardData } from "./BudgetCard";
 
 interface BudgetSectionProps {
   title: string;
   items: BudgetCardData[];
   month: string; // "YYYY-MM"
-  type: 'category' | 'account';
+  type: "category" | "account";
   isLoading?: boolean;
 }
 
@@ -23,25 +23,25 @@ function sortItems(items: BudgetCardData[]): BudgetCardData[] {
 export function BudgetSection({ title, items, month, type, isLoading }: BudgetSectionProps) {
   if (isLoading) {
     return (
-      <section style={{ marginBottom: 'var(--space-6)' }}>
+      <section style={{ marginBottom: "var(--space-6)" }}>
         <h2
           style={{
-            fontFamily: 'Syne, sans-serif',
+            fontFamily: "Syne, sans-serif",
             fontWeight: 700,
-            fontSize: 'var(--text-subheading)',
-            color: 'var(--color-text-secondary)',
-            margin: '0 0 var(--space-3)',
-            paddingInline: 'var(--space-4)',
+            fontSize: "var(--text-subheading)",
+            color: "var(--color-text-secondary)",
+            margin: "0 0 var(--space-3)",
+            paddingInline: "var(--space-4)",
           }}
         >
           {title}
         </h2>
         <div
           style={{
-            height: '60px',
-            margin: '0 var(--space-4)',
-            borderRadius: 'var(--radius-card)',
-            background: 'var(--color-surface)',
+            height: "60px",
+            margin: "0 var(--space-4)",
+            borderRadius: "var(--radius-card)",
+            background: "var(--color-surface)",
             opacity: 0.5,
           }}
         />
@@ -54,27 +54,27 @@ export function BudgetSection({ title, items, month, type, isLoading }: BudgetSe
   const sorted = sortItems(items);
 
   return (
-    <section style={{ marginBottom: 'var(--space-6)' }}>
+    <section style={{ marginBottom: "var(--space-6)" }}>
       <h2
         style={{
-          fontFamily: 'Syne, sans-serif',
+          fontFamily: "Syne, sans-serif",
           fontWeight: 700,
-          fontSize: 'var(--text-subheading)',
-          color: 'var(--color-text-secondary)',
-          margin: '0 0 var(--space-3)',
-          paddingInline: 'var(--space-4)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.05em',
+          fontSize: "var(--text-subheading)",
+          color: "var(--color-text-secondary)",
+          margin: "0 0 var(--space-3)",
+          paddingInline: "var(--space-4)",
+          textTransform: "uppercase",
+          letterSpacing: "0.05em",
         }}
       >
         {title}
       </h2>
       <div
         style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 'var(--space-2)',
-          paddingInline: 'var(--space-4)',
+          display: "flex",
+          flexDirection: "column",
+          gap: "var(--space-2)",
+          paddingInline: "var(--space-4)",
         }}
       >
         {sorted.map((item) => (

@@ -1,8 +1,8 @@
-import { registerSW as registerSWVite } from 'virtual:pwa-register';
+import { registerSW as registerSWVite } from "virtual:pwa-register";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
@@ -12,7 +12,9 @@ const _installListeners = new Set<(v: boolean) => void>();
 
 export function onCanInstallChange(fn: (v: boolean) => void): () => void {
   _installListeners.add(fn);
-  return () => { _installListeners.delete(fn); };
+  return () => {
+    _installListeners.delete(fn);
+  };
 }
 
 function setCanInstall(v: boolean) {
@@ -32,7 +34,9 @@ const _updateListeners = new Set<(v: boolean) => void>();
 
 export function onUpdateAvailableChange(fn: (v: boolean) => void): () => void {
   _updateListeners.add(fn);
-  return () => { _updateListeners.delete(fn); };
+  return () => {
+    _updateListeners.delete(fn);
+  };
 }
 
 function setUpdateAvailable(v: boolean) {
@@ -57,12 +61,12 @@ export function registerSW() {
   if (_registered) return;
   _registered = true;
 
-  window.addEventListener('beforeinstallprompt', (e) => {
+  window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
     deferredPrompt = e as BeforeInstallPromptEvent;
     setCanInstall(true);
   });
-  window.addEventListener('appinstalled', () => {
+  window.addEventListener("appinstalled", () => {
     setCanInstall(false);
     deferredPrompt = null;
   });
@@ -81,7 +85,7 @@ export async function triggerInstall() {
   await deferredPrompt.prompt();
   const { outcome } = await deferredPrompt.userChoice;
   deferredPrompt = null;
-  if (outcome === 'accepted') setCanInstall(false);
+  if (outcome === "accepted") setCanInstall(false);
 }
 
 export function dismissInstall() {
@@ -90,7 +94,7 @@ export function dismissInstall() {
 
 // ── Periodic Background Sync ──────────────────────────────────────────────────
 
-const SYNC_TAG = 'daily-reminder';
+const SYNC_TAG = "daily-reminder";
 const SYNC_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 type PeriodicSyncManager = {
@@ -99,12 +103,12 @@ type PeriodicSyncManager = {
 };
 
 function getPeriodicSync(reg: ServiceWorkerRegistration): PeriodicSyncManager | null {
-  if (!('periodicSync' in reg)) return null;
+  if (!("periodicSync" in reg)) return null;
   return (reg as ServiceWorkerRegistration & { periodicSync: PeriodicSyncManager }).periodicSync;
 }
 
 export async function registerPeriodicSync(): Promise<void> {
-  if (!('serviceWorker' in navigator)) return;
+  if (!("serviceWorker" in navigator)) return;
   try {
     const reg = await navigator.serviceWorker.ready;
     const ps = getPeriodicSync(reg);
@@ -116,7 +120,7 @@ export async function registerPeriodicSync(): Promise<void> {
 }
 
 export async function unregisterPeriodicSync(): Promise<void> {
-  if (!('serviceWorker' in navigator)) return;
+  if (!("serviceWorker" in navigator)) return;
   try {
     const reg = await navigator.serviceWorker.ready;
     const ps = getPeriodicSync(reg);

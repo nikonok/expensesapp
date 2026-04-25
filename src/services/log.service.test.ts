@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ── Mocks (hoisted before imports) ───────────────────────────────────────────
 
-vi.mock('../db/database', () => ({
+vi.mock("../db/database", () => ({
   db: {
     logs: {
       bulkAdd: vi.fn(),
@@ -13,17 +13,17 @@ vi.mock('../db/database', () => ({
   },
 }));
 
-vi.mock('../stores/settings-store', () => ({
+vi.mock("../stores/settings-store", () => ({
   useSettingsStore: {
-    getState: vi.fn(() => ({ logLevel: 'errors' })),
+    getState: vi.fn(() => ({ logLevel: "errors" })),
   },
 }));
 
 // ── Imports ───────────────────────────────────────────────────────────────────
 
-import { db } from '../db/database';
-import { useSettingsStore } from '../stores/settings-store';
-import { logger } from './log.service';
+import { db } from "../db/database";
+import { useSettingsStore } from "../stores/settings-store";
+import { logger } from "./log.service";
 
 // ── Test setup ────────────────────────────────────────────────────────────────
 
@@ -32,7 +32,7 @@ beforeEach(() => {
   // Drain the module-level buffer between tests
   (logger as any)._flush = vi.fn();
   // Reset to errors-only by default
-  vi.mocked(useSettingsStore.getState).mockReturnValue({ logLevel: 'errors' } as any);
+  vi.mocked(useSettingsStore.getState).mockReturnValue({ logLevel: "errors" } as any);
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -46,13 +46,13 @@ function getBuffer(): unknown[] {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('logger — logLevel filtering', () => {
+describe("logger — logLevel filtering", () => {
   it('does not flush debug or info when logLevel is "errors"', async () => {
-    vi.mocked(useSettingsStore.getState).mockReturnValue({ logLevel: 'errors' } as any);
+    vi.mocked(useSettingsStore.getState).mockReturnValue({ logLevel: "errors" } as any);
     vi.mocked(db.logs.bulkAdd).mockResolvedValue(undefined as any);
 
-    logger.debug('debug msg');
-    logger.info('info msg');
+    logger.debug("debug msg");
+    logger.info("info msg");
 
     // Allow microtask queue to drain
     await Promise.resolve();
@@ -61,41 +61,46 @@ describe('logger — logLevel filtering', () => {
   });
 
   it('flushes error entries when logLevel is "errors"', async () => {
-    vi.mocked(useSettingsStore.getState).mockReturnValue({ logLevel: 'errors' } as any);
+    vi.mocked(useSettingsStore.getState).mockReturnValue({ logLevel: "errors" } as any);
     vi.mocked(db.logs.bulkAdd).mockResolvedValue(undefined as any);
 
-    logger.error('something broke');
+    logger.error("something broke");
 
     await Promise.resolve();
     await Promise.resolve(); // two ticks: one for queueMicrotask, one for the async flush
 
     expect(vi.mocked(db.logs.bulkAdd)).toHaveBeenCalledTimes(1);
-    const batch = vi.mocked(db.logs.bulkAdd).mock.calls[0][0] as unknown as Array<{ level: string; message: string }>;
-    expect(batch[0].level).toBe('ERROR');
-    expect(batch[0]).toHaveProperty('message', 'something broke');
+    const batch = vi.mocked(db.logs.bulkAdd).mock.calls[0][0] as unknown as Array<{
+      level: string;
+      message: string;
+    }>;
+    expect(batch[0].level).toBe("ERROR");
+    expect(batch[0]).toHaveProperty("message", "something broke");
   });
 
   it('flushes all levels when logLevel is "all"', async () => {
-    vi.mocked(useSettingsStore.getState).mockReturnValue({ logLevel: 'all' } as any);
+    vi.mocked(useSettingsStore.getState).mockReturnValue({ logLevel: "all" } as any);
     vi.mocked(db.logs.bulkAdd).mockResolvedValue(undefined as any);
 
-    logger.debug('d');
-    logger.info('i');
-    logger.warn('w');
-    logger.error('e');
+    logger.debug("d");
+    logger.info("i");
+    logger.warn("w");
+    logger.error("e");
 
     await Promise.resolve();
     await Promise.resolve();
 
     expect(vi.mocked(db.logs.bulkAdd)).toHaveBeenCalledTimes(1);
-    const batch = vi.mocked(db.logs.bulkAdd).mock.calls[0][0] as unknown as Array<{ level: string }>;
-    expect(batch.map(b => b.level)).toEqual(['DEBUG', 'INFO', 'WARN', 'ERROR']);
+    const batch = vi.mocked(db.logs.bulkAdd).mock.calls[0][0] as unknown as Array<{
+      level: string;
+    }>;
+    expect(batch.map((b) => b.level)).toEqual(["DEBUG", "INFO", "WARN", "ERROR"]);
   });
 });
 
-describe('logger — buffer overflow', () => {
-  it('shifts the oldest entry when buffer exceeds MAX_BUFFER (500)', async () => {
-    vi.mocked(useSettingsStore.getState).mockReturnValue({ logLevel: 'all' } as any);
+describe("logger — buffer overflow", () => {
+  it("shifts the oldest entry when buffer exceeds MAX_BUFFER (500)", async () => {
+    vi.mocked(useSettingsStore.getState).mockReturnValue({ logLevel: "all" } as any);
     vi.mocked(db.logs.bulkAdd).mockResolvedValue(undefined as any);
 
     // Fill buffer with 500 entries
@@ -118,7 +123,7 @@ describe('logger — buffer overflow', () => {
       logger.info(`fill-${i}`);
     }
     // Now buffer is full (500). Add one more — should shift fill-0 and add the new one.
-    logger.info('overflow-entry');
+    logger.info("overflow-entry");
 
     // Verify by forcing a flush with a spy
     vi.mocked(db.logs.bulkAdd).mockResolvedValue(undefined as any);
@@ -128,20 +133,20 @@ describe('logger — buffer overflow', () => {
     // The last resolved bulkAdd call holds what was in the buffer after the overflow
     const lastBatch = calls[calls.length - 1][0] as unknown as Array<{ message: string }>;
     expect(lastBatch.length).toBe(500);
-    expect(lastBatch[0].message).toBe('fill-1'); // fill-0 was shifted out
-    expect(lastBatch[lastBatch.length - 1].message).toBe('overflow-entry');
+    expect(lastBatch[0].message).toBe("fill-1"); // fill-0 was shifted out
+    expect(lastBatch[lastBatch.length - 1].message).toBe("overflow-entry");
   });
 });
 
-describe('logger.trimOldLogs', () => {
-  it('deletes logs with timestamp below the 24h cutoff', async () => {
+describe("logger.trimOldLogs", () => {
+  it("deletes logs with timestamp below the 24h cutoff", async () => {
     const deleteMock = vi.fn().mockResolvedValue(3) as any;
     const belowMock = vi.fn().mockReturnValue({ delete: deleteMock });
     vi.mocked(db.logs.where).mockReturnValue({ below: belowMock } as any);
 
     const deleted = await logger.trimOldLogs();
 
-    expect(vi.mocked(db.logs.where)).toHaveBeenCalledWith('timestamp');
+    expect(vi.mocked(db.logs.where)).toHaveBeenCalledWith("timestamp");
     expect(deleted).toBe(3);
 
     // Verify the cutoff is approximately 24h ago
@@ -151,7 +156,7 @@ describe('logger.trimOldLogs', () => {
     expect(Math.abs(cutoffMs - expectedMs)).toBeLessThan(2000);
   });
 
-  it('returns 0 when no logs are old enough to delete', async () => {
+  it("returns 0 when no logs are old enough to delete", async () => {
     const deleteMock = vi.fn().mockResolvedValue(0) as any;
     const belowMock = vi.fn().mockReturnValue({ delete: deleteMock });
     vi.mocked(db.logs.where).mockReturnValue({ below: belowMock } as any);
@@ -161,7 +166,7 @@ describe('logger.trimOldLogs', () => {
   });
 });
 
-describe('logger.exportLogs', () => {
+describe("logger.exportLogs", () => {
   it('calls db.logs.orderBy("timestamp") to fetch all logs', async () => {
     vi.mocked(db.logs.bulkAdd).mockResolvedValue(undefined as any);
     const deleteMock = vi.fn().mockResolvedValue(0) as any;
@@ -169,36 +174,36 @@ describe('logger.exportLogs', () => {
     vi.mocked(db.logs.where).mockReturnValue({ below: belowMock } as any);
     vi.mocked(db.logs.orderBy).mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) } as any);
 
-    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake');
-    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:fake");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
     const clickMock = vi.fn();
-    const anchor = { href: '', download: '', click: clickMock } as unknown as HTMLAnchorElement;
-    vi.spyOn(document, 'createElement').mockReturnValue(anchor);
-    vi.spyOn(document.body, 'appendChild').mockImplementation(() => anchor);
-    vi.spyOn(document.body, 'removeChild').mockImplementation(() => anchor);
+    const anchor = { href: "", download: "", click: clickMock } as unknown as HTMLAnchorElement;
+    vi.spyOn(document, "createElement").mockReturnValue(anchor);
+    vi.spyOn(document.body, "appendChild").mockImplementation(() => anchor);
+    vi.spyOn(document.body, "removeChild").mockImplementation(() => anchor);
 
     await logger.exportLogs();
 
-    expect(vi.mocked(db.logs.orderBy)).toHaveBeenCalledWith('timestamp');
-    expect(document.createElement).toHaveBeenCalledWith('a');
+    expect(vi.mocked(db.logs.orderBy)).toHaveBeenCalledWith("timestamp");
+    expect(document.createElement).toHaveBeenCalledWith("a");
     expect(URL.createObjectURL).toHaveBeenCalled();
     expect(clickMock).toHaveBeenCalledTimes(1);
   });
 
-  it('sets a .txt download filename with todays date', async () => {
+  it("sets a .txt download filename with todays date", async () => {
     vi.mocked(db.logs.bulkAdd).mockResolvedValue(undefined as any);
     const deleteMock = vi.fn().mockResolvedValue(0) as any;
     const belowMock = vi.fn().mockReturnValue({ delete: deleteMock });
     vi.mocked(db.logs.where).mockReturnValue({ below: belowMock } as any);
     vi.mocked(db.logs.orderBy).mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) } as any);
 
-    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake');
-    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:fake");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
     const clickMock = vi.fn();
-    const anchor = { href: '', download: '', click: clickMock } as unknown as HTMLAnchorElement;
-    vi.spyOn(document, 'createElement').mockReturnValue(anchor);
-    vi.spyOn(document.body, 'appendChild').mockImplementation(() => anchor);
-    vi.spyOn(document.body, 'removeChild').mockImplementation(() => anchor);
+    const anchor = { href: "", download: "", click: clickMock } as unknown as HTMLAnchorElement;
+    vi.spyOn(document, "createElement").mockReturnValue(anchor);
+    vi.spyOn(document.body, "appendChild").mockImplementation(() => anchor);
+    vi.spyOn(document.body, "removeChild").mockImplementation(() => anchor);
 
     await logger.exportLogs();
 
@@ -206,7 +211,7 @@ describe('logger.exportLogs', () => {
     expect(anchor.download).toBe(`expenses-logs-${today}.txt`);
   });
 
-  it('formats each log line correctly', async () => {
+  it("formats each log line correctly", async () => {
     vi.mocked(db.logs.bulkAdd).mockResolvedValue(undefined as any);
     const deleteMock = vi.fn().mockResolvedValue(0) as any;
     const belowMock = vi.fn().mockReturnValue({ delete: deleteMock });
@@ -214,25 +219,25 @@ describe('logger.exportLogs', () => {
 
     const sampleLog = {
       id: 1,
-      timestamp: '2026-04-16T10:00:00.000Z',
-      level: 'INFO',
-      message: 'test message',
-      context: { key: 'value' },
+      timestamp: "2026-04-16T10:00:00.000Z",
+      level: "INFO",
+      message: "test message",
+      context: { key: "value" },
     };
     vi.mocked(db.logs.orderBy).mockReturnValue({
       toArray: vi.fn().mockResolvedValue([sampleLog]),
     } as any);
 
     let capturedBlob: Blob | undefined;
-    vi.spyOn(URL, 'createObjectURL').mockImplementation((b: Blob | MediaSource) => {
+    vi.spyOn(URL, "createObjectURL").mockImplementation((b: Blob | MediaSource) => {
       capturedBlob = b as Blob;
-      return 'blob:fake';
+      return "blob:fake";
     });
-    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-    const anchor = { href: '', download: '', click: vi.fn() } as unknown as HTMLAnchorElement;
-    vi.spyOn(document, 'createElement').mockReturnValue(anchor);
-    vi.spyOn(document.body, 'appendChild').mockImplementation(() => anchor);
-    vi.spyOn(document.body, 'removeChild').mockImplementation(() => anchor);
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const anchor = { href: "", download: "", click: vi.fn() } as unknown as HTMLAnchorElement;
+    vi.spyOn(document, "createElement").mockReturnValue(anchor);
+    vi.spyOn(document.body, "appendChild").mockImplementation(() => anchor);
+    vi.spyOn(document.body, "removeChild").mockImplementation(() => anchor);
 
     await logger.exportLogs();
 

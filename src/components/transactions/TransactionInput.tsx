@@ -346,7 +346,11 @@ function Step2TO({
                 (a) => a.type !== "DEBT" && a.id !== fromAccountId,
               );
               const expenseCategories = categories.filter((c) => c.type === "EXPENSE");
-              if (debtAccounts.length === 0 && transferAccounts.length === 0 && expenseCategories.length === 0) {
+              if (
+                debtAccounts.length === 0 &&
+                transferAccounts.length === 0 &&
+                expenseCategories.length === 0
+              ) {
                 return (
                   <EmptyState
                     icon={Tag}
@@ -1750,7 +1754,9 @@ function Step3({
                 />
               ))
             )
-          ) : debtAccounts.length === 0 && transferAccounts.length === 0 && expenseCategories.length === 0 ? (
+          ) : debtAccounts.length === 0 &&
+            transferAccounts.length === 0 &&
+            expenseCategories.length === 0 ? (
             <EmptyState
               icon={Tag}
               heading="No categories yet"
@@ -2101,7 +2107,8 @@ export default function TransactionInput() {
         }
       })
       .catch((err) => {
-        if (import.meta.env.DEV) console.error('[TransactionInput] exchange rate fetch failed:', err);
+        if (import.meta.env.DEV)
+          console.error("[TransactionInput] exchange rate fetch failed:", err);
       });
   }, [numpadValue, account, toAccount, toAccount2ndCurrencyDiffers, toSecondaryManual]);
 
@@ -2298,8 +2305,8 @@ export default function TransactionInput() {
     }
   }, [step, isEdit, navigate]);
 
-  const handleNavigateToCategories = useCallback(() => navigate('/categories'), [navigate]);
-  const handleNavigateToAccounts = useCallback(() => navigate('/accounts'), [navigate]);
+  const handleNavigateToCategories = useCallback(() => navigate("/categories"), [navigate]);
+  const handleNavigateToAccounts = useCallback(() => navigate("/accounts"), [navigate]);
 
   // Escape key: close form (inner overlays handle Escape via capture-phase listeners)
   useEffect(() => {

@@ -1,13 +1,13 @@
 export function formatAmount(amount: number, currency: string, locale?: string): string {
   return new Intl.NumberFormat(locale, {
-    style: 'currency',
+    style: "currency",
     currency,
   }).format(amount / 100);
 }
 
 export function formatAmountNoSymbol(amount: number, currency: string, locale?: string): string {
   return new Intl.NumberFormat(locale, {
-    style: 'decimal',
+    style: "decimal",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount / 100);
@@ -19,13 +19,13 @@ export function convertAmount(amount: number, rate: number): number {
 
 export function getCurrencySymbol(currency: string, locale?: string): string {
   const formatted = new Intl.NumberFormat(locale, {
-    style: 'currency',
+    style: "currency",
     currency,
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   })
     .formatToParts(0)
-    .find((part) => part.type === 'currency');
+    .find((part) => part.type === "currency");
   return formatted?.value ?? currency;
 }
 
@@ -36,8 +36,9 @@ export function getCurrencyDecimalPlaces(currency: string): number {
     return _decimalPlacesCache.get(currency)!;
   }
   try {
-    const dp = new Intl.NumberFormat('en-US', { style: 'currency', currency })
-      .resolvedOptions().minimumFractionDigits ?? 2;
+    const dp =
+      new Intl.NumberFormat("en-US", { style: "currency", currency }).resolvedOptions()
+        .minimumFractionDigits ?? 2;
     _decimalPlacesCache.set(currency, dp);
     return dp;
   } catch {

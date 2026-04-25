@@ -1,27 +1,27 @@
-import { useLiveQuery } from 'dexie-react-hooks';
-import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
-import { LayoutGrid } from 'lucide-react';
-import { db } from '../db/database';
-import { useUIStore } from '../stores/ui-store';
-import { useCategories } from '../hooks/use-categories';
-import { useAccounts } from '../hooks/use-accounts';
-import { useBudgets } from '../hooks/use-budgets';
-import PeriodFilter from '../components/shared/PeriodFilter';
-import { BudgetSection } from '../components/budget/BudgetSection';
-import { EmptyState } from '../components/shared/EmptyState';
-import type { BudgetCardData } from '../components/budget/BudgetCard';
-import type { PeriodFilter as PeriodFilterType } from '../types';
+import { useLiveQuery } from "dexie-react-hooks";
+import { format, parseISO, startOfMonth, endOfMonth } from "date-fns";
+import { LayoutGrid } from "lucide-react";
+import { db } from "../db/database";
+import { useUIStore } from "../stores/ui-store";
+import { useCategories } from "../hooks/use-categories";
+import { useAccounts } from "../hooks/use-accounts";
+import { useBudgets } from "../hooks/use-budgets";
+import PeriodFilter from "../components/shared/PeriodFilter";
+import { BudgetSection } from "../components/budget/BudgetSection";
+import { EmptyState } from "../components/shared/EmptyState";
+import type { BudgetCardData } from "../components/budget/BudgetCard";
+import type { PeriodFilter as PeriodFilterType } from "../types";
 
 function monthToPeriodFilter(month: string): PeriodFilterType {
   return {
-    type: 'month',
+    type: "month",
     startDate: `${month}-01`,
-    endDate: format(endOfMonth(parseISO(`${month}-01`)), 'yyyy-MM-dd'),
+    endDate: format(endOfMonth(parseISO(`${month}-01`)), "yyyy-MM-dd"),
   };
 }
 
 function periodFilterToMonth(f: PeriodFilterType): string {
-  return format(startOfMonth(parseISO(f.startDate)), 'yyyy-MM');
+  return format(startOfMonth(parseISO(f.startDate)), "yyyy-MM");
 }
 
 export default function BudgetPage() {
@@ -30,23 +30,23 @@ export default function BudgetPage() {
 
   // Derive date range strings for this month
   const monthStart = `${budgetMonth}-01`;
-  const monthEnd = format(endOfMonth(parseISO(monthStart)), 'yyyy-MM-dd');
+  const monthEnd = format(endOfMonth(parseISO(monthStart)), "yyyy-MM-dd");
 
   // Data
-  const expenseCategories = useCategories('EXPENSE');
-  const incomeCategories = useCategories('INCOME');
+  const expenseCategories = useCategories("EXPENSE");
+  const incomeCategories = useCategories("INCOME");
   const allAccounts = useAccounts();
   const budgets = useBudgets(budgetMonth);
 
-  const savingsAccounts = allAccounts.filter((a) => a.type === 'SAVINGS');
-  const debtAccounts = allAccounts.filter((a) => a.type === 'DEBT');
+  const savingsAccounts = allAccounts.filter((a) => a.type === "SAVINGS");
+  const debtAccounts = allAccounts.filter((a) => a.type === "DEBT");
 
   // Sum transactions by categoryId for this month (EXPENSE type)
   const categorySpend = useLiveQuery(async () => {
     const txs = await db.transactions
-      .where('date')
+      .where("date")
       .between(monthStart, monthEnd, true, true)
-      .filter((tx) => tx.type === 'EXPENSE' && tx.categoryId != null)
+      .filter((tx) => tx.type === "EXPENSE" && tx.categoryId != null)
       .toArray();
 
     const map: Record<number, number> = {};
@@ -61,9 +61,9 @@ export default function BudgetPage() {
   // Sum INCOME transactions by categoryId for this month
   const categoryIncome = useLiveQuery(async () => {
     const txs = await db.transactions
-      .where('date')
+      .where("date")
       .between(monthStart, monthEnd, true, true)
-      .filter((tx) => tx.type === 'INCOME' && tx.categoryId != null)
+      .filter((tx) => tx.type === "INCOME" && tx.categoryId != null)
       .toArray();
 
     const map: Record<number, number> = {};
@@ -78,9 +78,9 @@ export default function BudgetPage() {
   // Sum TRANSFER IN to savings/debt accounts for this month
   const accountSpend = useLiveQuery(async () => {
     const txs = await db.transactions
-      .where('date')
+      .where("date")
       .between(monthStart, monthEnd, true, true)
-      .filter((tx) => tx.type === 'TRANSFER' && tx.transferDirection === 'IN')
+      .filter((tx) => tx.type === "TRANSFER" && tx.transferDirection === "IN")
       .toArray();
 
     const map: Record<number, number> = {};
@@ -136,7 +136,8 @@ export default function BudgetPage() {
   }));
 
   // Loading state
-  const isLoading = categorySpend === undefined || categoryIncome === undefined || accountSpend === undefined;
+  const isLoading =
+    categorySpend === undefined || categoryIncome === undefined || accountSpend === undefined;
 
   // Empty state check
   const hasBudgets = budgets.length > 0;
@@ -158,27 +159,23 @@ export default function BudgetPage() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+    <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
       {/* Period filter bar */}
       <div
         style={{
-          padding: 'var(--space-3) var(--space-4)',
-          display: 'flex',
-          alignItems: 'center',
-          borderBottom: '1px solid var(--color-border)',
-          gap: 'var(--space-3)',
+          padding: "var(--space-3) var(--space-4)",
+          display: "flex",
+          alignItems: "center",
+          borderBottom: "1px solid var(--color-border)",
+          gap: "var(--space-3)",
           flexShrink: 0,
         }}
       >
-        <PeriodFilter
-          value={periodFilter}
-          onChange={handlePeriodChange}
-          variant="month-only"
-        />
+        <PeriodFilter value={periodFilter} onChange={handlePeriodChange} variant="month-only" />
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, paddingTop: 'var(--space-4)' }}>
+      <div style={{ flex: 1, paddingTop: "var(--space-4)" }}>
         {isEmpty ? (
           <EmptyState
             icon={LayoutGrid}

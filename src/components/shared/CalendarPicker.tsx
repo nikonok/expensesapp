@@ -1,15 +1,15 @@
-import { useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface CalendarPickerProps {
   value: string; // YYYY-MM-DD
   onChange: (date: string) => void;
 }
 
-const DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+const DAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
 function pad(n: number) {
-  return String(n).padStart(2, '0');
+  return String(n).padStart(2, "0");
 }
 
 function toDateString(year: number, month: number, day: number) {
@@ -21,13 +21,23 @@ export function CalendarPicker({ value, onChange }: CalendarPickerProps) {
   const todayStr = toDateString(today.getFullYear(), today.getMonth(), today.getDate());
 
   // Parse current value to get initially displayed month
-  const parsedValue = value ? new Date(value + 'T00:00:00') : today;
+  const parsedValue = value ? new Date(value + "T00:00:00") : today;
   const [viewYear, setViewYear] = useState(parsedValue.getFullYear());
   const [viewMonth, setViewMonth] = useState(parsedValue.getMonth()); // 0-indexed
 
   const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
   ];
 
   const handlePrevMonth = () => {
@@ -63,34 +73,34 @@ export function CalendarPicker({ value, onChange }: CalendarPickerProps) {
   return (
     <div
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--space-3)',
-        userSelect: 'none',
+        display: "flex",
+        flexDirection: "column",
+        gap: "var(--space-3)",
+        userSelect: "none",
       }}
     >
       {/* Month navigation */}
       <div
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
         }}
       >
         <button
           onClick={handlePrevMonth}
           aria-label="Previous month"
           style={{
-            minWidth: '44px',
-            minHeight: '44px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: 'var(--color-text-secondary)',
-            borderRadius: 'var(--radius-btn)',
+            minWidth: "44px",
+            minHeight: "44px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "var(--color-text-secondary)",
+            borderRadius: "var(--radius-btn)",
           }}
         >
           <ChevronLeft size={18} />
@@ -100,8 +110,8 @@ export function CalendarPicker({ value, onChange }: CalendarPickerProps) {
           style={{
             fontFamily: '"DM Sans", sans-serif',
             fontWeight: 500,
-            fontSize: 'var(--text-body)',
-            color: 'var(--color-text)',
+            fontSize: "var(--text-body)",
+            color: "var(--color-text)",
           }}
         >
           {monthNames[viewMonth]} {viewYear}
@@ -111,16 +121,16 @@ export function CalendarPicker({ value, onChange }: CalendarPickerProps) {
           onClick={handleNextMonth}
           aria-label="Next month"
           style={{
-            minWidth: '44px',
-            minHeight: '44px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: 'var(--color-text-secondary)',
-            borderRadius: 'var(--radius-btn)',
+            minWidth: "44px",
+            minHeight: "44px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "var(--color-text-secondary)",
+            borderRadius: "var(--radius-btn)",
           }}
         >
           <ChevronRight size={18} />
@@ -130,20 +140,20 @@ export function CalendarPicker({ value, onChange }: CalendarPickerProps) {
       {/* Day-of-week headers */}
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(7, 1fr)',
-          gap: '2px',
+          display: "grid",
+          gridTemplateColumns: "repeat(7, 1fr)",
+          gap: "2px",
         }}
       >
         {DAY_LABELS.map((label) => (
           <div
             key={label}
             style={{
-              textAlign: 'center',
+              textAlign: "center",
               fontFamily: '"DM Sans", sans-serif',
-              fontSize: 'var(--text-caption)',
-              color: 'var(--color-text-secondary)',
-              paddingBlock: '4px',
+              fontSize: "var(--text-caption)",
+              color: "var(--color-text-secondary)",
+              paddingBlock: "4px",
             }}
           >
             {label}
@@ -153,7 +163,7 @@ export function CalendarPicker({ value, onChange }: CalendarPickerProps) {
         {/* Day cells */}
         {cells.map((day, idx) => {
           if (day === null) {
-            return <div key={`empty-${idx}`} style={{ minHeight: '44px' }} />;
+            return <div key={`empty-${idx}`} style={{ minHeight: "44px" }} />;
           }
           const dateStr = toDateString(viewYear, viewMonth, day);
           const isSelected = dateStr === value;
@@ -166,29 +176,28 @@ export function CalendarPicker({ value, onChange }: CalendarPickerProps) {
               aria-label={dateStr}
               aria-pressed={isSelected}
               style={{
-                minWidth: '44px',
-                minHeight: '44px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: isSelected
-                  ? 'var(--color-primary)'
-                  : 'none',
-                border: isToday && !isSelected
-                  ? '1px solid var(--color-primary)'
-                  : '1px solid transparent',
-                borderRadius: '50%',
-                cursor: 'pointer',
+                minWidth: "44px",
+                minHeight: "44px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: isSelected ? "var(--color-primary)" : "none",
+                border:
+                  isToday && !isSelected
+                    ? "1px solid var(--color-primary)"
+                    : "1px solid transparent",
+                borderRadius: "50%",
+                cursor: "pointer",
                 fontFamily: '"JetBrains Mono", monospace',
-                fontSize: 'var(--text-caption)',
+                fontSize: "var(--text-caption)",
                 fontWeight: isSelected ? 600 : 500,
                 color: isSelected
-                  ? 'var(--color-bg)'
+                  ? "var(--color-bg)"
                   : isToday
-                    ? 'var(--color-primary)'
-                    : 'var(--color-text)',
-                transition: 'background 100ms, color 100ms',
-                WebkitTapHighlightColor: 'transparent',
+                    ? "var(--color-primary)"
+                    : "var(--color-text)",
+                transition: "background 100ms, color 100ms",
+                WebkitTapHighlightColor: "transparent",
               }}
             >
               {day}

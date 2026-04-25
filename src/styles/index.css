@@ -24,7 +24,7 @@
   --color-income-dim: oklch(73% 0.23 160 / 12%);
   --color-expense: oklch(62% 0.28 18);
   --color-expense-dim: oklch(62% 0.28 18 / 12%);
-  --color-transfer: oklch(60% 0.10 265);
+  --color-transfer: oklch(60% 0.1 265);
 
   /* Text */
   --color-text: oklch(94% 0.01 265);
@@ -152,7 +152,9 @@ body {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes shimmer {
@@ -181,13 +183,25 @@ body {
 }
 
 @keyframes toast-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes toast-out {
-  from { opacity: 1; transform: translateY(0); }
-  to   { opacity: 0; transform: translateY(8px); }
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
 }
 
 /* Reduced motion */

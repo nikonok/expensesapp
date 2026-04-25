@@ -66,5 +66,5 @@ export const settingSchemas = {
   notificationEnabled: z.boolean(),
   notificationTime: z.string().regex(/^\d{2}:\d{2}$/),
   autoBackupIntervalHours: z.number().positive().int().nullable(),
-  logLevel: z.enum(['all', 'errors']),
+  logLevel: z.enum(["all", "errors"]),
 };

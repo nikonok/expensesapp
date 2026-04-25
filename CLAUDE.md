@@ -196,6 +196,7 @@ vite-env.d.ts           Vite env type declarations
 React Router 7. Tab layout at `/accounts`, `/categories`, `/transactions`, `/budget`, `/overview`.
 
 Full-screen views (no bottom nav):
+
 - `/transactions/new` — create transaction (lazy)
 - `/transactions/:id/edit` — edit transaction (lazy)
 - `/accounts/trash` — trashed accounts list
@@ -203,6 +204,7 @@ Full-screen views (no bottom nav):
 - `/onboarding` — first-run onboarding flow
 
 Nested within tab layout (rendered as overlays/sheets):
+
 - `/accounts/new`, `/accounts/:id` — account form/detail sheet
 - `/categories/trash` — trashed categories within the categories tab
 

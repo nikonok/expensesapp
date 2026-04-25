@@ -1,7 +1,7 @@
-import { createContext, useCallback, useContext, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import { createContext, useCallback, useContext, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
-type ToastVariant = 'info' | 'success' | 'error' | 'coming-soon';
+type ToastVariant = "info" | "success" | "error" | "coming-soon";
 
 interface ToastState {
   id: number;
@@ -23,12 +23,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const outTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const show = useCallback((message: string, variant: ToastVariant = 'info', duration?: number) => {
+  const show = useCallback((message: string, variant: ToastVariant = "info", duration?: number) => {
     if (timerRef.current) clearTimeout(timerRef.current);
     if (outTimerRef.current) clearTimeout(outTimerRef.current);
 
     const id = ++nextId;
-    const dismissAfter = duration ?? (variant === 'coming-soon' ? 1500 : 3000);
+    const dismissAfter = duration ?? (variant === "coming-soon" ? 1500 : 3000);
 
     setToast({ id, message, variant, visible: true });
 
@@ -50,15 +50,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 export function useToast(): ToastContextValue {
   const ctx = useContext(ToastContext);
-  if (!ctx) throw new Error('useToast must be used within a ToastProvider');
+  if (!ctx) throw new Error("useToast must be used within a ToastProvider");
   return ctx;
 }
 
 const VARIANT_BORDER: Record<ToastVariant, string> = {
-  error: 'var(--color-expense)',
-  success: 'var(--color-income)',
-  info: 'var(--color-border-strong)',
-  'coming-soon': 'var(--color-border-strong)',
+  error: "var(--color-expense)",
+  success: "var(--color-income)",
+  info: "var(--color-border-strong)",
+  "coming-soon": "var(--color-border-strong)",
 };
 
 function ToastContainer({ toast }: { toast: ToastState | null }) {
@@ -69,30 +69,30 @@ function ToastContainer({ toast }: { toast: ToastState | null }) {
       role="status"
       aria-live="polite"
       style={{
-        position: 'fixed',
-        bottom: 'calc(64px + env(safe-area-inset-bottom) + 8px)',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        maxWidth: '320px',
-        width: 'calc(100% - 32px)',
-        zIndex: 'var(--z-toast)',
-        pointerEvents: 'none',
+        position: "fixed",
+        bottom: "calc(64px + env(safe-area-inset-bottom) + 8px)",
+        left: "50%",
+        transform: "translateX(-50%)",
+        maxWidth: "320px",
+        width: "calc(100% - 32px)",
+        zIndex: "var(--z-toast)",
+        pointerEvents: "none",
       }}
     >
       <div
         key={toast.id}
         style={{
-          background: 'var(--color-surface-raised)',
-          border: '1px solid var(--color-border)',
+          background: "var(--color-surface-raised)",
+          border: "1px solid var(--color-border)",
           borderLeft: `3px solid ${VARIANT_BORDER[toast.variant]}`,
-          borderRadius: '12px',
-          padding: 'var(--space-3) var(--space-4)',
+          borderRadius: "12px",
+          padding: "var(--space-3) var(--space-4)",
           fontFamily: '"DM Sans", sans-serif',
-          fontSize: 'var(--text-body)',
-          color: 'var(--color-text)',
+          fontSize: "var(--text-body)",
+          color: "var(--color-text)",
           animation: toast.visible
-            ? 'toast-in 200ms ease-out forwards'
-            : 'toast-out 150ms ease-out forwards',
+            ? "toast-in 200ms ease-out forwards"
+            : "toast-out 150ms ease-out forwards",
         }}
       >
         {toast.message}

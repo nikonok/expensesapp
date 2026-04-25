@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { useUIStore } from '../../stores/ui-store';
+import { useEffect, useRef, useState } from "react";
+import { useUIStore } from "../../stores/ui-store";
 
 export interface DonutSlice {
   id: string;
@@ -11,7 +11,7 @@ interface DonutChartProps {
   slices: DonutSlice[];
   totalExpense: number;
   totalIncome: number;
-  categoriesViewType: 'EXPENSE' | 'INCOME';
+  categoriesViewType: "EXPENSE" | "INCOME";
 }
 
 const CX = 100;
@@ -38,7 +38,10 @@ export function dynamicFontSize(str: string, maxSize: number, minSize: number): 
   return Math.max(minSize, Math.min(maxSize, computed));
 }
 
-export function computeTextPositions(primaryFontSize: number, secondaryFontSize: number): { primaryY: number; secondaryY: number } {
+export function computeTextPositions(
+  primaryFontSize: number,
+  secondaryFontSize: number,
+): { primaryY: number; secondaryY: number } {
   const lineHeightRatio = 1.2;
   const primaryLineHeight = primaryFontSize * lineHeightRatio;
   const secondaryLineHeight = secondaryFontSize * lineHeightRatio;
@@ -48,7 +51,12 @@ export function computeTextPositions(primaryFontSize: number, secondaryFontSize:
   return { primaryY, secondaryY };
 }
 
-export default function DonutChart({ slices, totalExpense, totalIncome, categoriesViewType }: DonutChartProps) {
+export default function DonutChart({
+  slices,
+  totalExpense,
+  totalIncome,
+  categoriesViewType,
+}: DonutChartProps) {
   const toggleCategoriesViewType = useUIStore((s) => s.toggleCategoriesViewType);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [animated, setAnimated] = useState(false);
@@ -83,7 +91,12 @@ export default function DonutChart({ slices, totalExpense, totalIncome, categori
     return (
       <div
         onClick={handleChartClick}
-        style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer', padding: 'var(--space-4) 0' }}
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          cursor: "pointer",
+          padding: "var(--space-4) 0",
+        }}
       >
         <svg
           viewBox="0 0 200 200"
@@ -149,15 +162,13 @@ export default function DonutChart({ slices, totalExpense, totalIncome, categori
   });
 
   return (
-    <div
-      style={{ display: 'flex', justifyContent: 'center', padding: 'var(--space-4) 0' }}
-    >
+    <div style={{ display: "flex", justifyContent: "center", padding: "var(--space-4) 0" }}>
       <svg
         viewBox="0 0 200 200"
         width="200"
         height="200"
         onClick={handleChartClick}
-        style={{ cursor: 'pointer', display: 'block', overflow: 'visible' }}
+        style={{ cursor: "pointer", display: "block", overflow: "visible" }}
         aria-label="Category spending chart — tap to toggle expense/income"
         role="img"
       >
@@ -181,13 +192,11 @@ export default function DonutChart({ slices, totalExpense, totalIncome, categori
                 strokeLinecap="butt"
                 style={{
                   opacity: isInactive ? 0.35 : 1,
-                  filter: isActive
-                    ? `brightness(1.3) drop-shadow(0 0 6px ${arc.color})`
-                    : 'none',
+                  filter: isActive ? `brightness(1.3) drop-shadow(0 0 6px ${arc.color})` : "none",
                   transition: animated
                     ? `stroke-dasharray 400ms ${delay}ms ease-out, opacity 200ms ease-out, filter 200ms ease-out`
-                    : 'opacity 200ms ease-out, filter 200ms ease-out',
-                  cursor: 'pointer',
+                    : "opacity 200ms ease-out, filter 200ms ease-out",
+                  cursor: "pointer",
                 }}
                 onClick={(e) => handleSliceClick(e, arc.index)}
               />
@@ -197,13 +206,13 @@ export default function DonutChart({ slices, totalExpense, totalIncome, categori
 
         {/* Center text: primary (active type) on top, secondary below */}
         {(() => {
-          const isExpense = categoriesViewType === 'EXPENSE';
+          const isExpense = categoriesViewType === "EXPENSE";
           const primaryAmount = isExpense ? totalExpense : totalIncome;
           const secondaryAmount = isExpense ? totalIncome : totalExpense;
-          const primaryColor = isExpense ? 'var(--color-expense)' : 'var(--color-income)';
-          const secondaryColor = isExpense ? 'var(--color-income)' : 'var(--color-expense)';
-          const primaryPrefix = isExpense ? '-' : '+';
-          const secondaryPrefix = isExpense ? '+' : '-';
+          const primaryColor = isExpense ? "var(--color-expense)" : "var(--color-income)";
+          const secondaryColor = isExpense ? "var(--color-income)" : "var(--color-expense)";
+          const primaryPrefix = isExpense ? "-" : "+";
+          const secondaryPrefix = isExpense ? "+" : "-";
           const primaryStr = `${primaryPrefix}${formatAmount(primaryAmount)}`;
           const secondaryStr = `${secondaryPrefix}${formatAmount(secondaryAmount)}`;
           const primaryFontSize = dynamicFontSize(primaryStr, 24, 14);

@@ -1,4 +1,4 @@
-export type PeriodFilterType = 'all' | 'today' | 'custom' | 'day' | 'week' | 'month' | 'year';
+export type PeriodFilterType = "all" | "today" | "custom" | "day" | "week" | "month" | "year";
 
 export interface PeriodFilter {
   type: PeriodFilterType;
@@ -6,6 +6,6 @@ export interface PeriodFilter {
   endDate: string;
 }
 
-export type TabName = 'accounts' | 'categories' | 'transactions' | 'budget' | 'overview';
+export type TabName = "accounts" | "categories" | "transactions" | "budget" | "overview";
 
-export type CategoryViewType = 'EXPENSE' | 'INCOME';
+export type CategoryViewType = "EXPENSE" | "INCOME";

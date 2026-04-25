@@ -1,34 +1,37 @@
-import type { Page } from '@playwright/test';
+import type { Page } from "@playwright/test";
 
 /**
  * Mark onboarding as complete via IndexedDB, then navigate to /accounts.
  * Faster and more reliable than clicking through the onboarding UI.
  */
 export async function setup(page: Page) {
-  await page.goto('/');
-  await page.waitForLoadState('domcontentloaded');
+  await page.goto("/");
+  await page.waitForLoadState("domcontentloaded");
   // Give Dexie time to open and initialize the DB
   await page.waitForTimeout(400);
 
   await page.evaluate(() => {
     return new Promise<void>((resolve, reject) => {
-      const req = indexedDB.open('expenses-app-db');
+      const req = indexedDB.open("expenses-app-db");
       req.onsuccess = () => {
         const db = req.result;
-        const tx = db.transaction('settings', 'readwrite');
-        const store = tx.objectStore('settings');
-        store.put({ key: 'hasCompletedOnboarding', value: true });
+        const tx = db.transaction("settings", "readwrite");
+        const store = tx.objectStore("settings");
+        store.put({ key: "hasCompletedOnboarding", value: true });
         // Prevent cold-start redirect: default startupScreen is 'transactions',
         // which would immediately redirect away from /accounts after page load.
-        store.put({ key: 'startupScreen', value: 'accounts' });
-        tx.oncomplete = () => { db.close(); resolve(); };
+        store.put({ key: "startupScreen", value: "accounts" });
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
         tx.onerror = () => reject(tx.error);
       };
       req.onerror = () => reject(req.error);
     });
   });
 
-  await page.goto('/accounts');
+  await page.goto("/accounts");
   await page.waitForURL(/\/accounts/);
 }
 

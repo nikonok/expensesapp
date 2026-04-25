@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router';
-import { Plus, SlidersHorizontal, ArrowLeftRight } from 'lucide-react';
+import { useState, useMemo } from "react";
+import { useNavigate } from "react-router";
+import { Plus, SlidersHorizontal, ArrowLeftRight } from "lucide-react";
 import {
   DndContext,
   PointerSensor,
@@ -9,30 +9,30 @@ import {
   useSensors,
   closestCenter,
   type DragEndEvent,
-} from '@dnd-kit/core';
+} from "@dnd-kit/core";
 import {
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
   arrayMove,
-} from '@dnd-kit/sortable';
-import { useTransactions } from '../../hooks/use-transactions';
-import { useAccounts } from '../../hooks/use-accounts';
-import { useCategories } from '../../hooks/use-categories';
-import { useUIStore } from '../../stores/ui-store';
-import { useSettingsStore } from '../../stores/settings-store';
-import { useToast } from '../shared/Toast';
-import type { Transaction, Account, Category } from '../../db/models';
-import { getDayTotals } from '../../utils/transaction-utils';
-import { revertTransaction, revertTransfer } from '../../services/balance.service';
-import { db } from '../../db/database';
-import PeriodFilter from '../shared/PeriodFilter';
-import { EmptyState } from '../shared/EmptyState';
-import { ConfirmDialog } from '../shared/ConfirmDialog';
-import TransactionDayHeader from './TransactionDayHeader';
-import TransactionRow from './TransactionRow';
-import TransactionFilters from './TransactionFilters';
-import SelectionToolbar from './SelectionToolbar';
+} from "@dnd-kit/sortable";
+import { useTransactions } from "../../hooks/use-transactions";
+import { useAccounts } from "../../hooks/use-accounts";
+import { useCategories } from "../../hooks/use-categories";
+import { useUIStore } from "../../stores/ui-store";
+import { useSettingsStore } from "../../stores/settings-store";
+import { useToast } from "../shared/Toast";
+import type { Transaction, Account, Category } from "../../db/models";
+import { getDayTotals } from "../../utils/transaction-utils";
+import { revertTransaction, revertTransfer } from "../../services/balance.service";
+import { db } from "../../db/database";
+import PeriodFilter from "../shared/PeriodFilter";
+import { EmptyState } from "../shared/EmptyState";
+import { ConfirmDialog } from "../shared/ConfirmDialog";
+import TransactionDayHeader from "./TransactionDayHeader";
+import TransactionRow from "./TransactionRow";
+import TransactionFilters from "./TransactionFilters";
+import SelectionToolbar from "./SelectionToolbar";
 
 export default function TransactionList() {
   const navigate = useNavigate();
@@ -98,15 +98,14 @@ export default function TransactionList() {
       const seenGroups = new Set<string>();
       displayTxs = [];
       for (const t of transactions) {
-        if (t.type === 'TRANSFER' && t.transferGroupId) {
+        if (t.type === "TRANSFER" && t.transferGroupId) {
           if (seenGroups.has(t.transferGroupId)) continue;
           seenGroups.add(t.transferGroupId);
           // Show OUT side as the representative row
-          if (t.transferDirection === 'IN') {
+          if (t.transferDirection === "IN") {
             // Check if OUT side exists in this list
             const outSide = transactions.find(
-              (x) =>
-                x.transferGroupId === t.transferGroupId && x.transferDirection === 'OUT',
+              (x) => x.transferGroupId === t.transferGroupId && x.transferDirection === "OUT",
             );
             if (outSide) {
               displayTxs.push(outSide);
@@ -153,8 +152,7 @@ export default function TransactionList() {
     if (!tx.transferGroupId) return undefined;
     const partner = transactions.find(
       (t) =>
-        t.transferGroupId === tx.transferGroupId &&
-        t.transferDirection !== tx.transferDirection,
+        t.transferGroupId === tx.transferGroupId && t.transferDirection !== tx.transferDirection,
     );
     if (!partner) return undefined;
     return accountMap.get(partner.accountId);
@@ -178,19 +176,19 @@ export default function TransactionList() {
     for (const id of selectedTransactionIds) {
       const tx = txById.get(id);
       if (!tx) continue;
-      if (tx.type === 'TRANSFER' && tx.transferGroupId) {
+      if (tx.type === "TRANSFER" && tx.transferGroupId) {
         if (processedGroups.has(tx.transferGroupId)) continue;
         processedGroups.add(tx.transferGroupId);
         try {
           await revertTransfer(tx.transferGroupId);
         } catch (err) {
-          console.error('Failed to revert transfer', err);
+          console.error("Failed to revert transfer", err);
         }
       } else {
         try {
           await revertTransaction(tx);
         } catch (err) {
-          console.error('Failed to revert transaction', err);
+          console.error("Failed to revert transaction", err);
         }
       }
     }
@@ -205,10 +203,9 @@ export default function TransactionList() {
     if (!tx) return;
     // Navigate to the transaction's actual id (for transfers, use the OUT leg)
     let editId = id;
-    if (tx.type === 'TRANSFER' && tx.transferGroupId) {
+    if (tx.type === "TRANSFER" && tx.transferGroupId) {
       const outTx = transactions.find(
-        (t) =>
-          t.transferGroupId === tx.transferGroupId && t.transferDirection === 'OUT',
+        (t) => t.transferGroupId === tx.transferGroupId && t.transferDirection === "OUT",
       );
       if (outTx?.id !== undefined) editId = outTx.id;
     }
@@ -249,7 +246,7 @@ export default function TransactionList() {
 
         const reordered = arrayMove(sourceGroup, oldIndex, newIndex);
         const updates = reordered.map((tx, index) => ({ ...tx, displayOrder: index * 10 }));
-        await db.transaction('rw', db.transactions, async () => {
+        await db.transaction("rw", db.transactions, async () => {
           await db.transactions.bulkPut(updates);
         });
       } else {
@@ -276,14 +273,14 @@ export default function TransactionList() {
           updatedAt: now,
         }));
 
-        await db.transaction('rw', db.transactions, async () => {
+        await db.transaction("rw", db.transactions, async () => {
           await db.transactions.bulkPut(targetUpdates);
           if (sourceUpdates.length > 0) {
             await db.transactions.bulkPut(sourceUpdates);
           }
-          if (activeTx.type === 'TRANSFER' && activeTx.transferGroupId) {
+          if (activeTx.type === "TRANSFER" && activeTx.transferGroupId) {
             const partner = await db.transactions
-              .where('transferGroupId')
+              .where("transferGroupId")
               .equals(activeTx.transferGroupId)
               .filter((t) => t.id !== activeTx.id)
               .first();
@@ -294,8 +291,8 @@ export default function TransactionList() {
         });
       }
     } catch (err) {
-      console.error('Failed to save transaction order:', err);
-      showToast('Failed to save order', 'error');
+      console.error("Failed to save transaction order:", err);
+      showToast("Failed to save order", "error");
     }
   }
 
@@ -316,8 +313,7 @@ export default function TransactionList() {
         {txs.map((tx) => {
           const account = accountMap.get(tx.accountId);
           if (!account) return null;
-          const category =
-            tx.categoryId !== null ? (categoryMap.get(tx.categoryId) ?? null) : null;
+          const category = tx.categoryId !== null ? (categoryMap.get(tx.categoryId) ?? null) : null;
           const toAccount = getTransferToAccount(tx);
           return (
             <TransactionRow
@@ -340,16 +336,16 @@ export default function TransactionList() {
       {/* Filter row */}
       <div
         style={{
-          position: 'sticky',
+          position: "sticky",
           top: 0,
-          zIndex: 'var(--z-sticky)',
-          background: 'var(--color-bg)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-3)',
-          paddingInline: 'var(--space-4)',
-          paddingBlock: 'var(--space-2)',
-          borderBottom: '1px solid var(--color-border)',
+          zIndex: "var(--z-sticky)",
+          background: "var(--color-bg)",
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--space-3)",
+          paddingInline: "var(--space-4)",
+          paddingBlock: "var(--space-2)",
+          borderBottom: "1px solid var(--color-border)",
         }}
       >
         <div style={{ flex: 1 }}>
@@ -359,18 +355,18 @@ export default function TransactionList() {
           aria-label="Open filters"
           onClick={() => setFiltersOpen(true)}
           style={{
-            minWidth: '44px',
-            minHeight: '44px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: hasFilters ? 'var(--color-primary-dim)' : 'var(--color-surface)',
-            border: `1px solid ${hasFilters ? 'var(--color-primary)' : 'var(--color-border)'}`,
-            borderRadius: 'var(--radius-chip)',
-            cursor: 'pointer',
-            color: hasFilters ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+            minWidth: "44px",
+            minHeight: "44px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: hasFilters ? "var(--color-primary-dim)" : "var(--color-surface)",
+            border: `1px solid ${hasFilters ? "var(--color-primary)" : "var(--color-border)"}`,
+            borderRadius: "var(--radius-chip)",
+            cursor: "pointer",
+            color: hasFilters ? "var(--color-primary)" : "var(--color-text-secondary)",
             flexShrink: 0,
-            transition: 'background 100ms ease-out, border-color 100ms ease-out',
+            transition: "background 100ms ease-out, border-color 100ms ease-out",
           }}
         >
           <SlidersHorizontal size={18} strokeWidth={1.5} />
@@ -381,27 +377,27 @@ export default function TransactionList() {
       {hasFilters && (
         <div
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-2)',
-            paddingInline: 'var(--space-4)',
-            paddingBlock: 'var(--space-2)',
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-2)",
+            paddingInline: "var(--space-4)",
+            paddingBlock: "var(--space-2)",
           }}
         >
           <button
             onClick={clearTransactionFilters}
             style={{
-              height: '32px',
-              padding: '0 var(--space-3)',
-              background: 'var(--color-expense-dim)',
-              border: '1px solid oklch(62% 0.28 18 / 30%)',
-              borderRadius: 'var(--radius-chip)',
-              color: 'var(--color-expense)',
+              height: "32px",
+              padding: "0 var(--space-3)",
+              background: "var(--color-expense-dim)",
+              border: "1px solid oklch(62% 0.28 18 / 30%)",
+              borderRadius: "var(--radius-chip)",
+              color: "var(--color-expense)",
               fontFamily: '"DM Sans", sans-serif',
               fontWeight: 500,
-              fontSize: 'var(--text-caption)',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
+              fontSize: "var(--text-caption)",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
             }}
           >
             Clear filters
@@ -414,15 +410,22 @@ export default function TransactionList() {
         <EmptyState
           icon={ArrowLeftRight}
           heading="No transactions"
-          body={hasFilters ? 'Try adjusting your filters.' : 'Tap + to add your first transaction.'}
+          body={hasFilters ? "Try adjusting your filters." : "Tap + to add your first transaction."}
           action={
             !hasFilters
-              ? { label: 'Add transaction', onClick: () => navigate('/transactions/new') }
+              ? { label: "Add transaction", onClick: () => navigate("/transactions/new") }
               : undefined
           }
         />
       ) : (
-        <div style={{ paddingBottom: selectionCount > 0 ? 'calc(56px + env(safe-area-inset-bottom) + 16px)' : 'var(--space-4)' }}>
+        <div
+          style={{
+            paddingBottom:
+              selectionCount > 0
+                ? "calc(56px + env(safe-area-inset-bottom) + 16px)"
+                : "var(--space-4)",
+          }}
+        >
           {hasFilters ? (
             dayGroupsJsx
           ) : (
@@ -446,33 +449,33 @@ export default function TransactionList() {
       {/* FAB */}
       <button
         aria-label="Add transaction"
-        onClick={() => navigate('/transactions/new')}
+        onClick={() => navigate("/transactions/new")}
         style={{
-          position: 'fixed',
+          position: "fixed",
           bottom: `calc(var(--nav-height) + var(--space-4))`,
-          right: 'var(--space-4)',
-          width: '56px',
-          height: '56px',
-          borderRadius: '50%',
-          background: 'var(--color-primary)',
-          border: 'none',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 'var(--z-fab)',
-          boxShadow: '0 0 16px oklch(72% 0.22 210 / 50%)',
-          transition: 'transform 80ms ease-out, box-shadow 80ms ease-out',
-          color: 'var(--color-bg)',
+          right: "var(--space-4)",
+          width: "56px",
+          height: "56px",
+          borderRadius: "50%",
+          background: "var(--color-primary)",
+          border: "none",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: "var(--z-fab)",
+          boxShadow: "0 0 16px oklch(72% 0.22 210 / 50%)",
+          transition: "transform 80ms ease-out, box-shadow 80ms ease-out",
+          color: "var(--color-bg)",
         }}
         onPointerDown={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.93)';
+          (e.currentTarget as HTMLButtonElement).style.transform = "scale(0.93)";
         }}
         onPointerUp={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.transform = '';
+          (e.currentTarget as HTMLButtonElement).style.transform = "";
         }}
         onPointerLeave={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.transform = '';
+          (e.currentTarget as HTMLButtonElement).style.transform = "";
         }}
       >
         <Plus size={24} strokeWidth={2} />
@@ -495,7 +498,7 @@ export default function TransactionList() {
       <ConfirmDialog
         isOpen={confirmOpen}
         title="Remove transactions"
-        body={`Remove ${selectionCount} transaction${selectionCount !== 1 ? 's' : ''}? This cannot be undone.`}
+        body={`Remove ${selectionCount} transaction${selectionCount !== 1 ? "s" : ""}? This cannot be undone.`}
         confirmLabel="Remove"
         onConfirm={handleConfirmRemove}
         onCancel={() => setConfirmOpen(false)}

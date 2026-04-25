@@ -16,7 +16,8 @@ export default defineConfig({
       manifest: {
         name: "Expenses",
         short_name: "Expenses",
-        description: "Track your income, expenses, and budgets. Dark theme, works offline, no account needed.",
+        description:
+          "Track your income, expenses, and budgets. Dark theme, works offline, no account needed.",
         start_url: "/",
         scope: "/",
         id: "/",
@@ -66,8 +67,8 @@ export default defineConfig({
         ],
       },
       injectManifest: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        globIgnores: ['**/screenshots/**'],
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        globIgnores: ["**/screenshots/**"],
       },
     }),
   ],
@@ -75,11 +76,11 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id: string) {
-          if (id.includes('node_modules/recharts')) return 'recharts';
-          if (id.includes('node_modules/xlsx')) return 'xlsx';
-          if (id.includes('node_modules/@dnd-kit')) return 'dnd-kit';
-          if (id.includes('node_modules/dexie')) return 'dexie';
-          if (id.includes('node_modules/date-fns')) return 'date-fns';
+          if (id.includes("node_modules/recharts")) return "recharts";
+          if (id.includes("node_modules/xlsx")) return "xlsx";
+          if (id.includes("node_modules/@dnd-kit")) return "dnd-kit";
+          if (id.includes("node_modules/dexie")) return "dexie";
+          if (id.includes("node_modules/date-fns")) return "date-fns";
         },
       },
     },

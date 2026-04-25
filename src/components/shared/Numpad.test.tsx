@@ -16,12 +16,7 @@ describe("Numpad", () => {
 
   function renderNumpad(value = "") {
     return render(
-      <Numpad
-        value={value}
-        onChange={onChange}
-        onSave={onSave}
-        variant="transaction"
-      />
+      <Numpad value={value} onChange={onChange} onSave={onSave} variant="transaction" />,
     );
   }
 
@@ -31,15 +26,11 @@ describe("Numpad", () => {
     fireEvent.click(screen.getByRole("button", { name: "1" }));
     expect(onChange).toHaveBeenLastCalledWith("1");
 
-    rerender(
-      <Numpad value="1" onChange={onChange} onSave={onSave} variant="transaction" />
-    );
+    rerender(<Numpad value="1" onChange={onChange} onSave={onSave} variant="transaction" />);
     fireEvent.click(screen.getByRole("button", { name: "0" }));
     expect(onChange).toHaveBeenLastCalledWith("10");
 
-    rerender(
-      <Numpad value="10" onChange={onChange} onSave={onSave} variant="transaction" />
-    );
+    rerender(<Numpad value="10" onChange={onChange} onSave={onSave} variant="transaction" />);
     fireEvent.click(screen.getByRole("button", { name: "0" }));
     expect(onChange).toHaveBeenLastCalledWith("100");
   });
@@ -95,7 +86,13 @@ describe("Numpad", () => {
   describe("decimal guards", () => {
     it("JPY blocks decimal point", () => {
       render(
-        <Numpad value="" onChange={onChange} onSave={vi.fn()} variant="transaction" currencyCode="JPY" />
+        <Numpad
+          value=""
+          onChange={onChange}
+          onSave={vi.fn()}
+          variant="transaction"
+          currencyCode="JPY"
+        />,
       );
       fireEvent.click(screen.getByRole("button", { name: "decimal point" }));
       expect(onChange).not.toHaveBeenCalled();
@@ -103,7 +100,13 @@ describe("Numpad", () => {
 
     it("USD blocks second decimal point in same segment", () => {
       render(
-        <Numpad value="1." onChange={onChange} onSave={vi.fn()} variant="transaction" currencyCode="USD" />
+        <Numpad
+          value="1."
+          onChange={onChange}
+          onSave={vi.fn()}
+          variant="transaction"
+          currencyCode="USD"
+        />,
       );
       fireEvent.click(screen.getByRole("button", { name: "decimal point" }));
       expect(onChange).not.toHaveBeenCalled();
@@ -111,7 +114,13 @@ describe("Numpad", () => {
 
     it("USD blocks 3rd decimal digit", () => {
       render(
-        <Numpad value="1.23" onChange={onChange} onSave={vi.fn()} variant="transaction" currencyCode="USD" />
+        <Numpad
+          value="1.23"
+          onChange={onChange}
+          onSave={vi.fn()}
+          variant="transaction"
+          currencyCode="USD"
+        />,
       );
       fireEvent.click(screen.getByRole("button", { name: "4" }));
       expect(onChange).not.toHaveBeenCalled();
@@ -119,7 +128,13 @@ describe("Numpad", () => {
 
     it("KWD allows 3rd decimal digit", () => {
       render(
-        <Numpad value="1.23" onChange={onChange} onSave={vi.fn()} variant="transaction" currencyCode="KWD" />
+        <Numpad
+          value="1.23"
+          onChange={onChange}
+          onSave={vi.fn()}
+          variant="transaction"
+          currencyCode="KWD"
+        />,
       );
       fireEvent.click(screen.getByRole("button", { name: "4" }));
       expect(onChange).toHaveBeenCalledWith("1.234");
@@ -127,7 +142,13 @@ describe("Numpad", () => {
 
     it("KWD blocks 4th decimal digit", () => {
       render(
-        <Numpad value="1.234" onChange={onChange} onSave={vi.fn()} variant="transaction" currencyCode="KWD" />
+        <Numpad
+          value="1.234"
+          onChange={onChange}
+          onSave={vi.fn()}
+          variant="transaction"
+          currencyCode="KWD"
+        />,
       );
       fireEvent.click(screen.getByRole("button", { name: "5" }));
       expect(onChange).not.toHaveBeenCalled();
@@ -135,7 +156,13 @@ describe("Numpad", () => {
 
     it("multi-segment: new segment after operator resets decimal tracking", () => {
       render(
-        <Numpad value="1.23+4" onChange={onChange} onSave={vi.fn()} variant="transaction" currencyCode="USD" />
+        <Numpad
+          value="1.23+4"
+          onChange={onChange}
+          onSave={vi.fn()}
+          variant="transaction"
+          currencyCode="USD"
+        />,
       );
       fireEvent.click(screen.getByRole("button", { name: "decimal point" }));
       expect(onChange).toHaveBeenCalledWith("1.23+4.");
@@ -143,7 +170,7 @@ describe("Numpad", () => {
 
     it("no currencyCode: all digits pass through without guard", () => {
       render(
-        <Numpad value="1.234567" onChange={onChange} onSave={vi.fn()} variant="transaction" />
+        <Numpad value="1.234567" onChange={onChange} onSave={vi.fn()} variant="transaction" />,
       );
       fireEvent.click(screen.getByRole("button", { name: "8" }));
       expect(onChange).toHaveBeenCalledWith("1.2345678");

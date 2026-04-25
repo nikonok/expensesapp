@@ -20,6 +20,7 @@ This PWA has solid foundational performance patterns but exhibits **moderate re-
 
 **Issue:**  
 In Step1 and Step2 components, `AccountRow` and `CategoryRow` are rendered with inline arrow functions as the `onPress` handler:
+
 ```typescript
 {nonDebtAccounts.map((acc) => (
   <AccountRow key={acc.id} account={acc} onPress={() => onFromAccountSelect(acc)} />
@@ -33,12 +34,16 @@ These anonymous functions are **recreated on every render** of Step1/Step2. Whil
 
 **Impact:** Medium-High. Step1/Step2 render whenever parent state changes (e.g., numpadValue, note). With hundreds of accounts/categories, this multiplies re-renders.
 
-**Recommendation:**  
+**Recommendation:**
+
 1. Wrap inline closures in `useCallback` for each list map:
    ```typescript
-   const handleAccountPress = useCallback((acc: Account) => {
-     onFromAccountSelect(acc);
-   }, [onFromAccountSelect]);
+   const handleAccountPress = useCallback(
+     (acc: Account) => {
+       onFromAccountSelect(acc);
+     },
+     [onFromAccountSelect],
+   );
    ```
 2. Or memoize `AccountRow` and `CategoryRow` with `React.memo()` to ignore shallow changes to `onPress`.
 
@@ -51,6 +56,7 @@ These anonymous functions are **recreated on every render** of Step1/Step2. Whil
 
 **Issue:**  
 Every render calls `dynamicFontSize()` and `computeTextPositions()` to calculate SVG text metrics:
+
 ```typescript
 const primaryFontSize = dynamicFontSize(primaryStr, 24, 14);
 const secondaryFontSize = dynamicFontSize(secondaryStr, 14, 10);
@@ -63,6 +69,7 @@ These helper functions perform string-length-based calculations repeatedly, even
 
 **Recommendation:**  
 Wrap in `useMemo`:
+
 ```typescript
 const { primaryFontSize, secondaryFontSize, primaryY, secondaryY } = useMemo(() => {
   const pfs = dynamicFontSize(primaryStr, 24, 14);
@@ -81,6 +88,7 @@ const { primaryFontSize, secondaryFontSize, primaryY, secondaryY } = useMemo(() 
 
 **Issue:**  
 UI controls pass inline arrow functions as event handlers:
+
 ```typescript
 <button onClick={() => navigate('/categories/trash')} ... />
 <button onClick={() => setCategoriesEditMode(!categoriesEditMode)} ... />
@@ -93,6 +101,7 @@ While these are simple operations, they create new function instances on every r
 
 **Recommendation:**  
 Use `useCallback` to stabilize references:
+
 ```typescript
 const handleToggleEditMode = useCallback(() => {
   setCategoriesEditMode(!categoriesEditMode);
@@ -108,12 +117,14 @@ const handleToggleEditMode = useCallback(() => {
 
 **Issue:**  
 `formatAmount()` is defined as a function expression inside the component body:
+
 ```typescript
 const formatAmount = (amount: number, currency: string) =>
   new Intl.NumberFormat(...).format(...);
 ```
 
 Called in `.map()` for every row:
+
 ```typescript
 const assetsStr = formatAmount(g.assets, g.currency);
 const debtsStr = formatAmount(g.debts, g.currency);
@@ -123,7 +134,8 @@ const debtsStr = formatAmount(g.debts, g.currency);
 
 **Impact:** Low-Medium. If TotalWealth re-renders (account balance changes), and there are many currencies (e.g., 5+), this becomes noticeable.
 
-**Recommendation:**  
+**Recommendation:**
+
 1. Move `formatAmount` outside component or memoize with `useMemo`.
 2. Cache `Intl.NumberFormat` instances:
    ```typescript
@@ -145,17 +157,18 @@ const debtsStr = formatAmount(g.debts, g.currency);
 **File:** `/home/anton/Project/expensesapp/src/components/transactions/TransactionInput.tsx`  
 **Lines:** 2038-2056
 
-**Issue:**  
+**Issue:**
+
 ```typescript
 const handleFromIncomeCategorySelect = useCallback(
   (cat: Category) => {
     // ... logic ...
-    const hasPresetAccount = 
+    const hasPresetAccount =
       account !== null ||
       (qAccountId !== null && allAccounts.some((a) => a.id === parseInt(qAccountId, 10)));
     // ...
   },
-  [account, allAccounts, searchParams],  // Dependencies listed
+  [account, allAccounts, searchParams], // Dependencies listed
 );
 ```
 
@@ -172,7 +185,8 @@ However, looking closer, `searchParams` is passed as a dependency via `[account,
 **File:** `/home/anton/Project/expensesapp/src/components/transactions/TransactionInput.tsx`  
 **Lines:** 1937-1960, 1984-2000
 
-**Issue:**  
+**Issue:**
+
 ```typescript
 useEffect(() => {
   if (secondaryManual) return;
@@ -189,10 +203,11 @@ This effect recalculates the secondary amount whenever `numpadValue` changes. Ho
 
 **Recommendation:**  
 Add an AbortController to cancel in-flight requests:
+
 ```typescript
 useEffect(() => {
   const abort = new AbortController();
-  
+
   (async () => {
     if (secondaryManual) return;
     if (!account || account.currency === mainCurrency) return;
@@ -201,7 +216,7 @@ useEffect(() => {
       setSecondaryAmount("");
       return;
     }
-    
+
     try {
       const rate = await exchangeRateService.getRate(account.currency, mainCurrency);
       if (!abort.signal.aborted) {
@@ -213,7 +228,7 @@ useEffect(() => {
       }
     }
   })();
-  
+
   return () => abort.abort();
 }, [numpadValue, account, mainCurrency, secondaryManual]);
 ```
@@ -225,14 +240,15 @@ useEffect(() => {
 **File:** `/home/anton/Project/expensesapp/src/App.tsx`  
 **Lines:** 66-76
 
-**Issue:**  
+**Issue:**
+
 ```typescript
 useEffect(() => {
   if (!isLoaded) return;
   if (notificationEnabled) {
     scheduleDailyReminder(notificationTime || "20:00");
     registerPeriodicSync();
-    return () => cancelDailyReminder();  // <-- Only returns cleanup if notificationEnabled
+    return () => cancelDailyReminder(); // <-- Only returns cleanup if notificationEnabled
   } else {
     cancelDailyReminder();
     unregisterPeriodicSync();
@@ -244,11 +260,12 @@ The cleanup function is only returned if `notificationEnabled === true`. If the 
 
 **Impact:** Low-Medium. Could leak background sync registration if notifications are toggled.
 
-**Recommendation:**  
+**Recommendation:**
+
 ```typescript
 useEffect(() => {
   if (!isLoaded) return;
-  
+
   if (notificationEnabled) {
     scheduleDailyReminder(notificationTime || "20:00");
     registerPeriodicSync();
@@ -256,7 +273,7 @@ useEffect(() => {
     cancelDailyReminder();
     unregisterPeriodicSync();
   }
-  
+
   return () => {
     cancelDailyReminder();
     unregisterPeriodicSync();
@@ -273,6 +290,7 @@ useEffect(() => {
 
 **Issue:**  
 The effect correctly uses a `cancelled` flag to prevent state updates after unmount:
+
 ```typescript
 useEffect(() => {
   let cancelled = false;
@@ -284,7 +302,9 @@ useEffect(() => {
     }
   }
   calc();
-  return () => { cancelled = true; };
+  return () => {
+    cancelled = true;
+  };
 }, [groups, mainCurrency]);
 ```
 
@@ -294,6 +314,7 @@ This is a good pattern, but the effect refetches rates **every time** the `group
 
 **Recommendation:**  
 Track the set of currencies instead of the entire groups array:
+
 ```typescript
 const currencies = useMemo(() => [...new Set(groups.map((g) => g.currency))], [groups]);
 useEffect(() => {
@@ -311,6 +332,7 @@ useEffect(() => {
 **Lines:** 17-19
 
 Already lazy-loaded:
+
 - ✅ `BudgetPage` (223 lines)
 - ✅ `OverviewPage` (105 lines)
 - ✅ `TransactionInput` (2565 lines)
@@ -358,6 +380,7 @@ useEffect(() => {
 **Lines:** 2188-2195, 501-510, 667-677
 
 Multiple effects attach global `keydown` listeners for Escape. Example:
+
 ```typescript
 useEffect(() => {
   const h = (e: KeyboardEvent) => {
@@ -436,20 +459,20 @@ Consolidate Escape handling into a single top-level effect in the main component
 
 ## 6. SUMMARY TABLE
 
-| # | Issue | Component | Impact | Priority | Fix Effort |
-|---|-------|-----------|--------|----------|-----------|
-| 1.1 | Inline arrow functions in AccountRow/CategoryRow maps | TransactionInput (Step1/2) | High | High | Low |
-| 1.2 | Text metrics recalculation on every render | DonutChart | Medium | Medium | Low |
-| 1.3 | Inline handlers on filter buttons | CategoryList | Low | Low | Low |
-| 1.4 | Intl.NumberFormat recreated per call | TotalWealth | Medium | Medium | Low |
-| 2.1 | Secondary amount effect missing race condition guard | TransactionInput | Medium | Medium | Medium |
-| 2.2 | Notification cleanup conditional | App.tsx | Medium | Medium | Low |
-| 2.3 | Exchange rate currency tracking could optimize | TotalWealth | Low | Low | Low |
-| 2.4 | Multiple global Escape listeners | TransactionInput | Low | Low | Medium |
-| 3.1 | Lazy loading strategy | App.tsx | — | ✅ Good | — |
-| 4.1 | Cancellation pattern | TotalWealth | — | ✅ Good | — |
-| 4.2 | Timer cleanup | DonutChart | — | ✅ Good | — |
-| 5.x | Key props | All lists | — | ✅ Good | — |
+| #   | Issue                                                 | Component                  | Impact | Priority | Fix Effort |
+| --- | ----------------------------------------------------- | -------------------------- | ------ | -------- | ---------- |
+| 1.1 | Inline arrow functions in AccountRow/CategoryRow maps | TransactionInput (Step1/2) | High   | High     | Low        |
+| 1.2 | Text metrics recalculation on every render            | DonutChart                 | Medium | Medium   | Low        |
+| 1.3 | Inline handlers on filter buttons                     | CategoryList               | Low    | Low      | Low        |
+| 1.4 | Intl.NumberFormat recreated per call                  | TotalWealth                | Medium | Medium   | Low        |
+| 2.1 | Secondary amount effect missing race condition guard  | TransactionInput           | Medium | Medium   | Medium     |
+| 2.2 | Notification cleanup conditional                      | App.tsx                    | Medium | Medium   | Low        |
+| 2.3 | Exchange rate currency tracking could optimize        | TotalWealth                | Low    | Low      | Low        |
+| 2.4 | Multiple global Escape listeners                      | TransactionInput           | Low    | Low      | Medium     |
+| 3.1 | Lazy loading strategy                                 | App.tsx                    | —      | ✅ Good  | —          |
+| 4.1 | Cancellation pattern                                  | TotalWealth                | —      | ✅ Good  | —          |
+| 4.2 | Timer cleanup                                         | DonutChart                 | —      | ✅ Good  | —          |
+| 5.x | Key props                                             | All lists                  | —      | ✅ Good  | —          |
 
 ---
 

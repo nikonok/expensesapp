@@ -1,34 +1,34 @@
-import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router';
-import { ArrowLeft } from 'lucide-react';
-import { useSettingsStore } from '../../stores/settings-store';
-import { LanguageSetting } from './LanguageSetting';
-import { ThemeSetting } from './ThemeSetting';
-import { StartupScreenSetting } from './StartupScreenSetting';
-import { NotificationSetting } from './NotificationSetting';
-import { MainCurrencySetting } from './MainCurrencySetting';
-import { BackupSettings } from './BackupSettings';
-import { ExportSettings } from './ExportSettings';
-import { LogSettings } from './LogSettings';
-import { ResetAppSetting } from './ResetAppSetting';
-import { ComingSoonStub } from '../shared/ComingSoonStub';
-import { InstallSetting } from './InstallSetting';
+import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router";
+import { ArrowLeft } from "lucide-react";
+import { useSettingsStore } from "../../stores/settings-store";
+import { LanguageSetting } from "./LanguageSetting";
+import { ThemeSetting } from "./ThemeSetting";
+import { StartupScreenSetting } from "./StartupScreenSetting";
+import { NotificationSetting } from "./NotificationSetting";
+import { MainCurrencySetting } from "./MainCurrencySetting";
+import { BackupSettings } from "./BackupSettings";
+import { ExportSettings } from "./ExportSettings";
+import { LogSettings } from "./LogSettings";
+import { ResetAppSetting } from "./ResetAppSetting";
+import { ComingSoonStub } from "../shared/ComingSoonStub";
+import { InstallSetting } from "./InstallSetting";
 
 function SectionHeader({ label }: { label: string }) {
   return (
     <div
       style={{
-        padding: 'var(--space-4) var(--space-4) var(--space-2)',
+        padding: "var(--space-4) var(--space-4) var(--space-2)",
       }}
     >
       <span
         style={{
-          fontFamily: 'Syne, sans-serif',
+          fontFamily: "Syne, sans-serif",
           fontWeight: 700,
-          fontSize: 'var(--text-caption)',
-          color: 'var(--color-text-secondary)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.12em',
+          fontSize: "var(--text-caption)",
+          color: "var(--color-text-secondary)",
+          textTransform: "uppercase",
+          letterSpacing: "0.12em",
         }}
       >
         {label}
@@ -45,24 +45,24 @@ export function SettingsView() {
   return (
     <div
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100dvh',
-        background: 'var(--color-bg)',
-        maxWidth: '480px',
-        marginInline: 'auto',
-        width: '100%',
+        display: "flex",
+        flexDirection: "column",
+        height: "100dvh",
+        background: "var(--color-bg)",
+        maxWidth: "480px",
+        marginInline: "auto",
+        width: "100%",
       }}
     >
       {/* Top bar */}
       <header
         style={{
-          height: '56px',
-          display: 'flex',
-          alignItems: 'center',
-          paddingInline: 'var(--space-4)',
-          background: 'var(--color-bg)',
-          borderBottom: '1px solid var(--color-border)',
+          height: "56px",
+          display: "flex",
+          alignItems: "center",
+          paddingInline: "var(--space-4)",
+          background: "var(--color-bg)",
+          borderBottom: "1px solid var(--color-border)",
           flexShrink: 0,
         }}
       >
@@ -70,22 +70,22 @@ export function SettingsView() {
           aria-label="Go back"
           onClick={() => {
             const idx = window.history.state?.idx;
-            if (typeof idx === 'number' && idx > 0) {
+            if (typeof idx === "number" && idx > 0) {
               navigate(-1);
             } else {
               navigate(`/${startupScreen}`, { replace: true });
             }
           }}
           style={{
-            minWidth: '44px',
-            minHeight: '44px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-start',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: 'var(--color-text-secondary)',
+            minWidth: "44px",
+            minHeight: "44px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-start",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "var(--color-text-secondary)",
             padding: 0,
           }}
         >
@@ -95,25 +95,25 @@ export function SettingsView() {
         <h1
           style={{
             flex: 1,
-            textAlign: 'center',
-            fontFamily: 'Syne, sans-serif',
+            textAlign: "center",
+            fontFamily: "Syne, sans-serif",
             fontWeight: 700,
-            fontSize: 'var(--text-heading)',
-            color: 'var(--color-text)',
+            fontSize: "var(--text-heading)",
+            color: "var(--color-text)",
             margin: 0,
           }}
         >
-          {t('settings.title')}
+          {t("settings.title")}
         </h1>
 
         {/* Spacer to balance the back button */}
-        <div style={{ minWidth: '44px' }} />
+        <div style={{ minWidth: "44px" }} />
       </header>
 
       {/* Scrollable content */}
-      <div style={{ overflowY: 'auto', flex: 1 }}>
+      <div style={{ overflowY: "auto", flex: 1 }}>
         {/* General section */}
-        <SectionHeader label={t('settings.sections.general')} />
+        <SectionHeader label={t("settings.sections.general")} />
 
         <InstallSetting />
         <LanguageSetting />
@@ -124,33 +124,33 @@ export function SettingsView() {
         <ComingSoonStub>
           <div
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              minHeight: '52px',
-              padding: '0 var(--space-4)',
-              borderBottom: '1px solid var(--color-border)',
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              minHeight: "52px",
+              padding: "0 var(--space-4)",
+              borderBottom: "1px solid var(--color-border)",
             }}
           >
             <span
               style={{
                 fontFamily: '"DM Sans", sans-serif',
                 fontWeight: 500,
-                fontSize: 'var(--text-body)',
-                color: 'var(--color-text)',
+                fontSize: "var(--text-body)",
+                color: "var(--color-text)",
               }}
             >
-              {t('settings.passcode.label')}
+              {t("settings.passcode.label")}
             </span>
           </div>
         </ComingSoonStub>
 
         {/* Notifications section */}
-        <SectionHeader label={t('settings.sections.notifications')} />
+        <SectionHeader label={t("settings.sections.notifications")} />
         <NotificationSetting />
 
         {/* Data section */}
-        <SectionHeader label={t('settings.sections.data')} />
+        <SectionHeader label={t("settings.sections.data")} />
         <MainCurrencySetting />
         <BackupSettings />
         <ExportSettings />
@@ -159,21 +159,21 @@ export function SettingsView() {
         {/* Danger Zone section */}
         <div
           style={{
-            padding: 'var(--space-2) var(--space-4) var(--space-1)',
+            padding: "var(--space-2) var(--space-4) var(--space-1)",
             fontFamily: '"Syne", sans-serif',
             fontWeight: 700,
-            fontSize: 'var(--text-caption)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            color: 'var(--color-expense)',
+            fontSize: "var(--text-caption)",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            color: "var(--color-expense)",
           }}
         >
-          {t('settings.sections.dangerZone')}
+          {t("settings.sections.dangerZone")}
         </div>
         <ResetAppSetting />
 
         {/* Bottom safe area padding */}
-        <div style={{ height: 'calc(var(--space-8) + env(safe-area-inset-bottom))' }} />
+        <div style={{ height: "calc(var(--space-8) + env(safe-area-inset-bottom))" }} />
       </div>
     </div>
   );

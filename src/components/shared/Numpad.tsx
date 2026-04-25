@@ -87,7 +87,11 @@ function useKeyPress() {
     btn.style.transform = "";
     btn.style.filter = "";
   };
-  return { onPointerDown: handlePointerDown, onPointerUp: handlePointerUp, onPointerLeave: handlePointerUp };
+  return {
+    onPointerDown: handlePointerDown,
+    onPointerUp: handlePointerUp,
+    onPointerLeave: handlePointerUp,
+  };
 }
 
 export function Numpad({
@@ -124,7 +128,7 @@ export function Numpad({
   };
 
   const handleSave = () => {
-    if (value === '' || value === '0') {
+    if (value === "" || value === "0") {
       onSave(0);
       return;
     }
@@ -137,9 +141,7 @@ export function Numpad({
 
   const gridStyle: React.CSSProperties = {
     display: "grid",
-    gridTemplateColumns: showOperators
-      ? "1fr 1fr 1fr 1fr 1fr"
-      : "1fr 1fr 1fr 1fr",
+    gridTemplateColumns: showOperators ? "1fr 1fr 1fr 1fr 1fr" : "1fr 1fr 1fr 1fr",
     gridTemplateRows: "repeat(4, 1fr)",
     gap: "6px",
     padding: "8px",
@@ -149,13 +151,7 @@ export function Numpad({
   // Rows [row][col], col 0 = operators (if shown), cols 1-3 = digits A/B/C, col 4 = actions
   // With operators hidden, shift everything left by 1
 
-  const renderKey = (
-    key: KeyDef,
-    row: number,
-    col: number,
-    rowSpan = 1,
-    colSpan = 1
-  ) => {
+  const renderKey = (key: KeyDef, row: number, col: number, rowSpan = 1, colSpan = 1) => {
     const gridRow = `${row + 1} / span ${rowSpan}`;
     const gridColumn = `${col + 1} / span ${colSpan}`;
     const style: React.CSSProperties = { gridRow, gridColumn };
@@ -197,7 +193,7 @@ export function Numpad({
           key="backspace"
           style={{
             ...actionStyle,
-            color: value.length > 0 ? 'var(--color-text)' : 'var(--color-text-secondary)',
+            color: value.length > 0 ? "var(--color-text)" : "var(--color-text-secondary)",
             ...style,
           }}
           onClick={handleBackspace}

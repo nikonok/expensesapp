@@ -1,18 +1,18 @@
-import { create } from 'zustand';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
-import type { PeriodFilter, CategoryViewType } from '../types';
+import { create } from "zustand";
+import { format, startOfMonth, endOfMonth } from "date-fns";
+import type { PeriodFilter, CategoryViewType } from "../types";
 
 function defaultFilter(): PeriodFilter {
   const now = new Date();
   return {
-    type: 'month',
-    startDate: format(startOfMonth(now), 'yyyy-MM-dd'),
-    endDate: format(endOfMonth(now), 'yyyy-MM-dd'),
+    type: "month",
+    startDate: format(startOfMonth(now), "yyyy-MM-dd"),
+    endDate: format(endOfMonth(now), "yyyy-MM-dd"),
   };
 }
 
 function defaultBudgetMonth(): string {
-  return format(new Date(), 'yyyy-MM');
+  return format(new Date(), "yyyy-MM");
 }
 
 interface UIStore {
@@ -58,13 +58,13 @@ export const useUIStore = create<UIStore>((set, get) => ({
   overviewFilter: defaultFilter(),
   budgetMonth: defaultBudgetMonth(),
 
-  categoriesViewType: 'EXPENSE',
+  categoriesViewType: "EXPENSE",
   categoriesEditMode: false,
 
   showInstallPrompt: false,
   showOnboardingCompletePopup: false,
 
-  transactionNoteFilter: '',
+  transactionNoteFilter: "",
   transactionCategoryFilter: null,
   transactionAccountFilter: null,
 
@@ -73,7 +73,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   hasActiveTransactionFilters: () => {
     const s = get();
     return (
-      s.transactionNoteFilter !== '' ||
+      s.transactionNoteFilter !== "" ||
       s.transactionCategoryFilter !== null ||
       s.transactionAccountFilter !== null
     );
@@ -86,7 +86,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
 
   toggleCategoriesViewType: () =>
     set((s) => ({
-      categoriesViewType: s.categoriesViewType === 'EXPENSE' ? 'INCOME' : 'EXPENSE',
+      categoriesViewType: s.categoriesViewType === "EXPENSE" ? "INCOME" : "EXPENSE",
     })),
   setCategoriesEditMode: (on) => set({ categoriesEditMode: on }),
   setShowInstallPrompt: (v) => set({ showInstallPrompt: v }),
@@ -98,7 +98,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
 
   clearTransactionFilters: () =>
     set({
-      transactionNoteFilter: '',
+      transactionNoteFilter: "",
       transactionCategoryFilter: null,
       transactionAccountFilter: null,
     }),
@@ -106,7 +106,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   resetTransactionsFilter: () =>
     set({
       transactionsFilter: defaultFilter(),
-      transactionNoteFilter: '',
+      transactionNoteFilter: "",
       transactionCategoryFilter: null,
       transactionAccountFilter: null,
     }),

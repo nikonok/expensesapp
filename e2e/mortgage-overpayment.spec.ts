@@ -100,7 +100,7 @@ test("mortgage overpayment shows term savings hint", async ({ page }) => {
 
   // Reload so Dexie picks up the newly seeded accounts
   await page.reload();
-  await page.waitForLoadState('domcontentloaded');
+  await page.waitForLoadState("domcontentloaded");
   await page.waitForURL(/\/accounts/, { timeout: 8000 });
 
   // Both accounts should now be visible in the list
@@ -114,7 +114,9 @@ test("mortgage overpayment shows term savings hint", async ({ page }) => {
 
   // Open the new transaction form (evaluate dispatches click directly, bypassing
   // BottomSheet/transform viewport geometry checks in Playwright)
-  await page.locator('button[aria-label="Add transaction"]').evaluate(el => (el as HTMLButtonElement).click());
+  await page
+    .locator('button[aria-label="Add transaction"]')
+    .evaluate((el) => (el as HTMLButtonElement).click());
   await page.waitForURL(/\/transactions\/new/, { timeout: 10000 });
 
   // ── Step 1: select source account ─────────────────────────────────────────

@@ -1,14 +1,13 @@
 name: expensesapp
 
 services:
-
   app:
     build:
       context: .
       dockerfile: Dockerfile
     image: expensesapp:local
     container_name: expensesapp-app
-    user: "101:101"   # nginx uid/gid — explicit here so it cannot be overridden at runtime
+    user: "101:101" # nginx uid/gid — explicit here so it cannot be overridden at runtime
     restart: unless-stopped
     # No host port binding — cloudflared reaches the app via Docker DNS (http://app:80).
     # Uncomment the line below for local debugging only:
@@ -19,15 +18,15 @@ services:
     cap_drop:
       - ALL
     cap_add:
-      - NET_BIND_SERVICE   # allows nginx to bind port 80 as non-root
+      - NET_BIND_SERVICE # allows nginx to bind port 80 as non-root
     security_opt:
       - "no-new-privileges:true"
     tmpfs:
       # nginx:alpine user uid/gid = 101. tmpfs mounts default to root:root (mode 755),
       # so nginx (non-root) can't write its PID file or logs without explicit ownership.
-      - /run:uid=101,gid=101,mode=755              # nginx PID file (/var/run → /run in Alpine)
-      - /var/cache/nginx:uid=101,gid=101,mode=755  # nginx proxy/fastcgi cache
-      - /var/log/nginx:uid=101,gid=101,mode=755    # logs — volatile, no disk-fill risk
+      - /run:uid=101,gid=101,mode=755 # nginx PID file (/var/run → /run in Alpine)
+      - /var/cache/nginx:uid=101,gid=101,mode=755 # nginx proxy/fastcgi cache
+      - /var/log/nginx:uid=101,gid=101,mode=755 # logs — volatile, no disk-fill risk
     deploy:
       resources:
         limits:
@@ -78,9 +77,9 @@ services:
         max-size: "5m"
         max-file: "3"
     extra_hosts:
-      - "host-gateway:host-gateway"  # resolves to the Docker host IP so the tunnel can reach sshd on the host
+      - "host-gateway:host-gateway" # resolves to the Docker host IP so the tunnel can reach sshd on the host
     networks:
-      - tunnel             # reaches app via http://app:80; outbound to CF edge via bridge default route
+      - tunnel # reaches app via http://app:80; outbound to CF edge via bridge default route
     depends_on:
       app:
         condition: service_healthy
@@ -114,9 +113,9 @@ services:
 
 networks:
   tunnel:
-    driver: bridge    # app ↔ cloudflared; outbound internet allowed for CF edge connection
+    driver: bridge # app ↔ cloudflared; outbound internet allowed for CF edge connection
   internal:
-    driver: bridge    # future: app ↔ db only; cloudflared is never added to this network
+    driver: bridge # future: app ↔ db only; cloudflared is never added to this network
 
 volumes:
   # Pre-declared for future PostgreSQL use. Persists independently of the

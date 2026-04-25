@@ -1,17 +1,17 @@
-import { db } from '@/db/database';
-import type { Account, Transaction } from '@/db/models';
-import { logger } from '@/services/log.service';
+import { db } from "@/db/database";
+import type { Account, Transaction } from "@/db/models";
+import { logger } from "@/services/log.service";
 
 export class QuotaError extends Error {
-  name = 'QuotaError';
-  constructor(message = 'Storage quota exceeded') {
+  name = "QuotaError";
+  constructor(message = "Storage quota exceeded") {
     super(message);
   }
 }
 
 function wrapQuotaError<T>(promise: Promise<T>): Promise<T> {
   return promise.catch((err: unknown) => {
-    if (err instanceof DOMException && err.name === 'QuotaExceededError') {
+    if (err instanceof DOMException && err.name === "QuotaExceededError") {
       throw new QuotaError();
     }
     throw err;
@@ -19,25 +19,22 @@ function wrapQuotaError<T>(promise: Promise<T>): Promise<T> {
 }
 
 function getBalanceDelta(account: Account, tx: Transaction): number {
-  if (tx.type === 'INCOME') {
-    return account.type === 'DEBT' ? -tx.amount : tx.amount;
+  if (tx.type === "INCOME") {
+    return account.type === "DEBT" ? -tx.amount : tx.amount;
   }
-  if (tx.type === 'EXPENSE') {
-    return account.type === 'DEBT' ? tx.amount : -tx.amount;
+  if (tx.type === "EXPENSE") {
+    return account.type === "DEBT" ? tx.amount : -tx.amount;
   }
   // TRANSFER
-  if (tx.transferDirection === 'IN') {
-    return account.type === 'DEBT' ? -tx.amount : tx.amount;
+  if (tx.transferDirection === "IN") {
+    return account.type === "DEBT" ? -tx.amount : tx.amount;
   }
   // TRANSFER OUT
-  return account.type === 'DEBT' ? tx.amount : -tx.amount;
+  return account.type === "DEBT" ? tx.amount : -tx.amount;
 }
 
 async function getMinDisplayOrder(date: string): Promise<number> {
-  const existing = await db.transactions
-    .where('date')
-    .equals(date)
-    .toArray();
+  const existing = await db.transactions.where("date").equals(date).toArray();
   if (existing.length === 0) return 1;
   return Math.min(...existing.map((t) => t.displayOrder));
 }
@@ -45,10 +42,10 @@ async function getMinDisplayOrder(date: string): Promise<number> {
 export async function applyTransaction(tx: Transaction): Promise<void> {
   try {
     await wrapQuotaError(
-      db.transaction('rw', [db.accounts, db.transactions], async () => {
+      db.transaction("rw", [db.accounts, db.transactions], async () => {
         const account = await db.accounts.get(tx.accountId);
         if (!account) throw new Error(`Account ${tx.accountId} not found`);
-        if (account.isTrashed) throw new Error('Account is archived and cannot be modified');
+        if (account.isTrashed) throw new Error("Account is archived and cannot be modified");
 
         const minOrder = await getMinDisplayOrder(tx.date);
         const now = new Date().toISOString();
@@ -65,11 +62,11 @@ export async function applyTransaction(tx: Transaction): Promise<void> {
           updatedAt: now,
         });
         await db.transactions.add(newTx);
-      })
+      }),
     );
-    logger.info('tx.apply', { type: tx.type, accountId: tx.accountId });
+    logger.info("tx.apply", { type: tx.type, accountId: tx.accountId });
   } catch (err) {
-    logger.error('tx.apply.failed', {
+    logger.error("tx.apply.failed", {
       type: tx.type,
       accountId: tx.accountId,
       error: err instanceof Error ? err.message : String(err),
@@ -81,10 +78,10 @@ export async function applyTransaction(tx: Transaction): Promise<void> {
 export async function revertTransaction(tx: Transaction): Promise<void> {
   try {
     await wrapQuotaError(
-      db.transaction('rw', [db.accounts, db.transactions], async () => {
+      db.transaction("rw", [db.accounts, db.transactions], async () => {
         const account = await db.accounts.get(tx.accountId);
         if (!account) throw new Error(`Account ${tx.accountId} not found`);
-        if (account.isTrashed) throw new Error('Account is archived and cannot be modified');
+        if (account.isTrashed) throw new Error("Account is archived and cannot be modified");
 
         const now = new Date().toISOString();
         const delta = getBalanceDelta(account, tx);
@@ -95,11 +92,11 @@ export async function revertTransaction(tx: Transaction): Promise<void> {
         // Hard-delete is intentional: Transaction has no isTrashed field (spec §3.7).
         // Soft-delete applies only to accounts and categories.
         await db.transactions.delete(tx.id!);
-      })
+      }),
     );
-    logger.info('tx.delete', { id: tx.id, type: tx.type });
+    logger.info("tx.delete", { id: tx.id, type: tx.type });
   } catch (err) {
-    logger.error('tx.delete.failed', {
+    logger.error("tx.delete.failed", {
       id: tx.id,
       error: err instanceof Error ? err.message : String(err),
     });
@@ -107,19 +104,16 @@ export async function revertTransaction(tx: Transaction): Promise<void> {
   }
 }
 
-export async function replaceTransaction(
-  oldTx: Transaction,
-  newTx: Transaction
-): Promise<void> {
+export async function replaceTransaction(oldTx: Transaction, newTx: Transaction): Promise<void> {
   try {
     await wrapQuotaError(
-      db.transaction('rw', [db.accounts, db.transactions], async () => {
+      db.transaction("rw", [db.accounts, db.transactions], async () => {
         const now = new Date().toISOString();
 
         // Revert old balance effect
         const oldAccount = await db.accounts.get(oldTx.accountId);
         if (!oldAccount) throw new Error(`Account ${oldTx.accountId} not found`);
-        if (oldAccount.isTrashed) throw new Error('Account is archived and cannot be modified');
+        if (oldAccount.isTrashed) throw new Error("Account is archived and cannot be modified");
         const oldDelta = getBalanceDelta(oldAccount, oldTx);
 
         // If account changed, update both accounts
@@ -130,7 +124,7 @@ export async function replaceTransaction(
           });
           const newAccount = await db.accounts.get(newTx.accountId);
           if (!newAccount) throw new Error(`Account ${newTx.accountId} not found`);
-          if (newAccount.isTrashed) throw new Error('Account is archived and cannot be modified');
+          if (newAccount.isTrashed) throw new Error("Account is archived and cannot be modified");
           const newDelta = getBalanceDelta(newAccount, newTx);
           await db.accounts.update(newTx.accountId, {
             balance: newAccount.balance + newDelta,
@@ -161,11 +155,11 @@ export async function replaceTransaction(
           updatedAt: now,
         };
         await db.transactions.put(updatedTx);
-      })
+      }),
     );
-    logger.info('tx.update', { id: oldTx.id, type: newTx.type });
+    logger.info("tx.update", { id: oldTx.id, type: newTx.type });
   } catch (err) {
-    logger.error('tx.update.failed', {
+    logger.error("tx.update.failed", {
       id: oldTx.id,
       type: newTx.type,
       error: err instanceof Error ? err.message : String(err),
@@ -174,25 +168,22 @@ export async function replaceTransaction(
   }
 }
 
-export async function applyTransfer(
-  outTx: Transaction,
-  inTx: Transaction
-): Promise<void> {
+export async function applyTransfer(outTx: Transaction, inTx: Transaction): Promise<void> {
   if (outTx.transferGroupId !== inTx.transferGroupId) {
-    throw new Error('Transfer records must share the same transferGroupId');
+    throw new Error("Transfer records must share the same transferGroupId");
   }
   try {
     await wrapQuotaError(
-      db.transaction('rw', [db.accounts, db.transactions], async () => {
+      db.transaction("rw", [db.accounts, db.transactions], async () => {
         const now = new Date().toISOString();
 
         const outAccount = await db.accounts.get(outTx.accountId);
         if (!outAccount) throw new Error(`Account ${outTx.accountId} not found`);
-        if (outAccount.isTrashed) throw new Error('Account is archived and cannot be modified');
+        if (outAccount.isTrashed) throw new Error("Account is archived and cannot be modified");
 
         const inAccount = await db.accounts.get(inTx.accountId);
         if (!inAccount) throw new Error(`Account ${inTx.accountId} not found`);
-        if (inAccount.isTrashed) throw new Error('Account is archived and cannot be modified');
+        if (inAccount.isTrashed) throw new Error("Account is archived and cannot be modified");
 
         const outDelta = getBalanceDelta(outAccount, outTx);
         const inDelta = getBalanceDelta(inAccount, inTx);
@@ -235,15 +226,15 @@ export async function applyTransfer(
           updatedAt: now,
         };
         await db.transactions.add(inRecord);
-      })
+      }),
     );
-    logger.info('tx.transfer.apply', {
+    logger.info("tx.transfer.apply", {
       outAccountId: outTx.accountId,
       inAccountId: inTx.accountId,
       transferGroupId: outTx.transferGroupId,
     });
   } catch (err) {
-    logger.error('tx.transfer.apply.failed', {
+    logger.error("tx.transfer.apply.failed", {
       outAccountId: outTx.accountId,
       inAccountId: inTx.accountId,
       error: err instanceof Error ? err.message : String(err),
@@ -255,15 +246,15 @@ export async function applyTransfer(
 export async function revertTransfer(transferGroupId: string): Promise<void> {
   try {
     await wrapQuotaError(
-      db.transaction('rw', [db.accounts, db.transactions], async () => {
+      db.transaction("rw", [db.accounts, db.transactions], async () => {
         const records = await db.transactions
-          .where('transferGroupId')
+          .where("transferGroupId")
           .equals(transferGroupId)
           .toArray();
 
         if (records.length !== 2) {
           throw new Error(
-            `Expected 2 transfer records for group ${transferGroupId}, found ${records.length}`
+            `Expected 2 transfer records for group ${transferGroupId}, found ${records.length}`,
           );
         }
 
@@ -271,7 +262,7 @@ export async function revertTransfer(transferGroupId: string): Promise<void> {
         for (const record of records) {
           const account = await db.accounts.get(record.accountId);
           if (!account) throw new Error(`Account ${record.accountId} not found`);
-          if (account.isTrashed) throw new Error('Account is archived and cannot be modified');
+          if (account.isTrashed) throw new Error("Account is archived and cannot be modified");
           const delta = getBalanceDelta(account, record);
           await db.accounts.update(record.accountId, {
             balance: account.balance - delta,
@@ -280,11 +271,11 @@ export async function revertTransfer(transferGroupId: string): Promise<void> {
           // Hard-delete is intentional: Transaction has no isTrashed field (spec §3.7).
           await db.transactions.delete(record.id!);
         }
-      })
+      }),
     );
-    logger.info('tx.transfer.delete', { transferGroupId });
+    logger.info("tx.transfer.delete", { transferGroupId });
   } catch (err) {
-    logger.error('tx.transfer.delete.failed', {
+    logger.error("tx.transfer.delete.failed", {
       transferGroupId,
       error: err instanceof Error ? err.message : String(err),
     });
@@ -295,19 +286,19 @@ export async function revertTransfer(transferGroupId: string): Promise<void> {
 export async function replaceTransfer(
   transferGroupId: string,
   outTx: Transaction,
-  inTx: Transaction
+  inTx: Transaction,
 ): Promise<void> {
   try {
     await wrapQuotaError(
-      db.transaction('rw', [db.accounts, db.transactions], async () => {
+      db.transaction("rw", [db.accounts, db.transactions], async () => {
         const records = await db.transactions
-          .where('transferGroupId')
+          .where("transferGroupId")
           .equals(transferGroupId)
           .toArray();
 
         if (records.length !== 2) {
           throw new Error(
-            `Expected 2 transfer records for group ${transferGroupId}, found ${records.length}`
+            `Expected 2 transfer records for group ${transferGroupId}, found ${records.length}`,
           );
         }
 
@@ -317,7 +308,7 @@ export async function replaceTransfer(
         for (const record of records) {
           const account = await db.accounts.get(record.accountId);
           if (!account) throw new Error(`Account ${record.accountId} not found`);
-          if (account.isTrashed) throw new Error('Account is archived and cannot be modified');
+          if (account.isTrashed) throw new Error("Account is archived and cannot be modified");
           const delta = getBalanceDelta(account, record);
           await db.accounts.update(record.accountId, {
             balance: account.balance - delta,
@@ -330,10 +321,10 @@ export async function replaceTransfer(
         // Apply new records
         const outAccount = await db.accounts.get(outTx.accountId);
         if (!outAccount) throw new Error(`Account ${outTx.accountId} not found`);
-        if (outAccount.isTrashed) throw new Error('Account is archived and cannot be modified');
+        if (outAccount.isTrashed) throw new Error("Account is archived and cannot be modified");
         const inAccount = await db.accounts.get(inTx.accountId);
         if (!inAccount) throw new Error(`Account ${inTx.accountId} not found`);
-        if (inAccount.isTrashed) throw new Error('Account is archived and cannot be modified');
+        if (inAccount.isTrashed) throw new Error("Account is archived and cannot be modified");
 
         const outDelta = getBalanceDelta(outAccount, outTx);
         const inDelta = getBalanceDelta(inAccount, inTx);
@@ -373,11 +364,11 @@ export async function replaceTransfer(
           createdAt: now,
           updatedAt: now,
         });
-      })
+      }),
     );
-    logger.info('tx.transfer.update', { transferGroupId });
+    logger.info("tx.transfer.update", { transferGroupId });
   } catch (err) {
-    logger.error('tx.transfer.update.failed', {
+    logger.error("tx.transfer.update.failed", {
       transferGroupId,
       error: err instanceof Error ? err.message : String(err),
     });
@@ -385,25 +376,22 @@ export async function replaceTransfer(
   }
 }
 
-export async function adjustBalance(
-  accountId: number,
-  newBalance: number
-): Promise<void> {
+export async function adjustBalance(accountId: number, newBalance: number): Promise<void> {
   try {
     await wrapQuotaError(
-      db.transaction('rw', [db.accounts], async () => {
+      db.transaction("rw", [db.accounts], async () => {
         const account = await db.accounts.get(accountId);
         if (!account) throw new Error(`Account ${accountId} not found`);
-        if (account.isTrashed) throw new Error('Account is archived and cannot be modified');
+        if (account.isTrashed) throw new Error("Account is archived and cannot be modified");
         await db.accounts.update(accountId, {
           balance: newBalance,
           updatedAt: new Date().toISOString(),
         });
-      })
+      }),
     );
-    logger.info('account.balance.adjust', { accountId, newBalance });
+    logger.info("account.balance.adjust", { accountId, newBalance });
   } catch (err) {
-    logger.error('account.balance.adjust.failed', {
+    logger.error("account.balance.adjust.failed", {
       accountId,
       newBalance,
       error: err instanceof Error ? err.message : String(err),

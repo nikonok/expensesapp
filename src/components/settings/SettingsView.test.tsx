@@ -15,7 +15,9 @@ vi.mock("../../services/backup.service", () => ({
   importBackup: vi.fn(),
   createBackup: vi.fn(),
 }));
-vi.mock("../../services/export.service", () => ({ exportService: { exportTransactions: vi.fn() } }));
+vi.mock("../../services/export.service", () => ({
+  exportService: { exportTransactions: vi.fn() },
+}));
 vi.mock("../../services/exchange-rate.service", () => ({
   exchangeRateService: { fetchRate: vi.fn() },
 }));
@@ -65,9 +67,13 @@ vi.mock("react-router", async () => {
 });
 
 // Mock settings store
-type MockState = { startupScreen: string; logLevel: 'errors' | 'all'; update: Mock };
+type MockState = { startupScreen: string; logLevel: "errors" | "all"; update: Mock };
 const mockUpdate = vi.fn();
-const mockState: MockState = { startupScreen: "transactions", logLevel: "errors", update: mockUpdate };
+const mockState: MockState = {
+  startupScreen: "transactions",
+  logLevel: "errors",
+  update: mockUpdate,
+};
 vi.mock("../../stores/settings-store", () => ({
   useSettingsStore: (sel?: (s: MockState) => unknown) =>
     typeof sel === "function" ? sel(mockState) : mockState,

@@ -21,9 +21,14 @@ vi.mock("../shared/ConfirmDialog", () => ({ ConfirmDialog: () => null }));
 vi.mock("../shared/IconPicker", () => ({ getLucideIcon: () => null }));
 // Numpad mock: renders the value prop so we can assert what it was seeded with
 vi.mock("../shared/Numpad", () => ({
-  Numpad: ({ value }: { value: string; onChange: (v: string) => void; onSave: (v: number) => void; variant: string }) => (
-    <span data-testid="numpad-value">{value}</span>
-  ),
+  Numpad: ({
+    value,
+  }: {
+    value: string;
+    onChange: (v: string) => void;
+    onSave: (v: number) => void;
+    variant: string;
+  }) => <span data-testid="numpad-value">{value}</span>,
 }));
 
 // ── History mocks for BottomSheet ───────────────────────────────────────────
@@ -66,12 +71,7 @@ describe("AccountDetail — adjust balance numpad seeding", () => {
   function renderDetail(account: Account) {
     return render(
       <MemoryRouter>
-        <AccountDetail
-          account={account}
-          isOpen
-          onClose={onClose}
-          onEdit={vi.fn()}
-        />
+        <AccountDetail account={account} isOpen onClose={onClose} onEdit={vi.fn()} />
       </MemoryRouter>,
     );
   }
@@ -111,12 +111,7 @@ describe("mortgage time remaining", () => {
   function renderDetail(account: Account) {
     return render(
       <MemoryRouter>
-        <AccountDetail
-          account={account}
-          isOpen
-          onClose={onClose}
-          onEdit={vi.fn()}
-        />
+        <AccountDetail account={account} isOpen onClose={onClose} onEdit={vi.fn()} />
       </MemoryRouter>,
     );
   }

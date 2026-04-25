@@ -1,5 +1,10 @@
-import { useState, useEffect } from 'react';
-import { getUpdateAvailable, onUpdateAvailableChange, triggerUpdate, dismissUpdate } from '../sw-register';
+import { useState, useEffect } from "react";
+import {
+  getUpdateAvailable,
+  onUpdateAvailableChange,
+  triggerUpdate,
+  dismissUpdate,
+} from "../sw-register";
 
 export function useSwUpdate() {
   const [updateAvailable, setUpdateAvailable] = useState(getUpdateAvailable());

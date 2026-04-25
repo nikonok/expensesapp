@@ -1,6 +1,6 @@
-import { db } from '@/db/database';
-import { useSettingsStore } from '@/stores/settings-store';
-import type { Log, LogLevel } from '@/db/models';
+import { db } from "@/db/database";
+import { useSettingsStore } from "@/stores/settings-store";
+import type { Log, LogLevel } from "@/db/models";
 
 const buffer: Log[] = [];
 let isFlushing = false;
@@ -25,7 +25,7 @@ async function _flush(): Promise<void> {
   try {
     await db.logs.bulkAdd(batch);
   } catch (err) {
-    if (import.meta.env.DEV) console.error('[log-service] flush failed', err);
+    if (import.meta.env.DEV) console.error("[log-service] flush failed", err);
   } finally {
     isFlushing = false;
     if (buffer.length > 0) scheduleFlush();
@@ -41,13 +41,13 @@ function serializeContext(
     JSON.stringify(ctx); // test for circular refs
     return { ...ctx };
   } catch {
-    return { error: 'context not serializable' };
+    return { error: "context not serializable" };
   }
 }
 
 function log(level: LogLevel, message: string, context?: Record<string, unknown> | Error): void {
   const { logLevel } = useSettingsStore.getState();
-  if (logLevel === 'errors' && level !== 'ERROR') return;
+  if (logLevel === "errors" && level !== "ERROR") return;
   const entry: Log = {
     timestamp: new Date().toISOString(),
     level,
@@ -61,30 +61,30 @@ function log(level: LogLevel, message: string, context?: Record<string, unknown>
 
 export const logger = {
   debug: (message: string, context?: Record<string, unknown> | Error) =>
-    log('DEBUG', message, context),
+    log("DEBUG", message, context),
   info: (message: string, context?: Record<string, unknown> | Error) =>
-    log('INFO', message, context),
+    log("INFO", message, context),
   warn: (message: string, context?: Record<string, unknown> | Error) =>
-    log('WARN', message, context),
+    log("WARN", message, context),
   error: (message: string, context?: Record<string, unknown> | Error) =>
-    log('ERROR', message, context),
+    log("ERROR", message, context),
 
   async trimOldLogs(): Promise<number> {
     const cutoff = new Date(Date.now() - RETENTION_MS).toISOString();
-    return db.logs.where('timestamp').below(cutoff).delete();
+    return db.logs.where("timestamp").below(cutoff).delete();
   },
 
   async exportLogs(): Promise<void> {
     await _flush();
     await this.trimOldLogs();
-    const logs = await db.logs.orderBy('timestamp').toArray();
-    const lines = logs.map(l => {
-      const ctx = l.context ? ' ' + JSON.stringify(l.context) : '';
+    const logs = await db.logs.orderBy("timestamp").toArray();
+    const lines = logs.map((l) => {
+      const ctx = l.context ? " " + JSON.stringify(l.context) : "";
       return `[${l.timestamp}] ${l.level} ${l.message}${ctx}`;
     });
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = `expenses-logs-${new Date().toISOString().slice(0, 10)}.txt`;
     document.body.appendChild(a);

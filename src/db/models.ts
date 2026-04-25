@@ -145,7 +145,7 @@ export interface Backup {
 
 // ── Logs ──
 
-export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
+export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
 
 export interface Log {
   id?: number;

@@ -4,12 +4,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import BottomSheet from "./BottomSheet";
 
 // Mock history.pushState so it doesn't affect jsdom's location.
-const pushStateSpy = vi
-  .spyOn(window.history, "pushState")
-  .mockImplementation(() => {});
-const replaceStateSpy = vi
-  .spyOn(window.history, "replaceState")
-  .mockImplementation(() => {});
+const pushStateSpy = vi.spyOn(window.history, "pushState").mockImplementation(() => {});
+const replaceStateSpy = vi.spyOn(window.history, "replaceState").mockImplementation(() => {});
 
 describe("BottomSheet — hardware-back / LIFO close stack", () => {
   beforeEach(() => {
@@ -153,9 +149,7 @@ describe("BottomSheet — hardware-back / LIFO close stack", () => {
       </BottomSheet>,
     );
 
-    const backdrop = document.body.querySelector(
-      '[aria-hidden="true"]',
-    ) as HTMLElement;
+    const backdrop = document.body.querySelector('[aria-hidden="true"]') as HTMLElement;
     expect(backdrop).not.toBeNull();
 
     act(() => {
@@ -174,9 +168,7 @@ describe("BottomSheet — hardware-back / LIFO close stack", () => {
       </BottomSheet>,
     );
 
-    const backdrop = document.body.querySelector(
-      '[aria-hidden="true"]',
-    ) as HTMLElement;
+    const backdrop = document.body.querySelector('[aria-hidden="true"]') as HTMLElement;
     act(() => {
       backdrop.click();
     });
