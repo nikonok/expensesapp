@@ -16,6 +16,7 @@ import SettingsPage from "./pages/SettingsPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import TrashedAccounts from "./components/accounts/TrashedAccounts";
 import { InstallPopup } from "./components/shared/InstallPopup";
+import { OnboardingCompletePopup } from "./components/shared/OnboardingCompletePopup";
 const BudgetPage = lazy(() => import("./pages/BudgetPage"));
 const OverviewPage = lazy(() => import("./pages/OverviewPage"));
 const TransactionInput = lazy(() => import("./components/transactions/TransactionInput"));
@@ -209,6 +210,7 @@ export default function App() {
       <ToastProvider>
         <AppRoutes />
         <InstallPopup />
+        <OnboardingCompletePopup />
       </ToastProvider>
     </BrowserRouter>
   );

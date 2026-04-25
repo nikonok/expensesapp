@@ -282,6 +282,12 @@
       "cta": "Install",
       "skip": "Maybe later",
       "countdown": "Closing in {{seconds}}s…"
+    },
+    "complete": {
+      "title": "You're all set",
+      "body": "Your data has been saved. You can start tracking expenses now.",
+      "cancel": "Cancel & start over",
+      "countdown": "Closing in {{seconds}}s"
     }
   },
   "errors": {

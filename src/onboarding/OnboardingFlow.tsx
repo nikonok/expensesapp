@@ -555,6 +555,7 @@ export default function OnboardingFlow() {
       if (getCanInstall()) {
         useUIStore.getState().setShowInstallPrompt(true);
       }
+      useUIStore.getState().setShowOnboardingCompletePopup(true);
     } catch (err) {
       console.error('Onboarding save failed:', err);
       setError(t('errors.generic'));

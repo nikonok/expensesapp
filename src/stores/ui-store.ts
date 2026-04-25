@@ -25,6 +25,7 @@ interface UIStore {
   categoriesEditMode: boolean;
 
   showInstallPrompt: boolean;
+  showOnboardingCompletePopup: boolean;
 
   transactionNoteFilter: string;
   transactionCategoryFilter: number | null;
@@ -41,6 +42,7 @@ interface UIStore {
   toggleCategoriesViewType: () => void;
   setCategoriesEditMode: (on: boolean) => void;
   setShowInstallPrompt: (v: boolean) => void;
+  setShowOnboardingCompletePopup: (v: boolean) => void;
   setTransactionNoteFilter: (note: string) => void;
   setTransactionCategoryFilter: (id: number | null) => void;
   setTransactionAccountFilter: (id: number | null) => void;
@@ -60,6 +62,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   categoriesEditMode: false,
 
   showInstallPrompt: false,
+  showOnboardingCompletePopup: false,
 
   transactionNoteFilter: '',
   transactionCategoryFilter: null,
@@ -87,6 +90,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
     })),
   setCategoriesEditMode: (on) => set({ categoriesEditMode: on }),
   setShowInstallPrompt: (v) => set({ showInstallPrompt: v }),
+  setShowOnboardingCompletePopup: (v) => set({ showOnboardingCompletePopup: v }),
 
   setTransactionNoteFilter: (note) => set({ transactionNoteFilter: note }),
   setTransactionCategoryFilter: (id) => set({ transactionCategoryFilter: id }),
