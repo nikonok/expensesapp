@@ -306,6 +306,7 @@
     "integrityTitle": "Database Error",
     "integrityBody": "Your database appears to be corrupted. Restore from a backup to recover your data.",
     "restoreFailed": "Restore failed. Please try a different backup.",
-    "invalidFile": "Invalid or corrupted backup file."
+    "invalidFile": "Invalid or corrupted backup file.",
+    "amountTooLarge": "Amount exceeds the maximum allowed value"
   }
 }

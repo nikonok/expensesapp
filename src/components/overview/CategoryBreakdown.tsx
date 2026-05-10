@@ -192,6 +192,8 @@ export default function CategoryBreakdown({ transactions, currency }: CategoryBr
                       fontSize: "var(--text-amount-sm)",
                       color: isZero ? "var(--color-text-disabled)" : "var(--color-expense)",
                       flexShrink: 0,
+                      whiteSpace: "nowrap",
+                      minWidth: "fit-content",
                     }}
                   >
                     {isZero ? "—" : formatAmount(amount, currency)}

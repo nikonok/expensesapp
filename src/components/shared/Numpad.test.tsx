@@ -2,6 +2,11 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Numpad } from "./Numpad";
+import { ToastProvider } from "./Toast";
+
+function renderWithToast(ui: React.ReactElement) {
+  return render(<ToastProvider>{ui}</ToastProvider>);
+}
 
 describe("Numpad", () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -15,7 +20,7 @@ describe("Numpad", () => {
   });
 
   function renderNumpad(value = "") {
-    return render(
+    return renderWithToast(
       <Numpad value={value} onChange={onChange} onSave={onSave} variant="transaction" />,
     );
   }
@@ -26,11 +31,11 @@ describe("Numpad", () => {
     fireEvent.click(screen.getByRole("button", { name: "1" }));
     expect(onChange).toHaveBeenLastCalledWith("1");
 
-    rerender(<Numpad value="1" onChange={onChange} onSave={onSave} variant="transaction" />);
+    rerender(<ToastProvider><Numpad value="1" onChange={onChange} onSave={onSave} variant="transaction" /></ToastProvider>);
     fireEvent.click(screen.getByRole("button", { name: "0" }));
     expect(onChange).toHaveBeenLastCalledWith("10");
 
-    rerender(<Numpad value="10" onChange={onChange} onSave={onSave} variant="transaction" />);
+    rerender(<ToastProvider><Numpad value="10" onChange={onChange} onSave={onSave} variant="transaction" /></ToastProvider>);
     fireEvent.click(screen.getByRole("button", { name: "0" }));
     expect(onChange).toHaveBeenLastCalledWith("100");
   });
@@ -85,7 +90,7 @@ describe("Numpad", () => {
 
   describe("decimal guards", () => {
     it("JPY blocks decimal point", () => {
-      render(
+      renderWithToast(
         <Numpad
           value=""
           onChange={onChange}
@@ -99,7 +104,7 @@ describe("Numpad", () => {
     });
 
     it("USD blocks second decimal point in same segment", () => {
-      render(
+      renderWithToast(
         <Numpad
           value="1."
           onChange={onChange}
@@ -113,7 +118,7 @@ describe("Numpad", () => {
     });
 
     it("USD blocks 3rd decimal digit", () => {
-      render(
+      renderWithToast(
         <Numpad
           value="1.23"
           onChange={onChange}
@@ -127,7 +132,7 @@ describe("Numpad", () => {
     });
 
     it("KWD allows 3rd decimal digit", () => {
-      render(
+      renderWithToast(
         <Numpad
           value="1.23"
           onChange={onChange}
@@ -141,7 +146,7 @@ describe("Numpad", () => {
     });
 
     it("KWD blocks 4th decimal digit", () => {
-      render(
+      renderWithToast(
         <Numpad
           value="1.234"
           onChange={onChange}
@@ -155,7 +160,7 @@ describe("Numpad", () => {
     });
 
     it("multi-segment: new segment after operator resets decimal tracking", () => {
-      render(
+      renderWithToast(
         <Numpad
           value="1.23+4"
           onChange={onChange}
@@ -169,11 +174,29 @@ describe("Numpad", () => {
     });
 
     it("no currencyCode: all digits pass through without guard", () => {
-      render(
+      renderWithToast(
         <Numpad value="1.234567" onChange={onChange} onSave={vi.fn()} variant="transaction" />,
       );
       fireEvent.click(screen.getByRole("button", { name: "8" }));
       expect(onChange).toHaveBeenCalledWith("1.2345678");
     });
+  });
+
+  it("shows toast and does not call onSave when amount exceeds MAX_AMOUNT", () => {
+    const onChange = vi.fn();
+    const onSave = vi.fn();
+    // value that evaluates to > 99_999_999_999 minor units (e.g. 9999999999.01 dollars = 999,999,999,901 cents)
+    renderWithToast(
+      <Numpad
+        value="9999999999.01"
+        onChange={onChange}
+        onSave={onSave}
+        variant="transaction"
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    expect(onSave).not.toHaveBeenCalled();
+    // Toast renders with role="status" — getByRole throws if absent
+    expect(screen.getByRole("status")).toBeTruthy();
   });
 });

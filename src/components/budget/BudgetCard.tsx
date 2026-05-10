@@ -126,6 +126,8 @@ export function BudgetCard({ item, type, month }: BudgetCardProps) {
                 display: "flex",
                 gap: "4px",
                 alignItems: "baseline",
+                whiteSpace: "nowrap",
+                minWidth: "fit-content",
               }}
             >
               Budget:{" "}
@@ -135,6 +137,7 @@ export function BudgetCard({ item, type, month }: BudgetCardProps) {
                   fontWeight: 600,
                   fontSize: "var(--text-amount-sm)",
                   color: "var(--color-text)",
+                  whiteSpace: "nowrap",
                 }}
               >
                 {formatAmt(item.planned)}
@@ -148,6 +151,8 @@ export function BudgetCard({ item, type, month }: BudgetCardProps) {
                 display: "flex",
                 gap: "4px",
                 alignItems: "baseline",
+                whiteSpace: "nowrap",
+                minWidth: "fit-content",
               }}
             >
               Spent:{" "}
@@ -158,6 +163,7 @@ export function BudgetCard({ item, type, month }: BudgetCardProps) {
                   fontSize: "var(--text-amount-sm)",
                   color: isOverBudget ? "var(--color-expense)" : "var(--color-text)",
                   textShadow: isOverBudget ? "0 0 12px oklch(62% 0.28 18 / 45%)" : undefined,
+                  whiteSpace: "nowrap",
                 }}
               >
                 {formatAmt(item.spent)}

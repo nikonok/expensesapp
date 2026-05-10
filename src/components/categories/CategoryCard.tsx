@@ -2,6 +2,8 @@ import { GripVertical, X } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import type { Category } from "../../db/models";
 import { getLucideIcon } from "../shared/IconPicker";
+import { formatAmountNoSymbol } from "../../utils/currency-utils";
+import { useSettingsStore } from "../../stores/settings-store";
 
 interface CategoryCardProps {
   category: Category;
@@ -20,6 +22,7 @@ export default function CategoryCard({
   onRemove,
   onClick,
 }: CategoryCardProps) {
+  const mainCurrency = useSettingsStore((s) => s.mainCurrency);
   const isOverBudget = budget !== null && spent > budget;
   const progress = budget !== null && budget > 0 ? Math.min(spent / budget, 1) : 0;
 
@@ -136,15 +139,16 @@ export default function CategoryCard({
             fontSize: "var(--text-amount-sm)",
           }}
         >
-          <span style={{ color: "var(--color-text-secondary)" }}>
-            Budget: {budget !== null ? (budget / 100).toFixed(2) : "—"}
+          <span style={{ color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
+            Budget: {budget !== null ? formatAmountNoSymbol(budget, mainCurrency) : "—"}
           </span>
           <span
             style={{
               color: isOverBudget ? "var(--color-expense)" : "var(--color-text)",
+              whiteSpace: "nowrap",
             }}
           >
-            Spent: {(spent / 100).toFixed(2)}
+            Spent: {formatAmountNoSymbol(spent, mainCurrency)}
           </span>
         </div>
       </div>

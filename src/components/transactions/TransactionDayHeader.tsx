@@ -60,7 +60,7 @@ export default function TransactionDayHeader({
       </div>
 
       {/* Right: income + expense totals */}
-      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", flexShrink: 0, whiteSpace: "nowrap" }}>
         {totalIncome > 0 && (
           <AmountDisplay amount={totalIncome} currency={currency} type="income" size="sm" />
         )}
