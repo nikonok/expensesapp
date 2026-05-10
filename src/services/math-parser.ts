@@ -6,7 +6,10 @@
  * Returns null for empty or invalid input.
  * Result is an integer in minor currency units (cents). e.g. "10.50" → 1050.
  */
-export function evaluateExpression(expr: string): number | null {
+
+export const MAX_AMOUNT = 99_999_999_999;
+
+function evaluateRaw(expr: string): number | null {
   if (!expr || expr.trim() === "") return null;
 
   // Normalize unicode operators to ASCII
@@ -93,7 +96,17 @@ export function evaluateExpression(expr: string): number | null {
   }
 
   const rounded = Math.round(result * 100);
-  const MAX_AMOUNT = 99_999_999_999;
-  if (!isFinite(rounded) || rounded > MAX_AMOUNT || rounded < 0) return null;
+  if (!isFinite(rounded)) return null;
   return rounded;
+}
+
+export function evaluateExpression(expr: string): number | null {
+  const raw = evaluateRaw(expr);
+  if (raw === null || raw < 0 || raw > MAX_AMOUNT) return null;
+  return raw;
+}
+
+export function isAmountOverLimit(expr: string): boolean {
+  const raw = evaluateRaw(expr);
+  return raw !== null && raw > MAX_AMOUNT;
 }

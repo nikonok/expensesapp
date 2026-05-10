@@ -1,6 +1,8 @@
 import { Delete, Calendar, BarChart2 } from "lucide-react";
-import { evaluateExpression } from "@/services/math-parser";
+import { evaluateExpression, isAmountOverLimit } from "@/services/math-parser";
 import { getCurrencyDecimalPlaces } from "@/utils/currency-utils";
+import { useToast } from "@/components/shared/Toast";
+import { useTranslation } from "@/hooks/use-translation";
 
 export interface NumpadProps {
   value: string;
@@ -106,6 +108,8 @@ export function Numpad({
 }: NumpadProps) {
   const showOperators = variant === "transaction" && !isTransfer;
   const pressHandlers = useKeyPress();
+  const { show } = useToast();
+  const { t } = useTranslation();
 
   const handleChar = (char: string) => {
     if (currencyCode) {
@@ -133,7 +137,12 @@ export function Numpad({
       return;
     }
     const result = evaluateExpression(value);
-    if (result === null || isNaN(result)) return;
+    if (result === null || isNaN(result)) {
+      if (isAmountOverLimit(value)) {
+        show(t("errors.amountTooLarge"), "error");
+      }
+      return;
+    }
     onSave(result);
   };
 

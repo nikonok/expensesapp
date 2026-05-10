@@ -15,6 +15,9 @@ export default function OverviewSummary({
   const net = totalIncome - totalExpense;
   const isPositive = net >= 0;
 
+  const heroDisplay = formatAmount(Math.abs(net), currency);
+  const heroFontSize = heroDisplay.length > 12 ? "var(--text-amount-lg)" : "var(--text-display)";
+
   return (
     <div
       style={{
@@ -32,7 +35,7 @@ export default function OverviewSummary({
         style={{
           fontFamily: '"JetBrains Mono", monospace',
           fontWeight: 600,
-          fontSize: "var(--text-display)",
+          fontSize: heroFontSize,
           color: isPositive ? "var(--color-income)" : "var(--color-expense)",
           textShadow: isPositive
             ? "0 0 20px oklch(73% 0.23 160 / 40%)"
@@ -41,7 +44,7 @@ export default function OverviewSummary({
         }}
       >
         {isPositive ? "+" : "−"}
-        {formatAmount(Math.abs(net), currency)}
+        {heroDisplay}
       </div>
 
       {/* Income + expense row */}

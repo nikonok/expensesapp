@@ -140,6 +140,7 @@ export function BudgetStats({ categoryId, accountId, month }: BudgetStatsProps) 
               fontWeight: 600,
               fontSize: "var(--text-amount-sm)",
               color: row.value === "N/A" ? "var(--color-text-disabled)" : "var(--color-text)",
+              whiteSpace: "nowrap",
             }}
           >
             {row.value}
