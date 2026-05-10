@@ -286,8 +286,7 @@
     "complete": {
       "title": "You're all set",
       "body": "Your data has been saved. You can start tracking expenses now.",
-      "cancel": "Cancel & start over",
-      "countdown": "Closing in {{seconds}}s"
+      "cancel": "Cancel & start over"
     }
   },
   "errors": {

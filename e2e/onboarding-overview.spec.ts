@@ -73,6 +73,9 @@ test("onboarding: transaction form shows account in step 1 after onboarding", as
   await page.getByRole("button", { name: "Next" }).click(); // account
   await page.getByRole("button", { name: "Next" }).click(); // categories → navigates directly
   await page.waitForURL(/\/transactions/);
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).not.toBeVisible();
 
   // Open new transaction form
   await page.getByLabel("Add transaction").click();
@@ -94,6 +97,9 @@ test("overview: loads all sections after first transaction is added", async ({ p
   await page.getByRole("button", { name: "Next" }).click();
   await page.getByRole("button", { name: "Next" }).click(); // categories → navigates directly
   await page.waitForURL(/\/transactions/);
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).not.toBeVisible();
 
   // Add an expense: Cash → Food, amount 50
   await page.getByLabel("Add transaction").click();

@@ -548,48 +548,52 @@ export default function OnboardingFlow() {
     setIsSaving(true);
     setError(null);
     try {
-      const now = new Date().toISOString();
+      if (skipAccount) {
+        await settingsStore.update("hasCompletedOnboarding", true);
+      } else {
+        const now = new Date().toISOString();
 
-      // 1. Save main currency
-      await settingsStore.update("mainCurrency", currency);
+        // 1. Save main currency
+        await settingsStore.update("mainCurrency", currency);
 
-      // 2. Create first account if name was provided (skipped when user skips onboarding)
-      if (!skipAccount && accountName.trim()) {
-        await db.accounts.add({
-          name: accountName.trim(),
-          type: "REGULAR",
-          color: "var(--color-primary)",
-          icon: "wallet",
-          currency: currency,
-          description: "",
-          balance: startingBalance,
-          startingBalance: startingBalance,
-          includeInTotal: true,
-          isTrashed: false,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-
-      // 3. Create selected category presets
-      const selectedPresets = DEFAULT_CATEGORY_PRESETS.filter((_, i) => categorySelected[i]);
-      if (selectedPresets.length > 0) {
-        await db.categories.bulkAdd(
-          selectedPresets.map((preset, idx) => ({
-            name: preset.name,
-            type: preset.type,
-            color: preset.color,
-            icon: preset.icon,
-            displayOrder: idx,
+        // 2. Create first account
+        if (accountName.trim()) {
+          await db.accounts.add({
+            name: accountName.trim(),
+            type: "REGULAR",
+            color: "var(--color-primary)",
+            icon: "wallet",
+            currency: currency,
+            description: "",
+            balance: startingBalance,
+            startingBalance: startingBalance,
+            includeInTotal: true,
             isTrashed: false,
             createdAt: now,
             updatedAt: now,
-          })),
-        );
-      }
+          });
+        }
 
-      // 4. Mark onboarding complete
-      await settingsStore.update("hasCompletedOnboarding", true);
+        // 3. Create selected category presets
+        const selectedPresets = DEFAULT_CATEGORY_PRESETS.filter((_, i) => categorySelected[i]);
+        if (selectedPresets.length > 0) {
+          await db.categories.bulkAdd(
+            selectedPresets.map((preset, idx) => ({
+              name: preset.name,
+              type: preset.type,
+              color: preset.color,
+              icon: preset.icon,
+              displayOrder: idx,
+              isTrashed: false,
+              createdAt: now,
+              updatedAt: now,
+            })),
+          );
+        }
+
+        // 4. Mark onboarding complete
+        await settingsStore.update("hasCompletedOnboarding", true);
+      }
 
       // 5. Navigate to startup screen
       navigate(`/${settingsStore.startupScreen}`, { replace: true });
