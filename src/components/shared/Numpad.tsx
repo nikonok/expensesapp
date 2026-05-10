@@ -1,6 +1,7 @@
 import { Delete, Calendar, BarChart2 } from "lucide-react";
 import { evaluateExpression } from "@/services/math-parser";
 import { getCurrencyDecimalPlaces } from "@/utils/currency-utils";
+import { useSettingsStore } from "@/stores/settings-store";
 
 export interface NumpadProps {
   value: string;
@@ -76,11 +77,14 @@ const saveStyle: React.CSSProperties = {
   borderRadius: "var(--radius-numpad)",
 };
 
-function useKeyPress() {
+function makeKeyPressHandlers(hapticEnabled: boolean) {
   const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     const btn = e.currentTarget;
     btn.style.transform = "scale(0.93)";
     btn.style.filter = "brightness(1.25)";
+    if (hapticEnabled && "vibrate" in navigator) {
+      navigator.vibrate(10);
+    }
   };
   const handlePointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
     const btn = e.currentTarget;
@@ -105,7 +109,8 @@ export function Numpad({
   currencyCode,
 }: NumpadProps) {
   const showOperators = variant === "transaction" && !isTransfer;
-  const pressHandlers = useKeyPress();
+  const hapticEnabled = useSettingsStore((s) => s.hapticFeedbackEnabled);
+  const pressHandlers = makeKeyPressHandlers(hapticEnabled);
 
   const handleChar = (char: string) => {
     if (currencyCode) {

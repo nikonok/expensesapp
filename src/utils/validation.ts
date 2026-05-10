@@ -64,6 +64,7 @@ export const settingSchemas = {
   language: z.string().min(2).max(10),
   startupScreen: z.enum(["accounts", "categories", "transactions", "budget", "overview"]),
   notificationEnabled: z.boolean(),
+  hapticFeedbackEnabled: z.boolean(),
   notificationTime: z.string().regex(/^\d{2}:\d{2}$/),
   autoBackupIntervalHours: z.number().positive().int().nullable(),
   logLevel: z.enum(["all", "errors"]),

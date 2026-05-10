@@ -5,6 +5,7 @@ import { useSettingsStore } from "../../stores/settings-store";
 import { LanguageSetting } from "./LanguageSetting";
 import { ThemeSetting } from "./ThemeSetting";
 import { StartupScreenSetting } from "./StartupScreenSetting";
+import { HapticFeedbackSetting } from "./HapticFeedbackSetting";
 import { NotificationSetting } from "./NotificationSetting";
 import { MainCurrencySetting } from "./MainCurrencySetting";
 import { BackupSettings } from "./BackupSettings";
@@ -119,6 +120,7 @@ export function SettingsView() {
         <LanguageSetting />
         <ThemeSetting />
         <StartupScreenSetting />
+        <HapticFeedbackSetting />
 
         {/* Passcode — Coming soon stub */}
         <ComingSoonStub>

@@ -7,6 +7,7 @@ interface SettingsStore {
   startupScreen: string;
   notificationEnabled: boolean;
   notificationTime: string;
+  hapticFeedbackEnabled: boolean;
   lastUsedAccountId: number | null;
   autoBackupIntervalHours: number | null;
   lastAutoBackupAt: string | null;
@@ -24,6 +25,7 @@ const VALID_SETTING_KEYS = new Set([
   "startupScreen",
   "notificationEnabled",
   "notificationTime",
+  "hapticFeedbackEnabled",
   "lastUsedAccountId",
   "autoBackupIntervalHours",
   "lastAutoBackupAt",
@@ -37,6 +39,7 @@ const DEFAULTS: Omit<SettingsStore, "load" | "update" | "isLoaded"> = {
   startupScreen: "transactions",
   notificationEnabled: false,
   notificationTime: "20:00",
+  hapticFeedbackEnabled: false,
   lastUsedAccountId: null,
   autoBackupIntervalHours: null,
   lastAutoBackupAt: null,
@@ -72,6 +75,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         : DEFAULTS.startupScreen,
       notificationEnabled: (map["notificationEnabled"] as boolean) ?? DEFAULTS.notificationEnabled,
       notificationTime: (map["notificationTime"] as string) ?? DEFAULTS.notificationTime,
+      hapticFeedbackEnabled: (map["hapticFeedbackEnabled"] as boolean) ?? DEFAULTS.hapticFeedbackEnabled,
       lastUsedAccountId: (map["lastUsedAccountId"] as number | null) ?? DEFAULTS.lastUsedAccountId,
       autoBackupIntervalHours:
         (map["autoBackupIntervalHours"] as number | null) ?? DEFAULTS.autoBackupIntervalHours,

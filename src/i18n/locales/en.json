@@ -194,6 +194,9 @@
     "startupScreen": {
       "label": "Startup screen"
     },
+    "hapticFeedback": {
+      "label": "Haptic feedback"
+    },
     "passcode": {
       "label": "Passcode"
     },
