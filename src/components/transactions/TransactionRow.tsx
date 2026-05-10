@@ -123,6 +123,7 @@ export default function TransactionRow({
           border: "none",
           padding: 0,
           cursor: "pointer",
+          textAlign: "left",
         }}
       >
         {/* Selection checkbox or icon */}
