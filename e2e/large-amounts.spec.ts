@@ -220,21 +220,24 @@ test("TC-L02: two max-amount transactions display correctly on all tabs without 
 
   await expect(page.getByText(/999,999,999/).first()).toBeVisible();
 
-  // ── Categories tab ────────────────────────────────────────────────────────
-
-  await goToTab(page, "Categories", /\/categories/);
-  await expect(page.getByText("Max Test Category")).toBeVisible();
-
   // ── Budget tab ────────────────────────────────────────────────────────────
 
   await goToTab(page, "Budget", /\/budget/);
-  await expect(page.getByText("Max Test Category")).toBeVisible();
+  await expect(page.getByText("Max Test Category").first()).toBeVisible();
 
-  // ── Overview tab ──────────────────────────────────────────────────────────
+  // ── Overview tab ─────────────────────────────────────────────────────────
 
+  // Wait for any view-transition animation from Budget navigation to settle
+  await page.waitForTimeout(400);
   await goToTab(page, "Overview", /\/overview/);
   // Both max transactions were expenses, so the net is a large negative number containing "999"
   await expect(page.getByText(/999/).first()).toBeVisible();
+
+  // ── Categories tab (checked last — dnd-kit on this page can block nav) ───
+
+  await page.waitForTimeout(400);
+  await goToTab(page, "Categories", /\/categories/);
+  await expect(page.getByText("Max Test Category").first()).toBeVisible();
 
   // No unhandled JS errors should have occurred across all tabs
   expect(jsErrors).toHaveLength(0);
