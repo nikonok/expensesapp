@@ -123,3 +123,57 @@ describe("MAX_AMOUNT", () => {
     expect(MAX_AMOUNT).toBe(99_999_999_999);
   });
 });
+
+describe("evaluateExpression — edge cases", () => {
+  /**
+   * IEEE 754 floating-point precision edge case.
+   * parseFloat("1.005") * 100 = 100.49999999999999 in JavaScript (not 100.5),
+   * so Math.round(100.49...) = 100, not 101.
+   * This is a known limitation of binary floating-point representation.
+   */
+  it("1.005 rounds down to 100 due to IEEE 754 float precision", () => {
+    expect(evaluateExpression("1.005")).toBe(100);
+  });
+
+  /**
+   * Decimal-only input: the tokenizer regex includes `\.\d+` as a valid number
+   * token, so ".5" is parsed as 0.5 dollars = 50 cents.
+   */
+  it("decimal-only input '.5' returns 50 (50 cents)", () => {
+    expect(evaluateExpression(".5")).toBe(50);
+  });
+
+  /**
+   * Zero is a valid non-negative amount. The guard is `raw < 0` (strict),
+   * so 0 passes through and is returned as-is.
+   */
+  it("zero input '0' returns 0, not null", () => {
+    expect(evaluateExpression("0")).toBe(0);
+  });
+
+  /**
+   * A space character between tokens is not matched by the tokenizer regex.
+   * The gap-detection check (`match.index !== lastIndex`) catches it and
+   * returns null rather than crashing.
+   */
+  it("whitespace inside expression '10 + 5' returns null", () => {
+    expect(evaluateExpression("10 + 5")).toBeNull();
+  });
+
+  /**
+   * Consecutive operators produce an op-op adjacency that fails the
+   * alternating num/op validation, so the result is null.
+   */
+  it("consecutive operators '5++3' returns null", () => {
+    expect(evaluateExpression("5++3")).toBeNull();
+  });
+
+  /**
+   * A leading minus is an operator token, not a unary sign. The parser
+   * requires the first token to be a number, so "-5" fails the
+   * `tokens[0].type !== "num"` guard and returns null.
+   */
+  it("unary minus '-5' returns null", () => {
+    expect(evaluateExpression("-5")).toBeNull();
+  });
+});

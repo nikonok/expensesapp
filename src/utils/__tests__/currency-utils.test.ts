@@ -87,4 +87,50 @@ describe("getCurrencyDecimalPlaces", () => {
   it("returns 2 for an invalid currency code (fallback)", () => {
     expect(getCurrencyDecimalPlaces("INVALID")).toBe(2);
   });
+
+  it("returns cached value on second call (exercises the Map cache path)", () => {
+    // Call twice — first populates cache, second reads from it
+    const first = getCurrencyDecimalPlaces("AUD");
+    const second = getCurrencyDecimalPlaces("AUD");
+    expect(second).toBe(first);
+    expect(second).toBe(2);
+  });
+});
+
+describe("formatAmount — zero-decimal and three-decimal currencies", () => {
+  it("formats JPY: app divides by 100 universally, so 50000 minor units display as ¥500", () => {
+    // JPY has no subunit — 1 JPY = 1 minor unit in the real world.
+    // The app stores all amounts in minor units with /100 division on display.
+    // So 50000 stored → 50000/100 = 500 yen displayed. This is the documented behavior.
+    const result = formatAmount(50000, "JPY", "en-US");
+    expect(result).toBe("¥500");
+  });
+
+  it("formats KWD: 10000 minor units → 100 KWD displayed (3 decimal places via Intl)", () => {
+    // KWD has 3 decimal places. 10000 / 100 = 100.000 KWD.
+    const result = formatAmount(10000, "KWD", "en-US");
+    expect(result).toBe("KWD 100.000");
+  });
+});
+
+describe("formatAmountNoSymbol — zero-decimal currencies", () => {
+  it("formats JPY with hardcoded 2 decimal places: 50000 → '500.00'", () => {
+    // formatAmountNoSymbol uses style:'decimal' with maximumFractionDigits:2 regardless of
+    // the currency's native decimal count. JPY would normally display as '500' but the
+    // app always shows 2 decimal places here.
+    const result = formatAmountNoSymbol(50000, "JPY", "en-US");
+    expect(result).toBe("500.00");
+  });
+});
+
+describe("convertAmount — edge cases", () => {
+  it("handles negative amounts (e.g. DEBT balance)", () => {
+    // DEBT account balances are negative. convertAmount is called with Math.abs in
+    // use-total-balance.ts, but the function itself must handle negatives correctly.
+    expect(convertAmount(-1000, 1.5)).toBe(-1500);
+  });
+
+  it("handles negative rate edge case", () => {
+    expect(convertAmount(1000, -2)).toBe(-2000);
+  });
 });

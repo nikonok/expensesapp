@@ -148,6 +148,41 @@ describe("calculateMortgagePayment", () => {
   });
 });
 
+describe("calculateMortgagePayment — production minor-unit convention", () => {
+  it("accepts minor-unit loan amount: $200k loan = 20_000_000 minor units → ~$1,073/mo", () => {
+    // Production code passes toAccount.mortgageLoanAmount (stored in minor units) directly.
+    // $200,000 loan at 5% for 30 years → monthly payment ≈ $1,073.65 → ceil = $1,074 = 107400 minor units.
+    // The function returns minor units (same scale as input).
+    const result = calculateMortgagePayment(20_000_000, 0.05, 30);
+    expect(result).toBeGreaterThanOrEqual(107_000);
+    expect(result).toBeLessThanOrEqual(108_000);
+  });
+});
+
+describe("calculatePaymentSplit — production minor-unit convention", () => {
+  it("splits a $600 payment on a $5,000 debt at 5% annual (minor units throughout)", () => {
+    // Production convention: all amounts in minor units.
+    // currentBalance = 500_000 (=$5,000), monthlyRate = 0.05/12, payment = 60_000 (=$600).
+    // interest = Math.round(500_000 * 0.004166…) = 2083; principal = 60_000 - 2083 = 57_917.
+    const { interestAmount, principalAmount } = calculatePaymentSplit(500_000, 0.05 / 12, 60_000);
+    expect(interestAmount + principalAmount).toBe(60_000);
+    expect(interestAmount).toBeGreaterThan(0);
+    expect(principalAmount).toBeGreaterThan(0);
+    expect(interestAmount).toBe(2083);
+    expect(principalAmount).toBe(57_917);
+  });
+
+  it("documents overpayment-exceeds-balance: principal can exceed currentBalance (no cap)", () => {
+    // balance=50_000 ($500 owed), payment=60_000 ($600).
+    // The function does not cap principal at currentBalance — principalAmount > currentBalance is possible.
+    // Callers are expected to handle this case (e.g. by capping the payment to remaining balance).
+    const { interestAmount, principalAmount } = calculatePaymentSplit(50_000, 0.00417, 60_000);
+    expect(interestAmount + principalAmount).toBe(60_000);
+    expect(principalAmount).toBeGreaterThan(50_000); // exceeds current balance — documented behavior
+  });
+});
+
+
 describe("calculateTermSaved", () => {
   it("returns null when currentBalance is zero", () => {
     expect(calculateTermSaved(0, 1000, 0.005, 1200)).toBeNull();

@@ -4,12 +4,17 @@ import { db } from "../db/database";
 import { exchangeRateService } from "../services/exchange-rate.service";
 import { useSettingsStore } from "../stores/settings-store";
 
-export function useTotalBalance(): { netWorth: number | null; mainCurrency: string } {
+export function useTotalBalance(): {
+  netWorth: number | null;
+  mainCurrency: string;
+  ratesAvailable: boolean;
+} {
   const mainCurrency = useSettingsStore((s) => s.mainCurrency);
 
   const accounts = useLiveQuery(() => db.accounts.filter((a) => !a.isTrashed).toArray(), []) ?? [];
 
   const [netWorth, setNetWorth] = useState<number | null>(null);
+  const [ratesAvailable, setRatesAvailable] = useState(true);
 
   const groups = useMemo(() => {
     const result: { currency: string; assets: number; debts: number }[] = [];
@@ -36,6 +41,9 @@ export function useTotalBalance(): { netWorth: number | null; mainCurrency: stri
     }
     let cancelled = false;
     async function calc() {
+      // Reset unavailability at the start of each recalculation so a successful
+      // reload clears any previously flagged missing rate.
+      if (!cancelled) setRatesAvailable(true);
       const currencies = [...new Set(groups.map((g) => g.currency))];
       const rates = await Promise.all(
         currencies.map((c) => exchangeRateService.getRate(c, mainCurrency)),
@@ -44,9 +52,22 @@ export function useTotalBalance(): { netWorth: number | null; mainCurrency: stri
       let totalAssets = 0;
       let totalDebts = 0;
       for (const g of groups) {
-        const r = g.currency === mainCurrency ? 1 : (rateMap[g.currency] ?? 1);
-        totalAssets += g.assets * r;
-        totalDebts += g.debts * r;
+        if (g.currency === mainCurrency) {
+          totalAssets += g.assets;
+          totalDebts += g.debts;
+        } else {
+          const r = rateMap[g.currency];
+          // null means the rate service had no data — propagate unknown rather than show a wrong total
+          if (r == null) {
+            if (!cancelled) {
+              setRatesAvailable(false);
+              setNetWorth(null);
+            }
+            return;
+          }
+          totalAssets += g.assets * r;
+          totalDebts += g.debts * r;
+        }
       }
       if (!cancelled) setNetWorth(totalAssets - totalDebts);
     }
@@ -56,5 +77,5 @@ export function useTotalBalance(): { netWorth: number | null; mainCurrency: stri
     };
   }, [groups, mainCurrency]);
 
-  return { netWorth, mainCurrency };
+  return { netWorth, mainCurrency, ratesAvailable };
 }

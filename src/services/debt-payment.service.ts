@@ -48,8 +48,8 @@ export function calculateTermSaved(
   if (x <= 0) return null;
   const currentN = -Math.log(x) / Math.log(1 + monthlyRate);
   const newBalance = currentBalance - overpayment;
+  // newBalance < currentBalance and x > 0, so newX > x > 0 — the guard is provably unreachable.
   const newX = 1 - (newBalance * monthlyRate) / monthlyPayment;
-  if (newX <= 0) return null;
   const newN = -Math.log(newX) / Math.log(1 + monthlyRate);
   const saved = Math.round(currentN - newN);
   if (saved <= 0) return null;

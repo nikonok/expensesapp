@@ -23,6 +23,7 @@ export default function TotalWealth() {
 
   const [grandAssets, setGrandAssets] = useState<number | null>(null);
   const [grandDebts, setGrandDebts] = useState<number | null>(null);
+  const [ratesAvailable, setRatesAvailable] = useState(true);
 
   // Group active accounts by currency
   const groups = useMemo(() => {
@@ -47,6 +48,9 @@ export default function TotalWealth() {
   useEffect(() => {
     let cancelled = false;
     async function calc() {
+      // Reset unavailability at the start of each recalculation so a subsequent
+      // successful load clears any previously flagged missing rate.
+      if (!cancelled) setRatesAvailable(true);
       const currencies = [...new Set(groups.map((g) => g.currency))];
       const rates = await Promise.all(
         currencies.map((c) => exchangeRateService.getRate(c, mainCurrency)),
@@ -56,9 +60,23 @@ export default function TotalWealth() {
       let totalAssets = 0;
       let totalDebts = 0;
       for (const g of groups) {
-        const r = g.currency === mainCurrency ? 1 : (rateMap[g.currency] ?? 1);
-        totalAssets += g.assets * r;
-        totalDebts += g.debts * r;
+        if (g.currency === mainCurrency) {
+          totalAssets += g.assets;
+          totalDebts += g.debts;
+        } else {
+          const r = rateMap[g.currency];
+          // null means the rate service had no data — leave grand total hidden rather than show a wrong number
+          if (r == null) {
+            if (!cancelled) {
+              setRatesAvailable(false);
+              setGrandAssets(null);
+              setGrandDebts(null);
+            }
+            return;
+          }
+          totalAssets += g.assets * r;
+          totalDebts += g.debts * r;
+        }
       }
       if (!cancelled) {
         setGrandAssets(totalAssets);
@@ -196,6 +214,42 @@ export default function TotalWealth() {
           </div>
         );
       })}
+
+      {/* Grand total unavailable — shown only when rates were checked and found missing, not during initial load */}
+      {!ratesAvailable && groups.some((g) => g.currency !== mainCurrency) && (
+        <div
+          style={{
+            padding: "var(--space-3) var(--space-4)",
+            background: "var(--color-surface-raised)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            gap: "var(--space-2)",
+          }}
+        >
+          <span
+            style={{
+              fontFamily: '"Syne", sans-serif',
+              fontWeight: 700,
+              fontSize: "var(--text-body)",
+              color: "var(--color-text)",
+              flex: 1,
+            }}
+          >
+            Net
+          </span>
+          <span
+            style={{
+              fontFamily: '"JetBrains Mono", monospace',
+              fontWeight: 500,
+              fontSize: "var(--text-body)",
+              color: "var(--color-text-secondary)",
+            }}
+          >
+            —
+          </span>
+        </div>
+      )}
 
       {/* Grand total row */}
       {grandAssets != null && grandDebts != null && (
