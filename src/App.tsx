@@ -20,6 +20,7 @@ import { OnboardingCompletePopup } from "./components/shared/OnboardingCompleteP
 const BudgetPage = lazy(() => import("./pages/BudgetPage"));
 const OverviewPage = lazy(() => import("./pages/OverviewPage"));
 const TransactionInput = lazy(() => import("./components/transactions/TransactionInput"));
+const CryptoDemoPage = import.meta.env.DEV ? lazy(() => import("./pages/CryptoDemoPage")) : null;
 
 function AppRoutes() {
   const navigate = useNavigate();
@@ -206,6 +207,9 @@ function AppRoutes() {
         <Route path="transactions/:id/edit" element={<TransactionInput />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="onboarding" element={<OnboardingPage />} />
+        {import.meta.env.DEV && CryptoDemoPage && (
+          <Route path="dev/crypto-demo" element={<CryptoDemoPage />} />
+        )}
         <Route path="*" element={<Navigate to="/accounts" replace />} />
       </Routes>
     </Suspense>
