@@ -14,6 +14,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
 	"github.com/nikonok/expensesapp/backend/internal/config"
+	"github.com/nikonok/expensesapp/backend/internal/db"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
 	internallog "github.com/nikonok/expensesapp/backend/internal/log"
 	"github.com/nikonok/expensesapp/backend/internal/version"
@@ -29,7 +30,13 @@ func main() {
 	logger := internallog.New(cfg.LogLevel)
 	internallog.SetDefault(logger)
 
-	// TODO(0.6): open DB and run migrations here
+	database, err := db.Open(context.Background(), cfg.DBPath)
+	if err != nil {
+		slog.Error("db open failed", "err", err)
+		os.Exit(1)
+	}
+	defer database.Close()
+	slog.Info("db opened", "path", cfg.DBPath)
 
 	r := chi.NewRouter()
 	r.Use(chimiddleware.RequestID)
