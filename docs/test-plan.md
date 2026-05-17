@@ -46,6 +46,8 @@ Date format used throughout this plan: **dd.MM.yyyy** (e.g. 05.04.2026)
 
 ## 1. Onboarding
 
+> **Phase 1+ note**: The new first onboarding step is a Sign-In screen ("Continue with Google" / "Skip for now — keep things local"). All onboarding test cases below assume the operator taps **"Skip for now — keep things local"** to reach the existing flow. Tests that exercise the Google sign-in path are owned by the backend e2e harness (Phase 13). When test steps below reference "the Welcome screen", treat "Sign-In screen → Skip" as the implicit step 0 that precedes it.
+
 ### TC-001 — Full onboarding flow
 
 **Area**: Onboarding  
@@ -54,20 +56,21 @@ Date format used throughout this plan: **dd.MM.yyyy** (e.g. 05.04.2026)
 
 **Steps**:
 
-1. Confirm the Welcome screen is displayed with a "Get Started" button.
-2. Tap "Get Started".
-3. Confirm the Currency selection step is shown.
-4. Select a currency from the list (e.g. USD).
-5. Tap "Next" or "Continue" to advance.
-6. Confirm the Create First Account step is shown.
-7. Enter account name "My Wallet".
-8. Select account type "Regular".
-9. Enter starting balance "1000".
-10. Tap "Next" or "Continue".
-11. Confirm the Category Presets step is shown with suggested expense and income categories.
-12. Accept the default presets (tap "Next" or "Continue" / "Accept").
-13. Confirm the completion screen is shown.
-14. Tap "Finish" or "Done".
+1. Confirm the Sign-In screen is displayed. Tap "Skip for now — keep things local".
+2. Confirm the Welcome screen is displayed with a "Get Started" button.
+3. Tap "Get Started".
+4. Confirm the Currency selection step is shown.
+5. Select a currency from the list (e.g. USD).
+6. Tap "Next" or "Continue" to advance.
+7. Confirm the Create First Account step is shown.
+8. Enter account name "My Wallet".
+9. Select account type "Regular".
+10. Enter starting balance "1000".
+11. Tap "Next" or "Continue".
+12. Confirm the Category Presets step is shown with suggested expense and income categories.
+13. Accept the default presets (tap "Next" or "Continue" / "Accept").
+14. Confirm the completion screen is shown.
+15. Tap "Finish" or "Done".
 
 **Expected Result**: App navigates to the main tab layout (e.g. `/accounts`). Bottom navigation is visible. The account "My Wallet" appears in the accounts list with balance 1 000.00 USD. Onboarding screens are no longer shown.
 
@@ -81,8 +84,9 @@ Date format used throughout this plan: **dd.MM.yyyy** (e.g. 05.04.2026)
 
 **Steps**:
 
-1. Confirm the Welcome screen is displayed.
-2. Tap "Skip" on the Welcome screen.
+1. Confirm the Sign-In screen is displayed. Tap "Skip for now — keep things local".
+2. Confirm the Welcome screen is displayed.
+3. Tap "Skip" on the Welcome screen.
 
 **Expected Result**: App navigates directly to the main tab layout without creating any accounts or categories. Onboarding screens are not shown again.
 
@@ -96,9 +100,10 @@ Date format used throughout this plan: **dd.MM.yyyy** (e.g. 05.04.2026)
 
 **Steps**:
 
-1. Tap "Get Started" on the Welcome screen.
-2. Confirm the Currency selection step is displayed.
-3. Tap "Skip" on the currency step without selecting a currency.
+1. Tap "Skip for now — keep things local" on the Sign-In screen.
+2. Tap "Get Started" on the Welcome screen.
+3. Confirm the Currency selection step is displayed.
+4. Tap "Skip" on the currency step without selecting a currency.
 
 **Expected Result**: App navigates directly to the main tab layout. The default currency (based on device locale, or USD as fallback) is used. Onboarding screens are not shown again. No crash occurs.
 
@@ -138,7 +143,7 @@ Date format used throughout this plan: **dd.MM.yyyy** (e.g. 05.04.2026)
 
 **Area**: Onboarding  
 **Priority**: P1  
-**Preconditions**: Fresh app state. Navigate to http://localhost:5173. Advance past Welcome and Currency steps.
+**Preconditions**: Fresh app state. Navigate to http://localhost:5173. Skip the Sign-In screen, then advance past Welcome and Currency steps.
 
 **Steps**:
 
