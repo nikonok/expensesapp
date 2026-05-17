@@ -271,6 +271,15 @@ func CacheSize() int {
 	return count
 }
 
+// ClearSessionCache evicts all entries from the in-process session cache.
+// Exported for use in tests only — do not call in production code.
+func ClearSessionCache() {
+	sessionCache.Range(func(k, _ any) bool {
+		sessionCache.Delete(k)
+		return true
+	})
+}
+
 // generateToken produces 32 random bytes and returns (rawToken, sha256Hash, error).
 func generateToken() ([]byte, [32]byte, error) {
 	raw := make([]byte, tokenBytes)
