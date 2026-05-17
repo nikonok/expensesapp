@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
+	"github.com/nikonok/expensesapp/backend/internal/admin"
 	"github.com/nikonok/expensesapp/backend/internal/config"
 	"github.com/nikonok/expensesapp/backend/internal/db"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
@@ -37,6 +38,11 @@ func main() {
 	}
 	defer database.Close()
 	slog.Info("db opened", "path", cfg.DBPath)
+
+	if err := admin.EnsureBootstrap(context.Background(), database, cfg.BootstrapAdminEmail); err != nil {
+		slog.Error("bootstrap failed", "err", err)
+		os.Exit(1)
+	}
 
 	r := chi.NewRouter()
 	r.Use(chimiddleware.RequestID)

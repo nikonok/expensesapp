@@ -1,5 +1,7 @@
 version: "3"
 
+dotenv: ['.env']
+
 tasks:
   setup:
     desc: Install dependencies and Playwright browser binaries
@@ -79,6 +81,8 @@ tasks:
   backend:dev:
     desc: Run the backend API on :8080 (live process; ^C to stop)
     dir: backend
+    env:
+      BOOTSTRAP_ADMIN_EMAIL: '{{.BOOTSTRAP_ADMIN_EMAIL | default "root@example.com"}}'
     cmd: go run ./cmd/api
 
   backend:test:
