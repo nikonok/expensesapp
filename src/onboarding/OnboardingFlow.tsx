@@ -13,8 +13,11 @@ import type { CategoryPreset } from "../db/seed";
 import { evaluateExpression } from "../services/math-parser";
 import { getCanInstall } from "../sw-register";
 import { useUIStore } from "../stores/ui-store";
+import { SignInStep } from "./SignInStep";
 
-const TOTAL_STEPS = 4;
+// Step order: 0=Sign-in, 1=Welcome, 2=Currency, 3=First-account, 4=Categories
+// position 2: reserved for Phase 3 recovery code step (will shift remaining steps)
+const TOTAL_STEPS = 5;
 
 function detectLocaleCurrency(): string {
   try {
@@ -525,7 +528,7 @@ export default function OnboardingFlow() {
   const handleNumpadSave = (result: number) => {
     setStartingBalance(result);
     setNumpadValue(String(result / 100));
-    goToStep(3);
+    goToStep(4);
   };
 
   const goToStep = (n: number) => {
@@ -646,16 +649,17 @@ export default function OnboardingFlow() {
           }}
         >
           <SlideContainer step={step} direction={direction}>
-            {step === 0 && <StepWelcome onNext={() => goToStep(1)} onSkip={skipToComplete} />}
-            {step === 1 && (
+            {step === 0 && <SignInStep onNext={() => goToStep(1)} onSkip={() => goToStep(1)} />}
+            {step === 1 && <StepWelcome onNext={() => goToStep(2)} onSkip={skipToComplete} />}
+            {step === 2 && (
               <StepCurrency
                 currency={currency}
                 onChange={setCurrency}
-                onNext={() => goToStep(2)}
+                onNext={() => goToStep(3)}
                 onSkip={skipToComplete}
               />
             )}
-            {step === 2 && (
+            {step === 3 && (
               <StepAccount
                 accountName={accountName}
                 onAccountNameChange={setAccountName}
@@ -672,12 +676,12 @@ export default function OnboardingFlow() {
                     setStartingBalance(0);
                     setNumpadValue("");
                   }
-                  goToStep(3);
+                  goToStep(4);
                 }}
                 onSkip={skipToComplete}
               />
             )}
-            {step === 3 && (
+            {step === 4 && (
               <StepCategories
                 selected={categorySelected}
                 onToggle={handleToggleCategory}
