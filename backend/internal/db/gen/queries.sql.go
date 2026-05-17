@@ -7,7 +7,407 @@ package gen
 
 import (
 	"context"
+	"database/sql"
 )
+
+const addAllowlistEntry = `-- name: AddAllowlistEntry :exec
+INSERT INTO allowlist (email, added_by, added_at, note) VALUES (?, ?, ?, ?)
+ON CONFLICT(email) DO NOTHING
+`
+
+type AddAllowlistEntryParams struct {
+	Email   string
+	AddedBy string
+	AddedAt string
+	Note    sql.NullString
+}
+
+func (q *Queries) AddAllowlistEntry(ctx context.Context, arg AddAllowlistEntryParams) error {
+	_, err := q.db.ExecContext(ctx, addAllowlistEntry,
+		arg.Email,
+		arg.AddedBy,
+		arg.AddedAt,
+		arg.Note,
+	)
+	return err
+}
+
+const demoteAdmin = `-- name: DemoteAdmin :exec
+UPDATE users SET is_admin = 0 WHERE id = ?
+`
+
+func (q *Queries) DemoteAdmin(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, demoteAdmin, id)
+	return err
+}
+
+const downgradeFromRoot = `-- name: DowngradeFromRoot :exec
+UPDATE users SET is_root = 0, is_admin = 0 WHERE id = ?
+`
+
+func (q *Queries) DowngradeFromRoot(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, downgradeFromRoot, id)
+	return err
+}
+
+const getBootstrapState = `-- name: GetBootstrapState :one
+
+SELECT id, bootstrap_email, applied_at FROM bootstrap_state WHERE id = 1 LIMIT 1
+`
+
+// ----- bootstrap_state -----
+func (q *Queries) GetBootstrapState(ctx context.Context) (BootstrapState, error) {
+	row := q.db.QueryRowContext(ctx, getBootstrapState)
+	var i BootstrapState
+	err := row.Scan(&i.ID, &i.BootstrapEmail, &i.AppliedAt)
+	return i, err
+}
+
+const getCurrentRoot = `-- name: GetCurrentRoot :one
+SELECT id, email, google_sub, display_name, is_admin, is_root, promoter_id, suspended_at, delete_after, created_at, last_signin_at FROM users WHERE is_root = 1 LIMIT 1
+`
+
+func (q *Queries) GetCurrentRoot(ctx context.Context) (User, error) {
+	row := q.db.QueryRowContext(ctx, getCurrentRoot)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.GoogleSub,
+		&i.DisplayName,
+		&i.IsAdmin,
+		&i.IsRoot,
+		&i.PromoterID,
+		&i.SuspendedAt,
+		&i.DeleteAfter,
+		&i.CreatedAt,
+		&i.LastSigninAt,
+	)
+	return i, err
+}
+
+const getDeviceByID = `-- name: GetDeviceByID :one
+SELECT id, user_id, label, user_agent, pub_key, status, created_at, last_seen_at, revoked_at, revoke_reason FROM devices WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetDeviceByID(ctx context.Context, id string) (Device, error) {
+	row := q.db.QueryRowContext(ctx, getDeviceByID, id)
+	var i Device
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Label,
+		&i.UserAgent,
+		&i.PubKey,
+		&i.Status,
+		&i.CreatedAt,
+		&i.LastSeenAt,
+		&i.RevokedAt,
+		&i.RevokeReason,
+	)
+	return i, err
+}
+
+const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
+SELECT
+    s.id AS session_id,
+    s.device_id,
+    s.created_at AS session_created_at,
+    s.last_used_at,
+    d.user_id,
+    d.status AS device_status,
+    u.email,
+    u.display_name,
+    u.is_admin,
+    u.is_root,
+    u.suspended_at
+FROM sessions s
+JOIN devices d ON d.id = s.device_id
+JOIN users u   ON u.id = d.user_id
+WHERE s.token_hash = ? AND s.revoked_at IS NULL
+LIMIT 1
+`
+
+type GetSessionByTokenHashRow struct {
+	SessionID        string
+	DeviceID         string
+	SessionCreatedAt string
+	LastUsedAt       string
+	UserID           string
+	DeviceStatus     string
+	Email            string
+	DisplayName      string
+	IsAdmin          int64
+	IsRoot           int64
+	SuspendedAt      sql.NullString
+}
+
+// Joins through device -> user so the middleware gets everything in one round trip.
+func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (GetSessionByTokenHashRow, error) {
+	row := q.db.QueryRowContext(ctx, getSessionByTokenHash, tokenHash)
+	var i GetSessionByTokenHashRow
+	err := row.Scan(
+		&i.SessionID,
+		&i.DeviceID,
+		&i.SessionCreatedAt,
+		&i.LastUsedAt,
+		&i.UserID,
+		&i.DeviceStatus,
+		&i.Email,
+		&i.DisplayName,
+		&i.IsAdmin,
+		&i.IsRoot,
+		&i.SuspendedAt,
+	)
+	return i, err
+}
+
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT id, email, google_sub, display_name, is_admin, is_root, promoter_id, suspended_at, delete_after, created_at, last_signin_at FROM users WHERE email = ? COLLATE NOCASE LIMIT 1
+`
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserByEmail, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.GoogleSub,
+		&i.DisplayName,
+		&i.IsAdmin,
+		&i.IsRoot,
+		&i.PromoterID,
+		&i.SuspendedAt,
+		&i.DeleteAfter,
+		&i.CreatedAt,
+		&i.LastSigninAt,
+	)
+	return i, err
+}
+
+const getUserByID = `-- name: GetUserByID :one
+SELECT id, email, google_sub, display_name, is_admin, is_root, promoter_id, suspended_at, delete_after, created_at, last_signin_at FROM users WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetUserByID(ctx context.Context, id string) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserByID, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.GoogleSub,
+		&i.DisplayName,
+		&i.IsAdmin,
+		&i.IsRoot,
+		&i.PromoterID,
+		&i.SuspendedAt,
+		&i.DeleteAfter,
+		&i.CreatedAt,
+		&i.LastSigninAt,
+	)
+	return i, err
+}
+
+const insertAuditEntry = `-- name: InsertAuditEntry :exec
+
+INSERT INTO audit_log (id, actor_user_id, actor_email, action, target_kind, target_id, detail_json, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type InsertAuditEntryParams struct {
+	ID          string
+	ActorUserID sql.NullString
+	ActorEmail  sql.NullString
+	Action      string
+	TargetKind  sql.NullString
+	TargetID    sql.NullString
+	DetailJson  sql.NullString
+	CreatedAt   string
+}
+
+// ----- audit_log -----
+func (q *Queries) InsertAuditEntry(ctx context.Context, arg InsertAuditEntryParams) error {
+	_, err := q.db.ExecContext(ctx, insertAuditEntry,
+		arg.ID,
+		arg.ActorUserID,
+		arg.ActorEmail,
+		arg.Action,
+		arg.TargetKind,
+		arg.TargetID,
+		arg.DetailJson,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const insertDevice = `-- name: InsertDevice :one
+
+INSERT INTO devices (id, user_id, label, user_agent, pub_key, status, created_at, last_seen_at, revoked_at, revoke_reason)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+RETURNING id, user_id, label, user_agent, pub_key, status, created_at, last_seen_at, revoked_at, revoke_reason
+`
+
+type InsertDeviceParams struct {
+	ID         string
+	UserID     string
+	Label      string
+	UserAgent  sql.NullString
+	PubKey     []byte
+	Status     string
+	CreatedAt  string
+	LastSeenAt sql.NullString
+}
+
+// ----- devices -----
+func (q *Queries) InsertDevice(ctx context.Context, arg InsertDeviceParams) (Device, error) {
+	row := q.db.QueryRowContext(ctx, insertDevice,
+		arg.ID,
+		arg.UserID,
+		arg.Label,
+		arg.UserAgent,
+		arg.PubKey,
+		arg.Status,
+		arg.CreatedAt,
+		arg.LastSeenAt,
+	)
+	var i Device
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Label,
+		&i.UserAgent,
+		&i.PubKey,
+		&i.Status,
+		&i.CreatedAt,
+		&i.LastSeenAt,
+		&i.RevokedAt,
+		&i.RevokeReason,
+	)
+	return i, err
+}
+
+const insertSession = `-- name: InsertSession :exec
+
+INSERT INTO sessions (id, device_id, token_hash, created_at, last_used_at, revoked_at)
+VALUES (?, ?, ?, ?, ?, NULL)
+`
+
+type InsertSessionParams struct {
+	ID         string
+	DeviceID   string
+	TokenHash  []byte
+	CreatedAt  string
+	LastUsedAt string
+}
+
+// ----- sessions -----
+func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) error {
+	_, err := q.db.ExecContext(ctx, insertSession,
+		arg.ID,
+		arg.DeviceID,
+		arg.TokenHash,
+		arg.CreatedAt,
+		arg.LastUsedAt,
+	)
+	return err
+}
+
+const isEmailAllowed = `-- name: IsEmailAllowed :one
+
+SELECT EXISTS(SELECT 1 FROM allowlist WHERE email = ? COLLATE NOCASE) AS allowed
+`
+
+// ----- allowlist -----
+func (q *Queries) IsEmailAllowed(ctx context.Context, email string) (bool, error) {
+	row := q.db.QueryRowContext(ctx, isEmailAllowed, email)
+	var allowed bool
+	err := row.Scan(&allowed)
+	return allowed, err
+}
+
+const listAllowlist = `-- name: ListAllowlist :many
+SELECT email, added_by, added_at, note FROM allowlist ORDER BY added_at DESC
+`
+
+func (q *Queries) ListAllowlist(ctx context.Context) ([]Allowlist, error) {
+	rows, err := q.db.QueryContext(ctx, listAllowlist)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Allowlist{}
+	for rows.Next() {
+		var i Allowlist
+		if err := rows.Scan(
+			&i.Email,
+			&i.AddedBy,
+			&i.AddedAt,
+			&i.Note,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserDevices = `-- name: ListUserDevices :many
+SELECT id, user_id, label, user_agent, pub_key, status, created_at, last_seen_at, revoked_at, revoke_reason FROM devices WHERE user_id = ? AND status IN ('pending','active') ORDER BY created_at DESC
+`
+
+func (q *Queries) ListUserDevices(ctx context.Context, userID string) ([]Device, error) {
+	rows, err := q.db.QueryContext(ctx, listUserDevices, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Device{}
+	for rows.Next() {
+		var i Device
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Label,
+			&i.UserAgent,
+			&i.PubKey,
+			&i.Status,
+			&i.CreatedAt,
+			&i.LastSeenAt,
+			&i.RevokedAt,
+			&i.RevokeReason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markUserSuspended = `-- name: MarkUserSuspended :exec
+UPDATE users SET suspended_at = ? WHERE id = ?
+`
+
+type MarkUserSuspendedParams struct {
+	SuspendedAt sql.NullString
+	ID          string
+}
+
+func (q *Queries) MarkUserSuspended(ctx context.Context, arg MarkUserSuspendedParams) error {
+	_, err := q.db.ExecContext(ctx, markUserSuspended, arg.SuspendedAt, arg.ID)
+	return err
+}
 
 const ping = `-- name: Ping :one
 SELECT 1 AS ok
@@ -18,4 +418,225 @@ func (q *Queries) Ping(ctx context.Context) (int64, error) {
 	var ok int64
 	err := row.Scan(&ok)
 	return ok, err
+}
+
+const promoteUserToAdmin = `-- name: PromoteUserToAdmin :exec
+UPDATE users SET is_admin = 1, promoter_id = ? WHERE id = ?
+`
+
+type PromoteUserToAdminParams struct {
+	PromoterID sql.NullString
+	ID         string
+}
+
+func (q *Queries) PromoteUserToAdmin(ctx context.Context, arg PromoteUserToAdminParams) error {
+	_, err := q.db.ExecContext(ctx, promoteUserToAdmin, arg.PromoterID, arg.ID)
+	return err
+}
+
+const removeAllowlistEntry = `-- name: RemoveAllowlistEntry :exec
+DELETE FROM allowlist WHERE email = ? COLLATE NOCASE
+`
+
+func (q *Queries) RemoveAllowlistEntry(ctx context.Context, email string) error {
+	_, err := q.db.ExecContext(ctx, removeAllowlistEntry, email)
+	return err
+}
+
+const reparentPromoter = `-- name: ReparentPromoter :exec
+UPDATE users SET promoter_id = ? WHERE promoter_id = ?
+`
+
+type ReparentPromoterParams struct {
+	PromoterID   sql.NullString
+	PromoterID_2 sql.NullString
+}
+
+// Move all users whose promoter_id = old_promoter_id to a new promoter (used on demotion/root handoff).
+func (q *Queries) ReparentPromoter(ctx context.Context, arg ReparentPromoterParams) error {
+	_, err := q.db.ExecContext(ctx, reparentPromoter, arg.PromoterID, arg.PromoterID_2)
+	return err
+}
+
+const revokeAllDeviceSessions = `-- name: RevokeAllDeviceSessions :exec
+UPDATE sessions SET revoked_at = ? WHERE revoked_at IS NULL AND device_id = ?
+`
+
+type RevokeAllDeviceSessionsParams struct {
+	RevokedAt sql.NullString
+	DeviceID  string
+}
+
+func (q *Queries) RevokeAllDeviceSessions(ctx context.Context, arg RevokeAllDeviceSessionsParams) error {
+	_, err := q.db.ExecContext(ctx, revokeAllDeviceSessions, arg.RevokedAt, arg.DeviceID)
+	return err
+}
+
+const revokeAllUserSessions = `-- name: RevokeAllUserSessions :exec
+UPDATE sessions SET revoked_at = ?
+WHERE revoked_at IS NULL AND device_id IN (SELECT id FROM devices WHERE user_id = ?)
+`
+
+type RevokeAllUserSessionsParams struct {
+	RevokedAt sql.NullString
+	UserID    string
+}
+
+func (q *Queries) RevokeAllUserSessions(ctx context.Context, arg RevokeAllUserSessionsParams) error {
+	_, err := q.db.ExecContext(ctx, revokeAllUserSessions, arg.RevokedAt, arg.UserID)
+	return err
+}
+
+const revokeDevice = `-- name: RevokeDevice :exec
+UPDATE devices SET status = 'revoked', revoked_at = ?, revoke_reason = ? WHERE id = ?
+`
+
+type RevokeDeviceParams struct {
+	RevokedAt    sql.NullString
+	RevokeReason sql.NullString
+	ID           string
+}
+
+func (q *Queries) RevokeDevice(ctx context.Context, arg RevokeDeviceParams) error {
+	_, err := q.db.ExecContext(ctx, revokeDevice, arg.RevokedAt, arg.RevokeReason, arg.ID)
+	return err
+}
+
+const revokeSession = `-- name: RevokeSession :exec
+UPDATE sessions SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL
+`
+
+type RevokeSessionParams struct {
+	RevokedAt sql.NullString
+	ID        string
+}
+
+func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) error {
+	_, err := q.db.ExecContext(ctx, revokeSession, arg.RevokedAt, arg.ID)
+	return err
+}
+
+const rotateSessionToken = `-- name: RotateSessionToken :exec
+UPDATE sessions SET token_hash = ?, last_used_at = ? WHERE id = ? AND revoked_at IS NULL
+`
+
+type RotateSessionTokenParams struct {
+	TokenHash  []byte
+	LastUsedAt string
+	ID         string
+}
+
+func (q *Queries) RotateSessionToken(ctx context.Context, arg RotateSessionTokenParams) error {
+	_, err := q.db.ExecContext(ctx, rotateSessionToken, arg.TokenHash, arg.LastUsedAt, arg.ID)
+	return err
+}
+
+const setUserAsRoot = `-- name: SetUserAsRoot :exec
+UPDATE users SET is_root = 1, is_admin = 1, promoter_id = NULL WHERE id = ?
+`
+
+func (q *Queries) SetUserAsRoot(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, setUserAsRoot, id)
+	return err
+}
+
+const touchDevice = `-- name: TouchDevice :exec
+UPDATE devices SET last_seen_at = ? WHERE id = ?
+`
+
+type TouchDeviceParams struct {
+	LastSeenAt sql.NullString
+	ID         string
+}
+
+func (q *Queries) TouchDevice(ctx context.Context, arg TouchDeviceParams) error {
+	_, err := q.db.ExecContext(ctx, touchDevice, arg.LastSeenAt, arg.ID)
+	return err
+}
+
+const touchSession = `-- name: TouchSession :exec
+UPDATE sessions SET last_used_at = ? WHERE id = ? AND revoked_at IS NULL
+`
+
+type TouchSessionParams struct {
+	LastUsedAt string
+	ID         string
+}
+
+func (q *Queries) TouchSession(ctx context.Context, arg TouchSessionParams) error {
+	_, err := q.db.ExecContext(ctx, touchSession, arg.LastUsedAt, arg.ID)
+	return err
+}
+
+const unsuspendUser = `-- name: UnsuspendUser :exec
+UPDATE users SET suspended_at = NULL WHERE id = ?
+`
+
+func (q *Queries) UnsuspendUser(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, unsuspendUser, id)
+	return err
+}
+
+const upsertBootstrapState = `-- name: UpsertBootstrapState :exec
+INSERT INTO bootstrap_state (id, bootstrap_email, applied_at) VALUES (1, ?, ?)
+ON CONFLICT(id) DO UPDATE SET bootstrap_email = excluded.bootstrap_email, applied_at = excluded.applied_at
+`
+
+type UpsertBootstrapStateParams struct {
+	BootstrapEmail string
+	AppliedAt      string
+}
+
+func (q *Queries) UpsertBootstrapState(ctx context.Context, arg UpsertBootstrapStateParams) error {
+	_, err := q.db.ExecContext(ctx, upsertBootstrapState, arg.BootstrapEmail, arg.AppliedAt)
+	return err
+}
+
+const upsertUserByEmail = `-- name: UpsertUserByEmail :one
+
+INSERT INTO users (id, email, google_sub, display_name, is_admin, is_root, promoter_id, suspended_at, delete_after, created_at, last_signin_at)
+VALUES (?, ?, ?, ?, 0, 0, NULL, NULL, NULL, ?, ?)
+ON CONFLICT(email) DO UPDATE SET
+    google_sub = excluded.google_sub,
+    display_name = excluded.display_name,
+    last_signin_at = excluded.last_signin_at
+RETURNING id, email, google_sub, display_name, is_admin, is_root, promoter_id, suspended_at, delete_after, created_at, last_signin_at
+`
+
+type UpsertUserByEmailParams struct {
+	ID           string
+	Email        string
+	GoogleSub    sql.NullString
+	DisplayName  string
+	CreatedAt    string
+	LastSigninAt sql.NullString
+}
+
+// ----- users -----
+// Insert a new user or update display_name/google_sub/last_signin_at on existing row.
+// Returns the row including the id (preserved on update).
+func (q *Queries) UpsertUserByEmail(ctx context.Context, arg UpsertUserByEmailParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, upsertUserByEmail,
+		arg.ID,
+		arg.Email,
+		arg.GoogleSub,
+		arg.DisplayName,
+		arg.CreatedAt,
+		arg.LastSigninAt,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.GoogleSub,
+		&i.DisplayName,
+		&i.IsAdmin,
+		&i.IsRoot,
+		&i.PromoterID,
+		&i.SuspendedAt,
+		&i.DeleteAfter,
+		&i.CreatedAt,
+		&i.LastSigninAt,
+	)
+	return i, err
 }
