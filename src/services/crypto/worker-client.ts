@@ -2,6 +2,8 @@
 // through here so key material stays inside the worker scope.
 
 import CryptoWorker from "./worker?worker";
+import type { RecordMeta, EncryptedRecord } from "./record-cipher";
+import type { DeviceKeypair } from "./envelope";
 
 let worker: Worker | null = null;
 let nextId = 1;
@@ -40,6 +42,38 @@ function call<T>(req: { type: string; [k: string]: unknown }): Promise<T> {
 export const cryptoWorker = {
   init: () => call<void>({ type: "init" }),
   ping: (payload: string) => call<string>({ type: "ping", payload }),
-  // 2.c will extend: encryptRecord, decryptRecord, wrapKeyForDevice, unwrapKeyForDevice,
-  //                  deriveRecoveryKey, wrapRecovery, unwrapRecovery
+
+  generateDeviceKeypair: () => call<DeviceKeypair>({ type: "generateDeviceKeypair" }),
+
+  encryptRecord: (plaintext: Uint8Array, familyKey: Uint8Array, meta: RecordMeta) =>
+    call<EncryptedRecord>({ type: "encryptRecord", plaintext, familyKey, meta }),
+
+  decryptRecord: (blob: Uint8Array, familyKey: Uint8Array, meta: Omit<RecordMeta, "nonce">) =>
+    call<Uint8Array>({ type: "decryptRecord", blob, familyKey, meta }),
+
+  wrapKeyForDevice: (familyKey: Uint8Array, devicePubKey: Uint8Array) =>
+    call<Uint8Array>({ type: "wrapKeyForDevice", familyKey, devicePubKey }),
+
+  unwrapKeyForDevice: (envelope: Uint8Array, devicePubKey: Uint8Array, devicePrivKey: Uint8Array) =>
+    call<Uint8Array>({ type: "unwrapKeyForDevice", envelope, devicePubKey, devicePrivKey }),
+
+  wrapRecoveryEnvelope: (
+    familyKey: Uint8Array,
+    phrase: string,
+    familyId: string,
+    createdAt: string,
+  ) => call<Uint8Array>({ type: "wrapRecoveryEnvelope", familyKey, phrase, familyId, createdAt }),
+
+  unwrapRecoveryEnvelope: (
+    envelope: Uint8Array,
+    phrase: string,
+    familyId: string,
+    createdAt: string,
+  ) => call<Uint8Array>({ type: "unwrapRecoveryEnvelope", envelope, phrase, familyId, createdAt }),
+
+  wrapPhraseForReveal: (phrase: string, familyKey: Uint8Array, familyId: string) =>
+    call<Uint8Array>({ type: "wrapPhraseForReveal", phrase, familyKey, familyId }),
+
+  unwrapPhraseForReveal: (envelope: Uint8Array, familyKey: Uint8Array, familyId: string) =>
+    call<string>({ type: "unwrapPhraseForReveal", envelope, familyKey, familyId }),
 };
