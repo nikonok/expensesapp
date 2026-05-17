@@ -1,0 +1,317 @@
+package auth
+
+// Opaque sessions per architecture.md §7.8.
+//
+// Token format on the wire: "<sessionID>.<base64urlToken>". The sessionID lets us
+// fetch the row without scanning by hash; the token is the secret. Server stores
+// only sha256(token) so a database breach yields nothing reusable.
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/base64"
+	"errors"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/nikonok/expensesapp/backend/internal/db/gen"
+	"github.com/nikonok/expensesapp/backend/internal/httpx"
+)
+
+// ErrInvalidSession is returned for any cookie-validation failure.
+var ErrInvalidSession = errors.New("invalid session")
+
+const (
+	cookieName      = "__Host-session"
+	cookieMaxAge    = 2592000 // 30 days in seconds
+	cacheTTL        = 60 * time.Second
+	rotateThreshold = 24 * time.Hour
+	tokenBytes      = 32
+)
+
+// SessionInfo carries the validated session data back to the caller.
+type SessionInfo struct {
+	SessionID   string
+	UserID      string
+	DeviceID    string
+	Email       string
+	DisplayName string
+	IsAdmin     bool
+	IsRoot      bool
+	LastUsedAt  time.Time
+	Suspended   bool
+}
+
+// cacheEntry holds a cached SessionInfo with an expiry time.
+type cacheEntry struct {
+	info      *SessionInfo
+	expiresAt time.Time
+}
+
+// sessionCache is a TTL-only in-process cache keyed by sha256(token).
+// TODO(load): cap to 1000 entries with LRU once user count grows.
+var sessionCache sync.Map // map[[32]byte]cacheEntry
+
+// Mint creates a new session for the device. Returns the cookie value the caller
+// must send to the client (HttpOnly cookie). The raw token is NEVER persisted.
+func Mint(ctx context.Context, db *sql.DB, deviceID string, now time.Time) (cookieValue string, sessionID string, err error) {
+	rawToken, hash, err := generateToken()
+	if err != nil {
+		return "", "", err
+	}
+
+	sessionID, err = newSessionID()
+	if err != nil {
+		return "", "", err
+	}
+
+	q := gen.New(db)
+	nowStr := httpx.FormatTime(now)
+	if err := q.InsertSession(ctx, gen.InsertSessionParams{
+		ID:         sessionID,
+		DeviceID:   deviceID,
+		TokenHash:  hash[:],
+		CreatedAt:  nowStr,
+		LastUsedAt: nowStr,
+	}); err != nil {
+		return "", "", err
+	}
+
+	cookieValue = buildCookieValue(sessionID, rawToken)
+	return cookieValue, sessionID, nil
+}
+
+// Validate parses the cookie value, looks up by hashed token, returns the session
+// info. Cache hits are 60s old at most. Returns ErrInvalidSession on any failure
+// (missing, revoked, suspended user, bad format).
+func Validate(ctx context.Context, db *sql.DB, cookieValue string, now time.Time) (*SessionInfo, error) {
+	_, rawToken, err := parseCookieValue(cookieValue)
+	if err != nil {
+		return nil, ErrInvalidSession
+	}
+
+	hash := sha256.Sum256(rawToken)
+
+	// Check cache first.
+	if v, ok := sessionCache.Load(hash); ok {
+		entry := v.(cacheEntry)
+		if now.Before(entry.expiresAt) {
+			if entry.info.Suspended {
+				return nil, ErrInvalidSession
+			}
+			return entry.info, nil
+		}
+		// Expired — remove and fall through to DB.
+		sessionCache.Delete(hash)
+	}
+
+	q := gen.New(db)
+	row, err := q.GetSessionByTokenHash(ctx, hash[:])
+	if err != nil {
+		// sql.ErrNoRows means revoked or not found — both map to ErrInvalidSession.
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrInvalidSession
+		}
+		return nil, err
+	}
+
+	lastUsedAt, err := httpx.ParseTime(row.LastUsedAt)
+	if err != nil {
+		return nil, ErrInvalidSession
+	}
+
+	info := &SessionInfo{
+		SessionID:   row.SessionID,
+		UserID:      row.UserID,
+		DeviceID:    row.DeviceID,
+		Email:       row.Email,
+		DisplayName: row.DisplayName,
+		IsAdmin:     row.IsAdmin != 0,
+		IsRoot:      row.IsRoot != 0,
+		LastUsedAt:  lastUsedAt,
+		Suspended:   row.SuspendedAt.Valid,
+	}
+
+	// Store in cache.
+	sessionCache.Store(hash, cacheEntry{
+		info:      info,
+		expiresAt: now.Add(cacheTTL),
+	})
+
+	if info.Suspended {
+		return nil, ErrInvalidSession
+	}
+
+	return info, nil
+}
+
+// TouchAndMaybeRotate updates last_used_at; if > 24h elapsed, mints a new token
+// and rotates token_hash. Returns (newCookieValue, rotated). When rotated=false,
+// newCookieValue is empty and caller does NOT need to reset the cookie.
+func TouchAndMaybeRotate(ctx context.Context, db *sql.DB, info *SessionInfo, now time.Time) (newCookieValue string, rotated bool, err error) {
+	q := gen.New(db)
+	nowStr := httpx.FormatTime(now)
+
+	if now.Sub(info.LastUsedAt) > rotateThreshold {
+		// Generate new token and rotate.
+		rawToken, hash, err := generateToken()
+		if err != nil {
+			return "", false, err
+		}
+
+		if err := q.RotateSessionToken(ctx, gen.RotateSessionTokenParams{
+			TokenHash:  hash[:],
+			LastUsedAt: nowStr,
+			ID:         info.SessionID,
+		}); err != nil {
+			return "", false, err
+		}
+
+		// Evict the old hash from cache — but we don't have the old hash here.
+		// The cache entry for the old token will expire naturally within cacheTTL.
+		// Store the new token in cache immediately.
+		newInfo := &SessionInfo{
+			SessionID:   info.SessionID,
+			UserID:      info.UserID,
+			DeviceID:    info.DeviceID,
+			Email:       info.Email,
+			DisplayName: info.DisplayName,
+			IsAdmin:     info.IsAdmin,
+			IsRoot:      info.IsRoot,
+			LastUsedAt:  now,
+			Suspended:   info.Suspended,
+		}
+		sessionCache.Store(hash, cacheEntry{
+			info:      newInfo,
+			expiresAt: now.Add(cacheTTL),
+		})
+
+		newCookieValue = buildCookieValue(info.SessionID, rawToken)
+		return newCookieValue, true, nil
+	}
+
+	// Just touch.
+	if err := q.TouchSession(ctx, gen.TouchSessionParams{
+		LastUsedAt: nowStr,
+		ID:         info.SessionID,
+	}); err != nil {
+		return "", false, err
+	}
+
+	return "", false, nil
+}
+
+// Revoke marks the session as revoked in the database. The in-memory cache
+// (keyed by token hash) does NOT track sessionID, so it is not evicted here;
+// stale entries expire within the 60s TTL window. Callers that need
+// immediately-fresh validation can flush the cache via the test-only helper.
+func Revoke(ctx context.Context, db *sql.DB, sessionID string, now time.Time) error {
+	q := gen.New(db)
+	return q.RevokeSession(ctx, gen.RevokeSessionParams{
+		RevokedAt: sql.NullString{String: httpx.FormatTime(now), Valid: true},
+		ID:        sessionID,
+	})
+}
+
+// RevokeAll marks every session for the user as revoked in the database.
+// Cache entries (keyed by token hash) are not evicted here; they expire within
+// the 60s TTL window. Used on signout-all.
+func RevokeAll(ctx context.Context, db *sql.DB, userID string, now time.Time) error {
+	q := gen.New(db)
+	return q.RevokeAllUserSessions(ctx, gen.RevokeAllUserSessionsParams{
+		RevokedAt: sql.NullString{String: httpx.FormatTime(now), Valid: true},
+		UserID:    userID,
+	})
+}
+
+// RevokeAllForDevice marks every session bound to a specific device as revoked
+// in the database. Cache entries expire within the 60s TTL window. Used on
+// device sign-out (per BR §3.10) and on family kick (per BR §3.33).
+func RevokeAllForDevice(ctx context.Context, db *sql.DB, deviceID string, now time.Time) error {
+	q := gen.New(db)
+	return q.RevokeAllDeviceSessions(ctx, gen.RevokeAllDeviceSessionsParams{
+		RevokedAt: sql.NullString{String: httpx.FormatTime(now), Valid: true},
+		DeviceID:  deviceID,
+	})
+}
+
+// SetCookie writes the __Host-session cookie. Per architecture §7.8: HttpOnly,
+// Secure, SameSite=Lax, Path=/, Max-Age=2592000.
+func SetCookie(w http.ResponseWriter, cookieValue string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     cookieName,
+		Value:    cookieValue,
+		Path:     "/",
+		MaxAge:   cookieMaxAge,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// ClearCookie writes an expired __Host-session cookie.
+func ClearCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     cookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   0,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// generateToken produces 32 random bytes and returns (rawToken, sha256Hash, error).
+func generateToken() ([]byte, [32]byte, error) {
+	raw := make([]byte, tokenBytes)
+	if _, err := rand.Read(raw); err != nil {
+		return nil, [32]byte{}, err
+	}
+	hash := sha256.Sum256(raw)
+	return raw, hash, nil
+}
+
+// newSessionID returns a UUID v7 string.
+func newSessionID() (string, error) {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return "", err
+	}
+	return id.String(), nil
+}
+
+// buildCookieValue encodes "<sessionID>.<base64urlToken>".
+func buildCookieValue(sessionID string, rawToken []byte) string {
+	encoded := base64.RawURLEncoding.EncodeToString(rawToken)
+	return sessionID + "." + encoded
+}
+
+// parseCookieValue splits "<sessionID>.<base64urlToken>" and returns (sessionID, rawToken, error).
+// Rejects empty, no-dot, or bad base64.
+func parseCookieValue(cookieValue string) (string, []byte, error) {
+	if cookieValue == "" {
+		return "", nil, ErrInvalidSession
+	}
+	// Split on first dot only — sessionID may not contain dots but base64url can't either;
+	// still be explicit about "first dot" to be safe.
+	idx := strings.IndexByte(cookieValue, '.')
+	if idx < 1 {
+		return "", nil, ErrInvalidSession
+	}
+	sessionID := cookieValue[:idx]
+	tokenStr := cookieValue[idx+1:]
+	if tokenStr == "" {
+		return "", nil, ErrInvalidSession
+	}
+	rawToken, err := base64.RawURLEncoding.DecodeString(tokenStr)
+	if err != nil || len(rawToken) != tokenBytes {
+		return "", nil, ErrInvalidSession
+	}
+	return sessionID, rawToken, nil
+}

@@ -8,6 +8,7 @@ const (
 	keyRequestID contextKey = iota + 1
 	keyUserID
 	keyDeviceID
+	keySessionID
 )
 
 // WithRequestID returns a child context carrying the given request ID.
@@ -40,5 +41,16 @@ func WithDeviceID(ctx context.Context, id string) context.Context {
 // DeviceID retrieves the device ID from ctx, or "" if not present.
 func DeviceID(ctx context.Context) string {
 	v, _ := ctx.Value(keyDeviceID).(string)
+	return v
+}
+
+// WithSessionID returns a child context carrying the given session ID.
+func WithSessionID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, keySessionID, id)
+}
+
+// SessionID retrieves the session ID from ctx, or "" if not present.
+func SessionID(ctx context.Context) string {
+	v, _ := ctx.Value(keySessionID).(string)
 	return v
 }

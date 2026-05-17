@@ -10,13 +10,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	chimiddleware "github.com/go-chi/chi/v5/middleware"
-
+	"github.com/nikonok/expensesapp/backend/internal/account"
+	"github.com/nikonok/expensesapp/backend/internal/admin"
+	authpkg "github.com/nikonok/expensesapp/backend/internal/auth"
 	"github.com/nikonok/expensesapp/backend/internal/config"
 	"github.com/nikonok/expensesapp/backend/internal/db"
-	"github.com/nikonok/expensesapp/backend/internal/httpx"
 	internallog "github.com/nikonok/expensesapp/backend/internal/log"
+	"github.com/nikonok/expensesapp/backend/internal/server"
 	"github.com/nikonok/expensesapp/backend/internal/version"
 )
 
@@ -38,13 +38,16 @@ func main() {
 	defer database.Close()
 	slog.Info("db opened", "path", cfg.DBPath)
 
-	r := chi.NewRouter()
-	r.Use(chimiddleware.RequestID)
-	r.Use(chimiddleware.RealIP)
-	r.Use(chimiddleware.Recoverer)
-	r.Use(httpx.LoggerMiddleware(slog.Default()))
+	if err := admin.EnsureBootstrap(context.Background(), database, cfg.BootstrapAdminEmail); err != nil {
+		slog.Error("bootstrap failed", "err", err)
+		os.Exit(1)
+	}
 
-	r.Get("/v1/health", healthHandler(cfg))
+	verifier := authpkg.NewGoogleVerifier(cfg.GoogleOAuthClientID)
+	authH := authpkg.NewHandler(database, verifier)
+	accountH := account.NewHandler(database)
+
+	r := server.NewRouter(database, authH, accountH, server.HealthConfig{Version: version.String()}, slog.Default())
 
 	srv := &http.Server{
 		Addr:    cfg.BindAddr,
@@ -75,12 +78,3 @@ func main() {
 	slog.Info("stopped")
 }
 
-func healthHandler(_ config.Config) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		httpx.WriteJSON(w, http.StatusOK, map[string]any{
-			"ok":      true,
-			"version": version.String(),
-			"time":    time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
-		})
-	}
-}

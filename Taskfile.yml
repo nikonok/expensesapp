@@ -1,5 +1,7 @@
 version: "3"
 
+dotenv: ['.env']
+
 tasks:
   setup:
     desc: Install dependencies and Playwright browser binaries
@@ -79,12 +81,23 @@ tasks:
   backend:dev:
     desc: Run the backend API on :8080 (live process; ^C to stop)
     dir: backend
+    env:
+      BOOTSTRAP_ADMIN_EMAIL: '{{.BOOTSTRAP_ADMIN_EMAIL | default "root@example.com"}}'
+      GOOGLE_OAUTH_CLIENT_ID: '{{.GOOGLE_OAUTH_CLIENT_ID | default "dev-placeholder"}}'
     cmd: go run ./cmd/api
 
   backend:test:
-    desc: Run backend unit + integration tests
+    desc: Run backend unit tests (no integration tag — fast, no server boot)
     dir: backend
     cmd: gotestsum --format pkgname -- ./...
+
+  backend:test:integration:
+    desc: Run backend integration tests (in-memory SQLite + httptest server)
+    dir: backend
+    env:
+      BOOTSTRAP_ADMIN_EMAIL: '{{.BOOTSTRAP_ADMIN_EMAIL | default "root@example.com"}}'
+      GOOGLE_OAUTH_CLIENT_ID: '{{.GOOGLE_OAUTH_CLIENT_ID | default "dev-placeholder"}}'
+    cmd: gotestsum --format pkgname -- -tags=integration -count=1 ./...
 
   backend:sqlc:
     desc: Regenerate sqlc Go bindings from schema.sql + queries.sql

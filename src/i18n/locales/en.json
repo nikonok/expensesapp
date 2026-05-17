@@ -261,6 +261,14 @@
     }
   },
   "onboarding": {
+    "signin": {
+      "title": "Sign in to enable cloud features",
+      "subtitle": "Your data is encrypted on this device before it leaves it. Even the server cannot read it.",
+      "body": "Sign in to enable backup, family sharing, and cross-device sync.",
+      "google_button": "Continue with Google",
+      "skip": "Skip for now — keep things local",
+      "error_fallback": "Sign-in failed. Try again."
+    },
     "welcome": {
       "title": "Expenses",
       "subtitle": "Your personal finance tracker.",
