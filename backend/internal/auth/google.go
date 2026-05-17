@@ -14,6 +14,7 @@ type Claims struct {
 	Email         string
 	EmailVerified bool
 	Sub           string
+	Name          string // "name" claim from the ID token; may be empty
 }
 
 // Verifier validates a Google ID token against the configured audience.
@@ -49,5 +50,6 @@ func (g *GoogleVerifier) Verify(ctx context.Context, idToken string) (*Claims, e
 	if email == "" || sub == "" || !emailVerified {
 		return nil, ErrInvalidIDToken
 	}
-	return &Claims{Email: email, EmailVerified: emailVerified, Sub: sub}, nil
+	name, _ := payload.Claims["name"].(string)
+	return &Claims{Email: email, EmailVerified: emailVerified, Sub: sub, Name: name}, nil
 }

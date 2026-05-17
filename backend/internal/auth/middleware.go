@@ -53,6 +53,7 @@ func SessionMiddleware(db *sql.DB) func(http.Handler) http.Handler {
 
 			ctx := httpx.WithUserID(r.Context(), info.UserID)
 			ctx = httpx.WithDeviceID(ctx, info.DeviceID)
+			ctx = httpx.WithSessionID(ctx, info.SessionID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

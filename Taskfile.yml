@@ -83,6 +83,7 @@ tasks:
     dir: backend
     env:
       BOOTSTRAP_ADMIN_EMAIL: '{{.BOOTSTRAP_ADMIN_EMAIL | default "root@example.com"}}'
+      GOOGLE_OAUTH_CLIENT_ID: '{{.GOOGLE_OAUTH_CLIENT_ID | default "dev-placeholder"}}'
     cmd: go run ./cmd/api
 
   backend:test:

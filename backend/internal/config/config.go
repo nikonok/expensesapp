@@ -13,6 +13,7 @@ type Config struct {
 	LogLevel            string `env:"LOG_LEVEL"              envDefault:"info"`
 	DBPath              string `env:"DB_PATH"                envDefault:"./data.db"`
 	BootstrapAdminEmail string `env:"BOOTSTRAP_ADMIN_EMAIL"  envDefault:""`
+	GoogleOAuthClientID string `env:"GOOGLE_OAUTH_CLIENT_ID" envDefault:""`
 }
 
 // Load parses Config from environment variables, returning an error if any
@@ -24,6 +25,9 @@ func Load() (Config, error) {
 	}
 	if cfg.BootstrapAdminEmail == "" {
 		return Config{}, fmt.Errorf("BOOTSTRAP_ADMIN_EMAIL is required")
+	}
+	if cfg.GoogleOAuthClientID == "" {
+		return Config{}, fmt.Errorf("GOOGLE_OAUTH_CLIENT_ID is required")
 	}
 	return cfg, nil
 }

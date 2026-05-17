@@ -13,7 +13,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
+	"github.com/nikonok/expensesapp/backend/internal/account"
 	"github.com/nikonok/expensesapp/backend/internal/admin"
+	authpkg "github.com/nikonok/expensesapp/backend/internal/auth"
 	"github.com/nikonok/expensesapp/backend/internal/config"
 	"github.com/nikonok/expensesapp/backend/internal/db"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
@@ -44,13 +46,35 @@ func main() {
 		os.Exit(1)
 	}
 
+	verifier := authpkg.NewGoogleVerifier(cfg.GoogleOAuthClientID)
+	authH := authpkg.NewHandler(database, verifier)
+	accountH := account.NewHandler(database)
+
 	r := chi.NewRouter()
 	r.Use(chimiddleware.RequestID)
 	r.Use(chimiddleware.RealIP)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(httpx.LoggerMiddleware(slog.Default()))
 
+	// Public write endpoint — CSRF-gated but no session required.
+	r.Group(func(r chi.Router) {
+		r.Use(authpkg.CSRFHeaderGate)
+		r.Post("/v1/auth/google", authH.PostGoogle)
+	})
+
+	// Always-public health endpoint — no auth, no CSRF gate.
 	r.Get("/v1/health", healthHandler(cfg))
+
+	// Protected endpoints — CSRF-gated and session required.
+	r.Group(func(r chi.Router) {
+		r.Use(authpkg.CSRFHeaderGate)
+		r.Use(authpkg.SessionMiddleware(database))
+		r.Post("/v1/auth/signout", authH.PostSignout)
+		r.Post("/v1/auth/signout-all", authH.PostSignoutAll)
+		r.Get("/v1/me", accountH.GetMe)
+		r.Get("/v1/me/devices", accountH.GetMyDevices)
+		r.Post("/v1/me/devices/{id}/revoke", accountH.RevokeMyDevice)
+	})
 
 	srv := &http.Server{
 		Addr:    cfg.BindAddr,
