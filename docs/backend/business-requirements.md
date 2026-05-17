@@ -67,6 +67,7 @@ Most business decisions are locked in (see § 3). A few items remain for the tec
 - Auth: **Google Sign-In only** (no email/password)
 - Backup must hold **≥ 5 years** of transaction history
 - Limit-reached state must be **surfaced to the user**
+- **Performance bias: read-optimized.** Reads (list views, balance lookups, sync pull) are the hot path and must be fast. Writes can complete asynchronously in the background; brief write-path latency is acceptable as long as the local optimistic update is immediate.
 
 ### 3.2 Distribution & monetization
 
@@ -89,12 +90,14 @@ Most business decisions are locked in (see § 3). A few items remain for the tec
 
 - **No MVP slicing.** All four features (auth, backup, push, family sharing) ship together in v1.
 - Reason: this is a personal/private product, no need to phase to validate market.
+- **Version reset.** No production data exists yet — all version identifiers (app version, PWA manifest/service-worker, DB schema) are reset to v1 for the release. No frontend-schema upgrade path is required from prior dev builds.
 
 ### 3.6 Access control
 
 - **Cloudflare Zero Trust** sits in front of the app today, but the backend MUST enforce its own access control independently — removing Cloudflare must require zero code changes.
 - A **bootstrap admin email** is set via startup config (env var). On first boot, that user becomes the **root admin**.
 - Sign-in flow: Google auth → backend checks email against allowlist → grant or refuse with a clean message.
+- **User profile.** The user's display name is initially taken from their Google profile and can be edited from Settings. Email is fixed (it's the allowlist key and the user's identity).
 
 #### Admin panel capabilities
 
@@ -160,9 +163,11 @@ The root admin's Google account could theoretically be deleted/disabled by Googl
 - Signing out a device revokes its tokens server-side AND deletes its envelope (E2EE — the device cannot decrypt new data even if it returns). Local cached data on the device remains readable until the device wipes itself on next sync attempt.
 - **Stale envelopes are garbage-collected.** When a device is signed out, suspended, or revoked, its envelope is purged. Dead push tokens (delivery-failure responses from FCM/APNS) are GC'd on first failure.
 - **Adding a new device:**
+  - There should be info screen saying that user should open app on another device to continue (it shoudn't be blocking, but should communicated)
   - **If at least one existing device is "available"**, that device wraps the family key for the new device and uploads the envelope. New device unwraps and syncs. Silent UX. "Available" means actively foregrounded or with a live socket — backgrounded mobile PWAs are NOT reliably available. If wrapping does not complete within **30 seconds**, the flow falls back to recovery code (next bullet).
   - **If no existing device is available** (or the 30s timeout fires), the new device prompts the user for their **recovery code**. Entering it lets the new device derive the unwrap key, fetch the recovery envelope, and reconstruct the family key. The new device then issues its own envelope so future devices can be added silently.
 - **Device join security alert:** see § 3.34. Whenever any new device joins, all other devices get a push + in-app banner with a one-tap revoke.
+- Each device should get human readable ID derived from the devices name and sign in date, like "Samsung Galaxy S23 (2023-01-01)" or "MacBook Pro (2023-01-01)". That is required for UI/UX only
 
 ### 3.11 Conflict resolution
 
@@ -173,6 +178,8 @@ The root admin's Google account could theoretically be deleted/disabled by Googl
 - Open question: are there any fields where LWW is unsafe and we need special handling? (Balances are recomputed from transactions, so they should be fine. To be reviewed in technical phase.)
 
 ### 3.12 Notifications
+
+All types of notifications are enabled by default if user allows notifications.
 
 Server-sent push notifications cover four event types:
 
@@ -195,6 +202,7 @@ Server-sent push notifications cover four event types:
 - **Snapshot deduplication.** Snapshots (§ 3.14) MUST deduplicate by ciphertext content hash — a record unchanged for N days occupies one stored blob, referenced from each snapshot. Without dedup, 30 × snapshot multiplier blows the quota for heavy users. The 200 MB quota is measured AFTER dedup + tombstone compaction.
 - **Tombstone retention.** Deleted records leave tombstones for LWW correctness. Tombstones are retained for **90 days** after the deletion timestamp (long enough to cover offline devices catching up), then **compacted**: server publishes a family-wide watermark, and tombstones older than the watermark are purged. Devices that come online with edits to records older than the watermark MUST refresh from the server before re-uploading.
 - **Worst-case math validation** is a technical-phase task: confirm that a 6-member family editing ~200 tx/month under E2EE (with per-record AEAD overhead, 30-day snapshot dedup, 90-day tombstones) fits well within 200 MB at 5 years.
+- delete old data - means that there will be snapshot of current account done but all the transactions will be lost (like clear init). Make sure it is communicated to the user.
 
 ### 3.14 Point-in-time recovery
 
@@ -228,6 +236,7 @@ Server-sent push notifications cover four event types:
 - **Background (app closed/inactive):** periodic sync — frequency on the order of minutes to a day, optimized for battery and data. Detailed cadence to be decided in tech phase.
 - Trade-off accepted: family members who are passively co-watching the app on the same shopping trip see live updates; offline/background users see stale views until app is reopened.
 - **E2EE impact:** sync payloads are ciphertext + metadata. Client encrypts before upload and decrypts after download; server is a blind transport. No change to the sync model otherwise.
+- While syncing, add spinner to indicate the process. Spinner is a toast overlay on the app UI and cannot be dismissed but it should not cover the entire content. Also users cannot make changes while syncing - simply disable any action to do changes from UI (make buttons disabled)
 
 ### 3.19 Account deletion (self-service)
 
@@ -244,6 +253,7 @@ Server-sent push notifications cover four event types:
   - After leaving, proceed as solo deletion above.
 - **Admins:**
   - Admins must be demoted before they can delete their account. If they are an admin with a subtree, the demote rules apply (re-parent to demoter).
+  - Admins have additional button on UI to delete their account immediatly withou grace period - that is for testing purposes only
 - **Root admin:**
   - Cannot self-delete while their email is configured as the bootstrap admin. Admin must update env config first or hand off (TBD how — see open questions).
 
@@ -291,6 +301,8 @@ To prevent removal-thrash in disputes (e.g. a couple in conflict, or a flatmate 
 - **Visibility:** only admins can see the audit log. The log shows actor email, action, target (where applicable), timestamp.
 - **Server logs must not include any ciphertext bodies, per-field byte counts, or any quantity that could narrow plaintext.** Aggregate counts (e.g. "X records uploaded") are fine; per-record sizes are not. This is an operational rule for both the audit log and ordinary server logs.
 
+The app in the settings where export logs button is available, should have a button to send logs to server. The user should be notified that logs can contain sensitive information and by sending the logs, they are consenting to the collection and use of such information. Then admin can review the logs on the server from admin panel.
+
 ### 3.25 Session lifetime
 
 - **Sessions live forever** until one of: user signs out, admin revokes the device, admin suspends the account, or the email is removed from the allowlist.
@@ -301,7 +313,7 @@ To prevent removal-thrash in disputes (e.g. a couple in conflict, or a flatmate 
 
 Onboarding order changes from the current 5 steps to 7, and one of the new steps appears **only if** the user signs in:
 
-1. **Sign in with Google** _(skippable — user can do this from Settings later; required for backup / family / cloud notifications)_
+1. **Sign in with Google** _(skippable — user can do this from Settings later; required for backup / family / cloud notifications)_ - let user know that without account the app has no cloud sync capabilities
 2. **Recovery code setup** _(shown ONLY if step 1 completed AND the user is creating a brand-new account — generates the family key, displays the 24-word phrase, requires a soft acknowledge checkbox)_
 3. Welcome
 4. Currency
@@ -349,11 +361,11 @@ Onboarding order changes from the current 5 steps to 7, and one of the new steps
   - Single permission ask.
 - If declined, user can re-enable later from Settings → Notifications (which will re-trigger the browser permission prompt).
 - Mandatory notifications (backup quota / sync errors) only fire if the user has granted permission — if not, those warnings are surfaced as in-app banners instead.
-- **iOS web push fallback.** Web push on iOS requires the PWA to be installed to the home screen AND iOS ≥ 16.4. For iOS users who don't meet both conditions, **all four push event types degrade gracefully to in-app banners on next foreground**. Mandatory quota/sync warnings additionally surface in the sync-status chip (§ 3.28). No email fallback in v1.
+- **iOS web push fallback.** Web push on iOS requires the PWA to be installed to the home screen AND iOS ≥ 16.4. For iOS users who don't meet both conditions, **all four push event types degrade gracefully to in-app banners on next foreground**. Mandatory quota/sync warnings additionally surface in the sync-status chip (§ 3.28). No email fallback in v1. Make sure for such users the limitation is communicated clearly so they would not wonder why they don't receive push notifications.
 
 ### 3.32 Data protection — end-to-end encryption (E2EE)
 
-The app ships with **end-to-end encryption from v1**. All user data is encrypted on the client device before it leaves it; the server only ever holds ciphertext and metadata. A server admin with full sudo on the host cannot read user data — only crack 256 bits of entropy through a slow KDF, which is not a path anyone will walk.
+The app ships with **end-to-end encryption from v1**. All user data is encrypted on the client device before it leaves it; the server only ever holds ciphertext and metadata. A server admin with full sudo on the host cannot read user data — only crack 256 bits of entropy through a slow KDF, which is not a path anyone will walk. Make sure that is communicated as the first screen of onboarding so it will encourage users to sign in.
 
 #### Threat model
 

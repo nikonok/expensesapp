@@ -111,6 +111,51 @@ services:
   #     timeout: 5s
   #     retries: 5
 
+# ───────────────────────────────────────────────────────────────────
+# Phase 0 stub — uncomment when Phase 13 freeze is done.
+# See docs/backend/architecture.md §11.6 for the canonical spec.
+# ───────────────────────────────────────────────────────────────────
+# api:
+#   build:
+#     context: .
+#     dockerfile: backend/Dockerfile
+#   image: expensesapp-api:local
+#   container_name: expensesapp-api
+#   restart: unless-stopped
+#   expose: ["8080"]
+#   read_only: true
+#   cap_drop: [ALL]
+#   security_opt: ["no-new-privileges:true"]
+#   tmpfs: ["/tmp"]
+#   volumes:
+#     - apidata:/var/lib/expensesapp
+#   environment:
+#     BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:?required}
+#     GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:?required}
+#     VAPID_PUBLIC_KEY:  ${VAPID_PUBLIC_KEY:?required}
+#     VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:?required}
+#     VAPID_SUBJECT:     ${VAPID_SUBJECT:?required}
+#     COOKIE_DOMAIN:     ${COOKIE_DOMAIN:?required}
+#     ALLOWED_ORIGINS:   ${ALLOWED_ORIGINS:?required}
+#   deploy:
+#     resources:
+#       limits:
+#         cpus: "0.5"
+#         memory: 256M
+#   logging:
+#     driver: json-file
+#     options:
+#       max-size: "10m"
+#       max-file: "3"
+#   networks:
+#     - tunnel
+#   healthcheck:
+#     test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/v1/health"]
+#     interval: 30s
+#     timeout: 5s
+#     retries: 3
+#     start_period: 10s
+
 networks:
   tunnel:
     driver: bridge # app ↔ cloudflared; outbound internet allowed for CF edge connection
@@ -122,3 +167,6 @@ volumes:
   # container lifecycle — docker compose down does NOT remove this volume.
   pgdata:
     driver: local
+  # Phase 0 stub — uncomment together with the api service above.
+  # apidata:
+  #   driver: local

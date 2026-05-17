@@ -73,3 +73,25 @@ tasks:
     cmds:
       - docker compose build --no-cache
       - docker compose up -d
+
+  # ── Backend ─────────────────────────────────────────────────────────────────
+
+  backend:dev:
+    desc: Run the backend API on :8080 (live process; ^C to stop)
+    dir: backend
+    cmd: go run ./cmd/api
+
+  backend:test:
+    desc: Run backend unit + integration tests
+    dir: backend
+    cmd: gotestsum --format pkgname -- ./...
+
+  backend:sqlc:
+    desc: Regenerate sqlc Go bindings from schema.sql + queries.sql
+    dir: backend
+    cmd: sqlc generate -f sqlc.yaml
+
+  backend:migrate:
+    desc: Apply pending goose migrations to ./data.db
+    dir: backend
+    cmd: goose -dir internal/db/migrations sqlite3 ../data.db up
