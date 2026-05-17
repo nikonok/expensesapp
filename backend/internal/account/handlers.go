@@ -13,11 +13,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	internaldb "github.com/nikonok/expensesapp/backend/internal/db"
 	"github.com/nikonok/expensesapp/backend/internal/db/gen"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
 )
-
-const rfc3339Ms = "2006-01-02T15:04:05.000Z07:00"
 
 // Handler holds dependencies for account HTTP endpoints.
 type Handler struct {
@@ -170,25 +169,24 @@ func (h *Handler) RevokeMyDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now().UTC()
-	nowStr := now.Format(rfc3339Ms)
+	nowStr := httpx.FormatTime(now)
 
-	// Revoke the device and all its sessions in a single query each.
-	// Using gen.Queries directly (accepts DBTX, works with *sql.DB).
-	if err := q.RevokeDevice(ctx, gen.RevokeDeviceParams{
-		RevokedAt:    sql.NullString{String: nowStr, Valid: true},
-		RevokeReason: sql.NullString{String: "user_signout", Valid: true},
-		ID:           targetID,
+	// Revoke the device and all its sessions atomically.
+	if err := internaldb.WithTx(ctx, h.db, func(tx *sql.Tx) error {
+		qt := gen.New(tx)
+		if err := qt.RevokeDevice(ctx, gen.RevokeDeviceParams{
+			RevokedAt:    sql.NullString{String: nowStr, Valid: true},
+			RevokeReason: sql.NullString{String: "user_signout", Valid: true},
+			ID:           targetID,
+		}); err != nil {
+			return err
+		}
+		return qt.RevokeAllDeviceSessions(ctx, gen.RevokeAllDeviceSessionsParams{
+			RevokedAt: sql.NullString{String: nowStr, Valid: true},
+			DeviceID:  targetID,
+		})
 	}); err != nil {
 		slog.WarnContext(ctx, "revoke device error", "err", err)
-		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
-		return
-	}
-
-	if err := q.RevokeAllDeviceSessions(ctx, gen.RevokeAllDeviceSessionsParams{
-		RevokedAt: sql.NullString{String: nowStr, Valid: true},
-		DeviceID:  targetID,
-	}); err != nil {
-		slog.WarnContext(ctx, "revoke device sessions error", "err", err)
 		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
 		return
 	}

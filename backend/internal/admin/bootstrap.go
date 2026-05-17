@@ -12,6 +12,7 @@ import (
 
 	"github.com/nikonok/expensesapp/backend/internal/db"
 	"github.com/nikonok/expensesapp/backend/internal/db/gen"
+	"github.com/nikonok/expensesapp/backend/internal/httpx"
 )
 
 // EnsureBootstrap is invoked on every startup. It reconciles the configured
@@ -36,7 +37,7 @@ func EnsureBootstrap(ctx context.Context, sqldb *sql.DB, configuredEmail string)
 			qt := gen.New(tx)
 			return qt.UpsertBootstrapState(ctx, gen.UpsertBootstrapStateParams{
 				BootstrapEmail: configuredEmail,
-				AppliedAt:      time.Now().UTC().Format(time.RFC3339),
+				AppliedAt:      httpx.FormatTime(time.Now()),
 			})
 		})
 	}
@@ -58,7 +59,7 @@ func EnsureBootstrap(ctx context.Context, sqldb *sql.DB, configuredEmail string)
 // handoff performs the bootstrap-email change inside an already-open transaction.
 // prevEmail is the email stored in bootstrap_state; newEmail is the configured one.
 func handoff(ctx context.Context, q *gen.Queries, prevEmail, newEmail string) error {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := httpx.FormatTime(time.Now())
 
 	// Locate the prior root (before any mutations so we capture the current state).
 	var priorUser *gen.User

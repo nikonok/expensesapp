@@ -22,8 +22,6 @@ import (
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
 )
 
-const rfc3339Ms = "2006-01-02T15:04:05.000Z07:00"
-
 // Handler holds dependencies for auth HTTP endpoints.
 type Handler struct {
 	db       *sql.DB
@@ -84,7 +82,7 @@ func (h *Handler) PostGoogle(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	now := time.Now().UTC()
-	nowStr := now.Format(rfc3339Ms)
+	nowStr := httpx.FormatTime(now)
 
 	// Verify the Google ID token.
 	claims, err := h.verifier.Verify(ctx, req.IDToken)
@@ -295,7 +293,7 @@ func (h *Handler) PostSignout(w http.ResponseWriter, r *http.Request) {
 
 	userID := httpx.UserID(ctx)
 	email := "" // not available directly in ctx; omit from audit detail
-	_ = insertAudit(ctx, h.db, userID, email, "auth.signout", "session", sessionID, now.Format(rfc3339Ms))
+	_ = insertAudit(ctx, h.db, userID, email, "auth.signout", "session", sessionID, httpx.FormatTime(now))
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -319,7 +317,7 @@ func (h *Handler) PostSignoutAll(w http.ResponseWriter, r *http.Request) {
 
 	ClearCookie(w)
 
-	_ = insertAudit(ctx, h.db, userID, "", "auth.signout.all", "user", userID, now.Format(rfc3339Ms))
+	_ = insertAudit(ctx, h.db, userID, "", "auth.signout.all", "user", userID, httpx.FormatTime(now))
 
 	w.WriteHeader(http.StatusNoContent)
 }

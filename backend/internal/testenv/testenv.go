@@ -22,6 +22,7 @@ import (
 	authpkg "github.com/nikonok/expensesapp/backend/internal/auth"
 	dbpkg "github.com/nikonok/expensesapp/backend/internal/db"
 	"github.com/nikonok/expensesapp/backend/internal/db/gen"
+	"github.com/nikonok/expensesapp/backend/internal/httpx"
 	"github.com/nikonok/expensesapp/backend/internal/server"
 )
 
@@ -168,7 +169,7 @@ func (e *Env) MintSession(t *testing.T, email string) (sessionCookie string, use
 	ctx := context.Background()
 	q := gen.New(e.DB)
 	now := e.Now().UTC()
-	nowStr := now.Format(time.RFC3339)
+	nowStr := httpx.FormatTime(now)
 
 	// Upsert user.
 	user, err := q.UpsertUserByEmail(ctx, gen.UpsertUserByEmailParams{

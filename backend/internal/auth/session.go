@@ -20,6 +20,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nikonok/expensesapp/backend/internal/db/gen"
+	"github.com/nikonok/expensesapp/backend/internal/httpx"
 )
 
 // ErrInvalidSession is returned for any cookie-validation failure.
@@ -70,7 +71,7 @@ func Mint(ctx context.Context, db *sql.DB, deviceID string, now time.Time) (cook
 	}
 
 	q := gen.New(db)
-	nowStr := now.UTC().Format(time.RFC3339)
+	nowStr := httpx.FormatTime(now)
 	if err := q.InsertSession(ctx, gen.InsertSessionParams{
 		ID:         sessionID,
 		DeviceID:   deviceID,
@@ -119,7 +120,7 @@ func Validate(ctx context.Context, db *sql.DB, cookieValue string, now time.Time
 		return nil, err
 	}
 
-	lastUsedAt, err := time.Parse(time.RFC3339, row.LastUsedAt)
+	lastUsedAt, err := httpx.ParseTime(row.LastUsedAt)
 	if err != nil {
 		return nil, ErrInvalidSession
 	}
@@ -154,7 +155,7 @@ func Validate(ctx context.Context, db *sql.DB, cookieValue string, now time.Time
 // newCookieValue is empty and caller does NOT need to reset the cookie.
 func TouchAndMaybeRotate(ctx context.Context, db *sql.DB, info *SessionInfo, now time.Time) (newCookieValue string, rotated bool, err error) {
 	q := gen.New(db)
-	nowStr := now.UTC().Format(time.RFC3339)
+	nowStr := httpx.FormatTime(now)
 
 	if now.Sub(info.LastUsedAt) > rotateThreshold {
 		// Generate new token and rotate.
@@ -205,30 +206,36 @@ func TouchAndMaybeRotate(ctx context.Context, db *sql.DB, info *SessionInfo, now
 	return "", false, nil
 }
 
-// Revoke marks the session revoked and evicts cache.
+// Revoke marks the session as revoked in the database. The in-memory cache
+// (keyed by token hash) does NOT track sessionID, so it is not evicted here;
+// stale entries expire within the 60s TTL window. Callers that need
+// immediately-fresh validation can flush the cache via the test-only helper.
 func Revoke(ctx context.Context, db *sql.DB, sessionID string, now time.Time) error {
 	q := gen.New(db)
 	return q.RevokeSession(ctx, gen.RevokeSessionParams{
-		RevokedAt: sql.NullString{String: now.UTC().Format(time.RFC3339), Valid: true},
+		RevokedAt: sql.NullString{String: httpx.FormatTime(now), Valid: true},
 		ID:        sessionID,
 	})
 }
 
-// RevokeAll revokes every session for the user. Used on signout-all.
+// RevokeAll marks every session for the user as revoked in the database.
+// Cache entries (keyed by token hash) are not evicted here; they expire within
+// the 60s TTL window. Used on signout-all.
 func RevokeAll(ctx context.Context, db *sql.DB, userID string, now time.Time) error {
 	q := gen.New(db)
 	return q.RevokeAllUserSessions(ctx, gen.RevokeAllUserSessionsParams{
-		RevokedAt: sql.NullString{String: now.UTC().Format(time.RFC3339), Valid: true},
+		RevokedAt: sql.NullString{String: httpx.FormatTime(now), Valid: true},
 		UserID:    userID,
 	})
 }
 
-// RevokeAllForDevice revokes every session bound to a specific device. Used on
+// RevokeAllForDevice marks every session bound to a specific device as revoked
+// in the database. Cache entries expire within the 60s TTL window. Used on
 // device sign-out (per BR §3.10) and on family kick (per BR §3.33).
 func RevokeAllForDevice(ctx context.Context, db *sql.DB, deviceID string, now time.Time) error {
 	q := gen.New(db)
 	return q.RevokeAllDeviceSessions(ctx, gen.RevokeAllDeviceSessionsParams{
-		RevokedAt: sql.NullString{String: now.UTC().Format(time.RFC3339), Valid: true},
+		RevokedAt: sql.NullString{String: httpx.FormatTime(now), Valid: true},
 		DeviceID:  deviceID,
 	})
 }
@@ -257,26 +264,6 @@ func ClearCookie(w http.ResponseWriter) {
 		HttpOnly: true,
 		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
-	})
-}
-
-// CacheSize returns the number of entries currently in the session cache.
-// Exported for use in tests only.
-func CacheSize() int {
-	count := 0
-	sessionCache.Range(func(_, _ any) bool {
-		count++
-		return true
-	})
-	return count
-}
-
-// ClearSessionCache evicts all entries from the in-process session cache.
-// Exported for use in tests only — do not call in production code.
-func ClearSessionCache() {
-	sessionCache.Range(func(k, _ any) bool {
-		sessionCache.Delete(k)
-		return true
 	})
 }
 
