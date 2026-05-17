@@ -126,9 +126,11 @@ function AppRoutes() {
     }
     // On PWA cold start, always redirect to the configured startup tab unless already on it.
     const path = coldStartPathRef.current;
-    if (path && path !== `/${startupScreen}`) {
+    if (path) {
       coldStartPathRef.current = "";
-      navigate(`/${startupScreen}`, { replace: true });
+      if (!path.startsWith("/dev/") && path !== `/${startupScreen}`) {
+        navigate(`/${startupScreen}`, { replace: true });
+      }
     }
   }, [isLoaded, hasCompletedOnboarding, navigate, startupScreen]);
 
