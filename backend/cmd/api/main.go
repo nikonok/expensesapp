@@ -80,7 +80,7 @@ func healthHandler(_ config.Config) http.HandlerFunc {
 		httpx.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok":      true,
 			"version": version.String(),
-			"time":    time.Now().UTC().Format(time.RFC3339),
+			"time":    time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
 		})
 	}
 }
