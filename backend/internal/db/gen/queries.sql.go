@@ -1191,3 +1191,263 @@ func (q *Queries) UpsertUserByEmail(ctx context.Context, arg UpsertUserByEmailPa
 	)
 	return i, err
 }
+
+// ----- family_invites -----
+
+const insertFamilyInvite = `-- name: InsertFamilyInvite :exec
+INSERT INTO family_invites (id, family_id, invited_by, invitee_email, created_at, expires_at, status, decided_at)
+VALUES (?, ?, ?, ?, ?, ?, 'pending', NULL)
+`
+
+type InsertFamilyInviteParams struct {
+	ID           string
+	FamilyID     string
+	InvitedBy    string
+	InviteeEmail string
+	CreatedAt    string
+	ExpiresAt    string
+}
+
+func (q *Queries) InsertFamilyInvite(ctx context.Context, arg InsertFamilyInviteParams) error {
+	_, err := q.db.ExecContext(ctx, insertFamilyInvite,
+		arg.ID,
+		arg.FamilyID,
+		arg.InvitedBy,
+		arg.InviteeEmail,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const getFamilyInvite = `-- name: GetFamilyInvite :one
+SELECT id, family_id, invited_by, invitee_email, created_at, expires_at, status, decided_at FROM family_invites WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetFamilyInvite(ctx context.Context, id string) (FamilyInvite, error) {
+	row := q.db.QueryRowContext(ctx, getFamilyInvite, id)
+	var i FamilyInvite
+	err := row.Scan(
+		&i.ID,
+		&i.FamilyID,
+		&i.InvitedBy,
+		&i.InviteeEmail,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.Status,
+		&i.DecidedAt,
+	)
+	return i, err
+}
+
+const listIncomingInvites = `-- name: ListIncomingInvites :many
+SELECT id, family_id, invited_by, invitee_email, created_at, expires_at, status, decided_at FROM family_invites
+WHERE invitee_email = ? COLLATE NOCASE
+  AND status = 'pending'
+  AND expires_at > ?
+ORDER BY created_at DESC
+`
+
+// Returns pending, non-expired invites for the given invitee email.
+func (q *Queries) ListIncomingInvites(ctx context.Context, inviteeEmail string, now string) ([]FamilyInvite, error) {
+	rows, err := q.db.QueryContext(ctx, listIncomingInvites, inviteeEmail, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FamilyInvite{}
+	for rows.Next() {
+		var i FamilyInvite
+		if err := rows.Scan(
+			&i.ID,
+			&i.FamilyID,
+			&i.InvitedBy,
+			&i.InviteeEmail,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.Status,
+			&i.DecidedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPendingInviteForEmail = `-- name: GetPendingInviteForEmail :one
+SELECT id, family_id, invited_by, invitee_email, created_at, expires_at, status, decided_at FROM family_invites
+WHERE family_id = ? AND invitee_email = ? COLLATE NOCASE AND status = 'pending'
+LIMIT 1
+`
+
+// Returns an existing pending invite for this family + email combo (for duplicate check).
+func (q *Queries) GetPendingInviteForEmail(ctx context.Context, familyID string, inviteeEmail string) (FamilyInvite, error) {
+	row := q.db.QueryRowContext(ctx, getPendingInviteForEmail, familyID, inviteeEmail)
+	var i FamilyInvite
+	err := row.Scan(
+		&i.ID,
+		&i.FamilyID,
+		&i.InvitedBy,
+		&i.InviteeEmail,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.Status,
+		&i.DecidedAt,
+	)
+	return i, err
+}
+
+const updateInviteStatus = `-- name: UpdateInviteStatus :exec
+UPDATE family_invites SET status = ?, decided_at = ? WHERE id = ?
+`
+
+type UpdateInviteStatusParams struct {
+	Status    string
+	DecidedAt sql.NullString
+	ID        string
+}
+
+func (q *Queries) UpdateInviteStatus(ctx context.Context, arg UpdateInviteStatusParams) error {
+	_, err := q.db.ExecContext(ctx, updateInviteStatus, arg.Status, arg.DecidedAt, arg.ID)
+	return err
+}
+
+// ----- family member queries -----
+
+const countActiveFamilyMembers = `-- name: CountActiveFamilyMembers :one
+SELECT COUNT(*) FROM family_members WHERE family_id = ? AND left_at IS NULL
+`
+
+// Returns the count of active (left_at IS NULL) members for a family.
+func (q *Queries) CountActiveFamilyMembers(ctx context.Context, familyID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countActiveFamilyMembers, familyID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const getFamilyMemberByUserID = `-- name: GetFamilyMemberByUserID :one
+SELECT family_id, user_id, joined_at, left_at, last_removed_at FROM family_members WHERE family_id = ? AND user_id = ? LIMIT 1
+`
+
+// Returns any family_members row (including left) for given family + user.
+func (q *Queries) GetFamilyMemberByUserID(ctx context.Context, familyID string, userID string) (FamilyMember, error) {
+	row := q.db.QueryRowContext(ctx, getFamilyMemberByUserID, familyID, userID)
+	var i FamilyMember
+	err := row.Scan(
+		&i.FamilyID,
+		&i.UserID,
+		&i.JoinedAt,
+		&i.LeftAt,
+		&i.LastRemovedAt,
+	)
+	return i, err
+}
+
+const joinFamily = `-- name: JoinFamily :exec
+INSERT INTO family_members (family_id, user_id, joined_at, left_at, last_removed_at)
+VALUES (?, ?, ?, NULL, NULL)
+`
+
+type JoinFamilyParams struct {
+	FamilyID string
+	UserID   string
+	JoinedAt string
+}
+
+// Insert a new active family_members row. Used in invite-accept path.
+func (q *Queries) JoinFamily(ctx context.Context, arg JoinFamilyParams) error {
+	_, err := q.db.ExecContext(ctx, joinFamily, arg.FamilyID, arg.UserID, arg.JoinedAt)
+	return err
+}
+
+const markFamilyMemberLeft = `-- name: MarkFamilyMemberLeft :exec
+UPDATE family_members SET left_at = ? WHERE family_id = ? AND user_id = ? AND left_at IS NULL
+`
+
+type MarkFamilyMemberLeftParams struct {
+	LeftAt   sql.NullString
+	FamilyID string
+	UserID   string
+}
+
+// Soft-leave: set left_at for the given family + user.
+func (q *Queries) MarkFamilyMemberLeft(ctx context.Context, arg MarkFamilyMemberLeftParams) error {
+	_, err := q.db.ExecContext(ctx, markFamilyMemberLeft, arg.LeftAt, arg.FamilyID, arg.UserID)
+	return err
+}
+
+const setMemberLastRemoved = `-- name: SetMemberLastRemoved :exec
+UPDATE family_members SET left_at = ?, last_removed_at = ? WHERE family_id = ? AND user_id = ?
+`
+
+type SetMemberLastRemovedParams struct {
+	LeftAt        sql.NullString
+	LastRemovedAt sql.NullString
+	FamilyID      string
+	UserID        string
+}
+
+// Record the removal timestamp for cool-down tracking.
+func (q *Queries) SetMemberLastRemoved(ctx context.Context, arg SetMemberLastRemovedParams) error {
+	_, err := q.db.ExecContext(ctx, setMemberLastRemoved,
+		arg.LeftAt,
+		arg.LastRemovedAt,
+		arg.FamilyID,
+		arg.UserID,
+	)
+	return err
+}
+
+// ----- migrations (solo-to-family idempotency) -----
+
+const insertMigrationRecord = `-- name: InsertMigrationRecord :exec
+INSERT INTO migrations (id, user_id, source_family_id, target_family_id, record_count, committed_at)
+VALUES (?, ?, ?, ?, ?, ?)
+`
+
+type InsertMigrationRecordParams struct {
+	ID             string
+	UserID         string
+	SourceFamilyID sql.NullString
+	TargetFamilyID string
+	RecordCount    int64
+	CommittedAt    string
+}
+
+func (q *Queries) InsertMigrationRecord(ctx context.Context, arg InsertMigrationRecordParams) error {
+	_, err := q.db.ExecContext(ctx, insertMigrationRecord,
+		arg.ID,
+		arg.UserID,
+		arg.SourceFamilyID,
+		arg.TargetFamilyID,
+		arg.RecordCount,
+		arg.CommittedAt,
+	)
+	return err
+}
+
+const getMigrationRecord = `-- name: GetMigrationRecord :one
+SELECT id, user_id, source_family_id, target_family_id, record_count, committed_at FROM migrations WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetMigrationRecord(ctx context.Context, id string) (Migration, error) {
+	row := q.db.QueryRowContext(ctx, getMigrationRecord, id)
+	var i Migration
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SourceFamilyID,
+		&i.TargetFamilyID,
+		&i.RecordCount,
+		&i.CommittedAt,
+	)
+	return i, err
+}

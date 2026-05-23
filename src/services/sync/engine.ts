@@ -482,18 +482,22 @@ export function startLiveSync(familyId: string): () => void {
         case "you.removed": {
           (async () => {
             try {
-              // Clear all local data.
+              // Clear all local data (crypto keys + sync state + domain records).
               await Promise.all([
                 db.transactions.clear(),
                 db.accounts.clear(),
                 db.categories.clear(),
                 db.budgets.clear(),
+                db.settings.clear(),
                 db.pendingUploads.clear(),
                 db.syncCursors.clear(),
+                db.cipherKeys.clear(),
               ]);
               // Sign out via auth store.
               const { useAuthStore } = await import("@/services/auth/session");
               await useAuthStore.getState().signOut();
+              // Navigate to onboarding — full reload clears in-memory state.
+              window.location.assign("/onboarding");
             } catch (err) {
               logger.error("liveSync.you.removed.failed", err instanceof Error ? err : undefined);
             }

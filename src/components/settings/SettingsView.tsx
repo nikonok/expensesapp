@@ -15,6 +15,7 @@ import { ResetAppSetting } from "./ResetAppSetting";
 import { ComingSoonStub } from "../shared/ComingSoonStub";
 import { InstallSetting } from "./InstallSetting";
 import { SecuritySettings } from "./SecuritySettings";
+import { FamilySettings } from "./FamilySettings";
 
 function SectionHeader({ label }: { label: string }) {
   return (
@@ -117,6 +118,10 @@ export function SettingsView() {
         {/* Security section */}
         <SectionHeader label="Security" />
         <SecuritySettings />
+
+        {/* Family section */}
+        <SectionHeader label="Family" />
+        <FamilySettings />
 
         {/* General section */}
         <SectionHeader label={t("settings.sections.general")} />
