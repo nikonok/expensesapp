@@ -341,6 +341,11 @@ func (s *Service) DeclineInvite(ctx context.Context, p DeclineInviteParams) erro
 			return ErrInviteNotPending
 		}
 
+		// Email match — only the invitee may decline.
+		if !strings.EqualFold(invite.InviteeEmail, p.CallerEmail) {
+			return ErrInviteEmailMismatch
+		}
+
 		if err := qt.UpdateInviteStatus(ctx, gen.UpdateInviteStatusParams{
 			Status:    "declined",
 			DecidedAt: sql.NullString{String: nowStr, Valid: true},

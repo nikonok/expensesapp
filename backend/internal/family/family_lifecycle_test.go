@@ -692,6 +692,50 @@ func TestRemove_HappyPath(t *testing.T) {
 // --------------------------------------------------------------------------
 
 // --------------------------------------------------------------------------
+// TestDeclineInvite_NotInvitee
+// --------------------------------------------------------------------------
+
+// TestDeclineInvite_NotInvitee verifies that a user who is not the invitee
+// cannot decline the invite — must return 403.
+func TestDeclineInvite_NotInvitee(t *testing.T) {
+	authpkg.ClearSessionCache()
+	env := testenv.New(t)
+	defer env.Close()
+
+	addToAllowlist(t, env.DB, "alice@example.com")
+	addToAllowlist(t, env.DB, "bob@example.com")
+	addToAllowlist(t, env.DB, "carol@example.com")
+
+	// Alice: init family and invite Bob.
+	clientA := env.Client
+	initFamilyForUser(t, env, clientA, "alice@example.com", "sub-alice-ni")
+
+	authpkg.ClearSessionCache()
+	env.Verifier.Claims = &authpkg.Claims{
+		Email: "alice@example.com", EmailVerified: true, Sub: "sub-alice-ni",
+	}
+	inviteID := sendInvite(t, env, clientA, "bob@example.com")
+
+	// Carol: sign in (not the invitee) and try to decline Bob's invite.
+	authpkg.ClearSessionCache()
+	clientC := env.NewClient()
+	env.Verifier.Claims = &authpkg.Claims{
+		Email: "carol@example.com", EmailVerified: true, Sub: "sub-carol-ni",
+	}
+	signInUser(t, env, clientC)
+
+	resp := postJSON(t, clientC, env.Server.URL+"/v1/family/invites/"+inviteID+"/decline", nil)
+	body := readBody(t, resp)
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "expected 403: %s", body)
+
+	// Invite status must still be pending.
+	q := gen.New(env.DB)
+	inv, err := q.GetFamilyInvite(context.Background(), inviteID)
+	require.NoError(t, err)
+	assert.Equal(t, "pending", inv.Status, "invite must remain pending after unauthorized decline attempt")
+}
+
+// --------------------------------------------------------------------------
 // TestMigrateSolo_NotInTargetFamily
 // --------------------------------------------------------------------------
 

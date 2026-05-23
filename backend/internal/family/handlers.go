@@ -345,6 +345,8 @@ func (h *Handler) PostDeclineInvite(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteError(w, r, http.StatusNotFound, "not-found", "invite not found")
 		case errors.Is(svcErr, ErrInviteNotPending):
 			httpx.WriteError(w, r, http.StatusConflict, "invite-not-pending", "invite is not pending")
+		case errors.Is(svcErr, ErrInviteEmailMismatch):
+			httpx.WriteError(w, r, http.StatusForbidden, "forbidden", "invite is not for this user")
 		default:
 			slog.WarnContext(ctx, "family.decline: decline invite", "err", svcErr)
 			httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
