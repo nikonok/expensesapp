@@ -128,6 +128,7 @@ func TestGetMyDevices(t *testing.T) {
 	assert.Equal(t, deviceID, items[0]["id"])
 	assert.Equal(t, "Test Phone", items[0]["label"])
 	assert.Equal(t, "active", items[0]["status"])
+	assert.NotEmpty(t, items[0]["pubKey"], "pubKey must be present for envelope wrapping")
 }
 
 // --------------------------------------------------------------------------
