@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/nikonok/expensesapp/backend/internal/db/gen"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
 )
 
@@ -85,9 +86,31 @@ func RequireAdmin(next http.Handler) http.Handler {
 	})
 }
 
-// RequireFamilyMembership is a placeholder for Phase 7. Same pattern.
-func RequireFamilyMembership(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		panic("auth.RequireFamilyMembership not implemented (Phase 7)")
-	})
+// RequireFamilyMembership loads the user's active family_members row and injects
+// the familyId into the context. If the user has no active family, it returns
+// 403 with error code "family-required".
+//
+// Requires SessionMiddleware to have run first (user ID must be in context).
+func RequireFamilyMembership(db *sql.DB) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+			userID := httpx.UserID(ctx)
+
+			q := gen.New(db)
+			member, err := q.GetActiveFamilyMember(ctx, userID)
+			if errors.Is(err, sql.ErrNoRows) {
+				httpx.WriteError(w, r, http.StatusForbidden, "family-required", "user is not a member of an active family")
+				return
+			}
+			if err != nil {
+				slog.WarnContext(ctx, "family membership lookup error", "err", err)
+				httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
+				return
+			}
+
+			ctx = httpx.WithFamilyID(ctx, member.FamilyID)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
 }
