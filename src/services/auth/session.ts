@@ -21,6 +21,10 @@ interface AuthState {
   isSigningIn: boolean;
   error: string | null;
   needsFamilyInit: boolean;
+  /** True when the sign-in response indicates this is a new device that must
+   *  wait for an existing device to POST a familyKey envelope.
+   *  While true, the app should show /devices/waiting. */
+  awaitingEnvelope: boolean;
   /** Ephemeral device public key stashed after sign-in; consumed by onboarding init step.
    *  The private key is persisted inside the crypto worker and never exposed here. */
   pendingDevicePubKey: Uint8Array | null;
@@ -37,6 +41,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   isSigningIn: false,
   error: null,
   needsFamilyInit: false,
+  awaitingEnvelope: false,
   pendingDevicePubKey: null,
 
   signIn: async () => {
@@ -65,6 +70,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         user: AuthUser;
         device: AuthDevice;
         needsFamilyInit?: boolean;
+        awaitingEnvelope?: boolean;
       }>("/api/v1/auth/google", {
         method: "POST",
         body: JSON.stringify({ idToken, devicePubKey: devicePubKeyB64, deviceLabel, userAgent }),
@@ -76,6 +82,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         isSignedIn: true,
         isSigningIn: false,
         needsFamilyInit: resp.needsFamilyInit ?? false,
+        awaitingEnvelope: resp.awaitingEnvelope ?? false,
         pendingDevicePubKey: devicePubKey,
       });
     } catch (e: unknown) {
@@ -93,6 +100,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       isSignedIn: false,
       error: null,
       needsFamilyInit: false,
+      awaitingEnvelope: false,
       pendingDevicePubKey: null,
     });
   },

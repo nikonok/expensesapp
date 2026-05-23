@@ -17,9 +17,11 @@ import OnboardingPage from "./pages/OnboardingPage";
 import TrashedAccounts from "./components/accounts/TrashedAccounts";
 import { InstallPopup } from "./components/shared/InstallPopup";
 import { OnboardingCompletePopup } from "./components/shared/OnboardingCompletePopup";
+import { DeviceJoinedBanner } from "./components/shared/DeviceJoinedBanner";
 const BudgetPage = lazy(() => import("./pages/BudgetPage"));
 const OverviewPage = lazy(() => import("./pages/OverviewPage"));
 const TransactionInput = lazy(() => import("./components/transactions/TransactionInput"));
+const DeviceJoinWaiting = lazy(() => import("./pages/DeviceJoinWaiting"));
 const CryptoDemoPage = import.meta.env.DEV ? lazy(() => import("./pages/CryptoDemoPage")) : null;
 
 function AppRoutes() {
@@ -209,6 +211,7 @@ function AppRoutes() {
         <Route path="transactions/:id/edit" element={<TransactionInput />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="onboarding" element={<OnboardingPage />} />
+        <Route path="devices/waiting" element={<DeviceJoinWaiting />} />
         {import.meta.env.DEV && CryptoDemoPage && (
           <Route path="dev/crypto-demo" element={<CryptoDemoPage />} />
         )}
@@ -225,6 +228,7 @@ export default function App() {
         <AppRoutes />
         <InstallPopup />
         <OnboardingCompletePopup />
+        <DeviceJoinedBanner />
       </ToastProvider>
     </BrowserRouter>
   );
