@@ -18,6 +18,7 @@ import TrashedAccounts from "./components/accounts/TrashedAccounts";
 import { InstallPopup } from "./components/shared/InstallPopup";
 import { OnboardingCompletePopup } from "./components/shared/OnboardingCompletePopup";
 import { DeviceJoinedBanner } from "./components/shared/DeviceJoinedBanner";
+import { useAuthStore } from "./services/auth/session";
 const BudgetPage = lazy(() => import("./pages/BudgetPage"));
 const OverviewPage = lazy(() => import("./pages/OverviewPage"));
 const TransactionInput = lazy(() => import("./components/transactions/TransactionInput"));
@@ -34,6 +35,7 @@ function AppRoutes() {
     notificationEnabled,
     notificationTime,
   } = useSettingsStore();
+  const { isSignedIn, awaitingEnvelope } = useAuthStore();
   const [integrityError, setIntegrityError] = useState(false);
   const coldStartPathRef = useRef(window.location.pathname);
 
@@ -126,6 +128,11 @@ function AppRoutes() {
       navigate("/onboarding", { replace: true });
       return;
     }
+    // New device waiting for envelope — takes priority over startup-screen redirect.
+    if (isSignedIn && awaitingEnvelope) {
+      navigate("/devices/waiting", { replace: true });
+      return;
+    }
     // On PWA cold start, always redirect to the configured startup tab unless already on it.
     const path = coldStartPathRef.current;
     if (path) {
@@ -138,7 +145,7 @@ function AppRoutes() {
         navigate(`/${startupScreen}`, { replace: true });
       }
     }
-  }, [isLoaded, hasCompletedOnboarding, navigate, startupScreen]);
+  }, [isLoaded, hasCompletedOnboarding, isSignedIn, awaitingEnvelope, navigate, startupScreen]);
 
   if (integrityError) {
     return <IntegrityErrorScreen />;

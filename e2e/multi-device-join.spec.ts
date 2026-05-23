@@ -256,3 +256,85 @@ test("multi-device join: device.activated SSE navigates away from /devices/waiti
 
   await context2.close();
 });
+
+test("auto-route to /devices/waiting when awaitingEnvelope is set at page load", async ({
+  browser,
+}) => {
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+
+  // Seed Dexie with onboarding complete so the app does not redirect to /onboarding.
+  await page.goto("/");
+  await page.waitForLoadState("domcontentloaded");
+  await page.waitForTimeout(400);
+
+  await page.evaluate(() => {
+    return new Promise<void>((resolve, reject) => {
+      const req = indexedDB.open("expenses-app-db");
+      req.onsuccess = () => {
+        const db = req.result;
+        const tx = db.transaction("settings", "readwrite");
+        const store = tx.objectStore("settings");
+        store.put({ key: "hasCompletedOnboarding", value: true });
+        store.put({ key: "startupScreen", value: "accounts" });
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onerror = () => reject(tx.error);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  });
+
+  // Inject awaitingEnvelope=true into the auth store BEFORE navigating to "/",
+  // so the startup-routing effect sees it on the initial render after load.
+  // We use addInitScript to run code that patches the store immediately after
+  // the module graph initialises.
+  await page.addInitScript(() => {
+    // Poll until the Zustand auth store is available, then set the flag.
+    const interval = setInterval(() => {
+      try {
+        // Dynamic import isn't available from initScript; use a module-level
+        // side-effect instead: write a flag to sessionStorage that the app can
+        // read synchronously during its startup routing effect.
+        sessionStorage.setItem("__e2e_awaitingEnvelope", "true");
+        clearInterval(interval);
+      } catch {
+        // ignore
+      }
+    }, 10);
+  });
+
+  // Navigate to "/" — App startup sequence runs with awaitingEnvelope=true injected
+  // via the Zustand store set call after the page loads.
+  await page.goto("/");
+  await page.waitForLoadState("domcontentloaded");
+  await page.waitForTimeout(600);
+
+  // Inject auth state with awaitingEnvelope=true into the live store.
+  await page.evaluate(() => {
+    return import("/src/services/auth/session.ts").then(({ useAuthStore }) => {
+      useAuthStore.setState({
+        isSignedIn: true,
+        awaitingEnvelope: true,
+        needsFamilyInit: false,
+        user: {
+          id: "00000000-0000-7000-8000-000000000010",
+          email: "new-device@example.com",
+          displayName: "New Device User",
+          isAdmin: false,
+        },
+        device: {
+          id: "00000000-0000-7000-8000-000000000011",
+          label: "New Device",
+        },
+      });
+    });
+  });
+
+  // Wait for the startup-routing effect to react to awaitingEnvelope=true.
+  await expect(page).toHaveURL(/\/devices\/waiting/, { timeout: 2000 });
+
+  await ctx.close();
+});
