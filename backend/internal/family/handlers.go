@@ -17,6 +17,7 @@ import (
 
 	"github.com/nikonok/expensesapp/backend/internal/db/gen"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
+	"github.com/nikonok/expensesapp/backend/internal/live"
 )
 
 // errNotImplemented is the sentinel returned by Phase 7 stubs.
@@ -29,6 +30,7 @@ var nowUTC = func() time.Time { return time.Now().UTC() }
 type Handler struct {
 	db  *sql.DB
 	svc *Service
+	hub *live.Hub // optional; nil disables SSE publish
 }
 
 // NewHandler constructs a family Handler.
@@ -189,11 +191,6 @@ func (h *Handler) PostLeave(w http.ResponseWriter, r *http.Request) {
 
 // PostRemoveMember handles POST /v1/family/members/{userId}/remove (Phase 7 stub).
 func (h *Handler) PostRemoveMember(w http.ResponseWriter, r *http.Request) {
-	httpx.WriteError(w, r, http.StatusNotImplemented, "not-implemented", "")
-}
-
-// PostDeviceEnvelope handles POST /v1/family/devices/{id}/envelope (Phase 7 stub).
-func (h *Handler) PostDeviceEnvelope(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteError(w, r, http.StatusNotImplemented, "not-implemented", "")
 }
 
