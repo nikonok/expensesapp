@@ -489,6 +489,55 @@ func TestSync_QuotaExceeded(t *testing.T) {
 	assert.Equal(t, "quota-exceeded", problemTitle(t, body))
 }
 
+// TestSync_NewRecordWithBadParentVersion pushes a brand-new record with
+// parentVersion != 0. The server has no existing row for that recordId, so
+// ErrInvalidParentVersion should be treated as a synthetic conflict
+// (currentVersion=0) rather than propagated as HTTP 500.
+func TestSync_NewRecordWithBadParentVersion(t *testing.T) {
+	authpkg.ClearSessionCache()
+	env := testenv.New(t)
+	defer env.Close()
+
+	email := "ivan@example.com"
+	env.Verifier.Claims = &authpkg.Claims{Email: email, EmailVerified: true, Sub: "sub-ivan", Name: "Ivan"}
+	addToAllowlist(t, env, email)
+	signIn(t, env, email)
+	initFamily(t, env)
+
+	// Push a brand-new record (no existing row) with parentVersion=5 — should
+	// not exist on the server, so ErrInvalidParentVersion fires.
+	blob := validBlob(10)
+	badRec := map[string]any{
+		"recordId":           newUUIDStr(t),
+		"recordType":         "transaction",
+		"blob":               base64.RawURLEncoding.EncodeToString(blob),
+		"updatedAtMap":       map[string]string{"amount": "2024-01-01T00:00:00.000Z"},
+		"parentVersion":      5, // non-zero for a new record — invalid
+		"plaintextByteCount": int64(10),
+	}
+
+	resp := postJSON(t, env.Client, env.Server.URL+"/v1/sync/push", map[string]any{
+		"records": []any{badRec},
+	})
+	body := readBody(t, resp)
+
+	// Must be 200, not 500.
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", body)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(body, &result))
+
+	accepted, _ := result["accepted"].([]any)
+	assert.Len(t, accepted, 0, "bad-parentVersion record must not be accepted")
+
+	conflicts, _ := result["conflicts"].([]any)
+	require.Len(t, conflicts, 1, "must get 1 synthetic conflict")
+
+	conflict := conflicts[0].(map[string]any)
+	assert.Equal(t, badRec["recordId"], conflict["recordId"])
+	assert.Equal(t, float64(0), conflict["currentVersion"], "currentVersion must be 0 (no existing row)")
+}
+
 // TestSync_NoFamily tries to push without calling /v1/family/init → 403.
 func TestSync_NoFamily(t *testing.T) {
 	authpkg.ClearSessionCache()

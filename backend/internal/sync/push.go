@@ -3,6 +3,7 @@ package sync
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -188,6 +189,18 @@ func (h *Handler) PostPush(w http.ResponseWriter, r *http.Request) {
 				PlaintextByteCount: v.raw.PlaintextByteCount,
 			})
 			if err != nil {
+				// A brand-new record arriving with parentVersion != 0 is a client
+				// data error. Treat it as a synthetic conflict (no existing row →
+				// currentVersion=0) rather than an infrastructure failure.
+				if errors.Is(err, records.ErrInvalidParentVersion) {
+					conflicts = append(conflicts, pushResponseConflict{
+						RecordID:            v.raw.RecordID,
+						CurrentBlob:         "",
+						CurrentVersion:      0,
+						CurrentUpdatedAtMap: nil,
+					})
+					continue
+				}
 				return err
 			}
 			if conflict != nil {
