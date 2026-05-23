@@ -403,7 +403,9 @@ export function startLiveSync(familyId: string): () => void {
   let lastPullAt = 0;
 
   function schedulePull() {
-    if (pullTimer !== null) return; // already scheduled
+    if (pullTimer !== null) {
+      clearTimeout(pullTimer);
+    }
     const now = Date.now();
     const elapsed = now - lastPullAt;
     const delay = Math.max(0, PULL_DEBOUNCE_MS - elapsed);

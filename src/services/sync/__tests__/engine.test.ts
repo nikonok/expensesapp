@@ -395,6 +395,57 @@ describe("startLiveSync — record.changed triggers debounced pull", () => {
     disconnect();
     vi.useRealTimers();
   });
+
+  it("trailing-edge debounce: burst of 5 events within 200ms produces exactly one pull", async () => {
+    vi.useFakeTimers();
+
+    vi.mocked(pullRecords).mockResolvedValue({
+      records: [],
+      nextCursor: "cursor-trailing-1",
+      hasMore: false,
+    });
+
+    const disconnect = startLiveSync("family-trailing-001");
+    expect(capturedSSEOpts).not.toBeNull();
+
+    // Prime: fire one event and let the initial pull complete so that lastPullAt
+    // is set to "now". This puts us in the normal steady-state where the debounce
+    // window is fully active for subsequent events.
+    capturedSSEOpts!.onEvent("record.changed", {
+      seq: 0,
+      recordId: "r0",
+      recordType: "transaction",
+      version: 1,
+    });
+    await vi.runAllTimersAsync();
+    expect(pullRecords).toHaveBeenCalledTimes(1);
+    vi.clearAllMocks();
+
+    // Burst: 5 events within 200ms, all within the 500ms debounce window.
+    // Each new event clears the pending timer and reschedules (trailing-edge).
+    for (let i = 1; i <= 5; i++) {
+      capturedSSEOpts!.onEvent("record.changed", {
+        seq: i,
+        recordId: `r${i}`,
+        recordType: "transaction",
+        version: 1,
+      });
+      // Advance 40ms between events (5 × 40ms = 200ms total burst duration).
+      await vi.advanceTimersByTimeAsync(40);
+    }
+
+    // Still within the debounce window after the burst — no pull yet.
+    expect(pullRecords).not.toHaveBeenCalled();
+
+    // Advance past the debounce window so the trailing-edge timer fires.
+    await vi.advanceTimersByTimeAsync(500);
+
+    // Exactly one pull after the burst settled.
+    expect(pullRecords).toHaveBeenCalledTimes(1);
+
+    disconnect();
+    vi.useRealTimers();
+  });
 });
 
 describe("startLiveSync — device.joined updates the store", () => {
