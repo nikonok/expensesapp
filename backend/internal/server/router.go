@@ -15,6 +15,7 @@ import (
 	"github.com/nikonok/expensesapp/backend/internal/family"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
 	"github.com/nikonok/expensesapp/backend/internal/live"
+	"github.com/nikonok/expensesapp/backend/internal/snapshot"
 	syncp "github.com/nikonok/expensesapp/backend/internal/sync"
 	"github.com/nikonok/expensesapp/backend/internal/version"
 )
@@ -29,7 +30,7 @@ type HealthConfig struct {
 // NewRouter wires the chi router used by both production and tests.
 // Keep this in sync with the route table in architecture.md §6.2.
 // If logger is nil, slog.Default() is used.
-func NewRouter(db *sql.DB, authH *authpkg.Handler, reauthH *authpkg.ReauthHandler, accountH *account.Handler, familyH *family.Handler, syncH *syncp.Handler, liveH *live.Handler, cfg HealthConfig, logger *slog.Logger) http.Handler {
+func NewRouter(db *sql.DB, authH *authpkg.Handler, reauthH *authpkg.ReauthHandler, accountH *account.Handler, familyH *family.Handler, syncH *syncp.Handler, liveH *live.Handler, snapshotH *snapshot.Handler, cfg HealthConfig, logger *slog.Logger) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -84,6 +85,10 @@ func NewRouter(db *sql.DB, authH *authpkg.Handler, reauthH *authpkg.ReauthHandle
 			r.Get("/v1/sync/pull", syncH.GetPull)
 			r.Get("/v1/sync/live", liveH.GetLive)
 			r.Get("/v1/family/recovery-envelope", familyH.GetRecoveryEnvelope)
+
+			// Snapshot endpoints (Phase 8+).
+			r.Get("/v1/snapshots", snapshotH.GetSnapshots)
+			r.Post("/v1/snapshots/{date}/restore", snapshotH.PostRestore)
 		})
 	})
 
