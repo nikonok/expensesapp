@@ -119,10 +119,23 @@ export function SecuritySettings() {
       // Dynamic import keeps the Web Worker bundle out of the initial chunk.
       const { cryptoWorker } = await import("@/services/crypto/worker-client");
 
+      // Fetch the recovery envelope to obtain the family's original createdAt.
+      // Envelope A's AAD is derived from familyId + createdAt; we must use the
+      // SAME createdAt as the server or AEAD verification will fail on recovery.
+      const existingEnvelope = await apiFetch<{
+        recoveryWrap: string;
+        salt: string;
+        version: number;
+        createdAt?: string;
+        familyId?: string;
+      }>("/api/v1/family/recovery-envelope");
+      const familyCreatedAt = existingEnvelope.createdAt ?? new Date().toISOString();
+
       const [salt, { wrapBytes, phraseCt }] = await Promise.all([
         deriveArgon2Salt(familyId),
         // Worker wraps Envelope A + B using the stored familyKey (never exposed).
-        cryptoWorker.regenerateRecoveryEnvelopes(newPhrase, familyId, new Date().toISOString()),
+        // Pass the family's ORIGINAL createdAt so AAD matches the server's envelope.
+        cryptoWorker.regenerateRecoveryEnvelopes(newPhrase, familyId, familyCreatedAt),
       ]);
 
       await apiFetch("/api/v1/account/recovery/regenerate", {
