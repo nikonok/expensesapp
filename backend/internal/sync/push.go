@@ -86,7 +86,6 @@ func (h *Handler) PostPush(w http.ResponseWriter, r *http.Request) {
 	}
 
 	validated := make([]validatedRecord, 0, len(req.Records))
-	var totalIncomingBytes int64
 
 	for i, rec := range req.Records {
 		// Validate recordId is a valid UUID.
@@ -149,22 +148,17 @@ func (h *Handler) PostPush(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		totalIncomingBytes += int64(len(ciphertext))
 		validated = append(validated, validatedRecord{raw: rec, ciphertext: ciphertext})
 	}
 
 	// -------------------------------------------------------------------------
-	// Quota pre-check: load current usage and compare.
+	// Load family to obtain current usage (used for quota check inside tx).
 	// -------------------------------------------------------------------------
 	q := gen.New(h.db)
 	family, err := q.GetFamilyByID(ctx, familyID)
 	if err != nil {
 		slog.WarnContext(ctx, "sync.push: get family error", "err", err)
 		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
-		return
-	}
-	if err := records.CheckQuota(family.UsageBytes, totalIncomingBytes); err != nil {
-		httpx.WriteError(w, r, http.StatusRequestEntityTooLarge, "quota-exceeded", "family storage quota exceeded")
 		return
 	}
 
@@ -221,6 +215,12 @@ func (h *Handler) PostPush(w http.ResponseWriter, r *http.Request) {
 			totalAcceptedBytes += int64(len(v.ciphertext))
 		}
 
+		// Quota check: only bytes that would actually be stored count.
+		// Conflicts and ErrInvalidParentVersion records are excluded.
+		if err := records.CheckQuota(family.UsageBytes, totalAcceptedBytes); err != nil {
+			return err
+		}
+
 		// Increment usage by the sum of all accepted blobs.
 		if totalAcceptedBytes > 0 {
 			if err := records.IncrementUsage(ctx, qt, familyID, totalAcceptedBytes); err != nil {
@@ -230,6 +230,10 @@ func (h *Handler) PostPush(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if txErr != nil {
+		if _, ok := txErr.(records.ErrQuotaExceeded); ok {
+			httpx.WriteError(w, r, http.StatusRequestEntityTooLarge, "quota-exceeded", "family storage quota exceeded")
+			return
+		}
 		slog.WarnContext(ctx, "sync.push: transaction error", "err", txErr)
 		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
 		return
