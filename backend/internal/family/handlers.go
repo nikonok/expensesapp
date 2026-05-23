@@ -548,6 +548,8 @@ func (h *Handler) PostRemoveMember(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteError(w, r, http.StatusForbidden, "forbidden", "target user is not in your family")
 		case errors.Is(svcErr, ErrCoolDown):
 			httpx.WriteError(w, r, http.StatusTooManyRequests, "cool-down", "remove cool-down has not elapsed")
+		case errors.Is(svcErr, ErrTieBreakDenied):
+			httpx.WriteError(w, r, http.StatusForbidden, "tie-break-denied", "caller joined after target; remove denied")
 		default:
 			slog.WarnContext(ctx, "family.remove: service remove", "err", svcErr)
 			httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")

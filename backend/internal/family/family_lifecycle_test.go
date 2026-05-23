@@ -785,6 +785,63 @@ func TestMigrateSolo_NotInTargetFamily(t *testing.T) {
 // TestRemove_CoolDown
 // --------------------------------------------------------------------------
 
+// --------------------------------------------------------------------------
+// TestRemove_TieBreakDenied
+// --------------------------------------------------------------------------
+
+// TestRemove_TieBreakDenied verifies that the newer member (Bob, who joined
+// after Alice) cannot remove Alice — the tie-break must return 403
+// tie-break-denied, not 500.
+func TestRemove_TieBreakDenied(t *testing.T) {
+	authpkg.ClearSessionCache()
+	env := testenv.New(t)
+	defer env.Close()
+
+	addToAllowlist(t, env.DB, "alice@example.com")
+	addToAllowlist(t, env.DB, "bob@example.com")
+
+	// Alice: init family (joined first = tie-break winner).
+	clientA := env.Client
+	initFamilyForUser(t, env, clientA, "alice@example.com", "sub-alice-tb")
+
+	// Send invite to Bob.
+	authpkg.ClearSessionCache()
+	env.Verifier.Claims = &authpkg.Claims{
+		Email: "alice@example.com", EmailVerified: true, Sub: "sub-alice-tb",
+	}
+	inviteID := sendInvite(t, env, clientA, "bob@example.com")
+
+	// Bob: sign in and accept invite (joined after Alice).
+	authpkg.ClearSessionCache()
+	clientB := env.NewClient()
+	env.Verifier.Claims = &authpkg.Claims{
+		Email: "bob@example.com", EmailVerified: true, Sub: "sub-bob-tb",
+	}
+	signInUser(t, env, clientB)
+
+	resp := postJSON(t, clientB, env.Server.URL+"/v1/family/invites/"+inviteID+"/accept", nil)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode, "Bob accept")
+	_ = readBody(t, resp)
+
+	// Bob: try to remove Alice — he joined later, so tie-break denies it.
+	aliceID := getUserIDByEmail(t, env.DB, "alice@example.com")
+	authpkg.ClearSessionCache()
+	env.Verifier.Claims = &authpkg.Claims{
+		Email: "bob@example.com", EmailVerified: true, Sub: "sub-bob-tb",
+	}
+	removeResp := postJSON(t, clientB, env.Server.URL+"/v1/family/members/"+aliceID+"/remove", nil)
+	removeBody := readBody(t, removeResp)
+	assert.Equal(t, http.StatusForbidden, removeResp.StatusCode, "expected 403 tie-break-denied: %s", removeBody)
+
+	var errBody map[string]any
+	_ = json.Unmarshal(removeBody, &errBody)
+	assert.Contains(t, errBody["title"], "tie-break-denied")
+}
+
+// --------------------------------------------------------------------------
+// TestRemove_CoolDown
+// --------------------------------------------------------------------------
+
 // TestRemove_CoolDown verifies that removing a member within 24h of a previous
 // removal returns 429 cool-down.
 func TestRemove_CoolDown(t *testing.T) {

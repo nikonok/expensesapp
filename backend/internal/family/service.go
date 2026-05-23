@@ -629,7 +629,7 @@ func (s *Service) RemoveMember(ctx context.Context, p RemoveMemberParams) error 
 
 		// Mutual-kick tie-break: kicker must have joined first.
 		if !resolveMutualKickTieBreak(p.CallerJoinedAt, targetMember.JoinedAt) {
-			return errors.New("tie-break: caller joined after target; remove denied")
+			return ErrTieBreakDenied
 		}
 
 		// Soft-remove.

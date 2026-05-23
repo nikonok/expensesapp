@@ -55,6 +55,10 @@ var ErrNotSameFamily = errors.New("caller and target are not in the same family"
 // member of the targetFamilyId supplied in the request body.
 var ErrNotInTargetFamily = errors.New("caller not in target family")
 
+// ErrTieBreakDenied is returned by RemoveMember when the caller joined after
+// the target and the mutual-kick tie-break denies the removal.
+var ErrTieBreakDenied = errors.New("tie-break: caller joined after target; remove denied")
+
 // checkMemberCap returns ErrFamilyFull when the family already has
 // maxFamilyMembers active members.
 func checkMemberCap(ctx context.Context, qt *gen.Queries, familyID string) error {
