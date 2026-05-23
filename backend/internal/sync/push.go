@@ -169,6 +169,11 @@ func (h *Handler) PostPush(w http.ResponseWriter, r *http.Request) {
 	conflicts := make([]pushResponseConflict, 0)
 	var totalAcceptedBytes int64
 
+	// acceptedResults and acceptedTypes track the UpsertResult + record type
+	// for each accepted record so we can publish SSE events after the tx.
+	var acceptedResults []records.UpsertResult
+	var acceptedTypes []string
+
 	txErr := h.svc.WithTx(ctx, func(qt *gen.Queries) error {
 		for _, v := range validated {
 			result, conflict, err := h.svc.Upsert(ctx, qt, records.UpsertParams{
@@ -212,6 +217,8 @@ func (h *Handler) PostPush(w http.ResponseWriter, r *http.Request) {
 				Version:   result.Version,
 				FamilySeq: result.FamilySeq,
 			})
+			acceptedResults = append(acceptedResults, *result)
+			acceptedTypes = append(acceptedTypes, v.raw.RecordType)
 			totalAcceptedBytes += int64(len(v.ciphertext))
 		}
 
@@ -237,6 +244,11 @@ func (h *Handler) PostPush(w http.ResponseWriter, r *http.Request) {
 		slog.WarnContext(ctx, "sync.push: transaction error", "err", txErr)
 		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
 		return
+	}
+
+	// Publish SSE events for each accepted record (best-effort, after tx commits).
+	if h.eventBus != nil && len(acceptedResults) > 0 {
+		h.eventBus.PublishRecordChanged(familyID, acceptedResults, acceptedTypes)
 	}
 
 	httpx.WriteJSON(w, http.StatusOK, pushResponse{
