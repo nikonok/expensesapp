@@ -22,7 +22,9 @@ describe("sealed-box envelope", () => {
     const familyKey = randomKey();
     const kp = await generateDeviceKeypair();
     const envelope = await wrapKeyForDevice(familyKey, kp.publicKey);
-    // libsodium sealed box: 32B ephemeral pubkey + 16B nonce + 32B payload + 16B Poly tag
+    // crypto_box_seal: 80-byte output for a 32-byte payload.
+    // Overhead = crypto_box_SEALBYTES = 48 bytes: 32B ephemeral pubkey + 16B Poly1305 tag.
+    // Nonce is derived (HSalsa20 over ephemeral_pk || recipient_pk) and is NOT stored.
     expect(envelope.length).toBe(80);
   });
 

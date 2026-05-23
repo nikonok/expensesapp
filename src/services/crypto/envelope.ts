@@ -5,7 +5,9 @@ export async function wrapKeyForDevice(
   devicePubKey: Uint8Array,
 ): Promise<Uint8Array> {
   const sodium = await sodiumReady();
-  // crypto_box_seal: 80-byte output (32B ephemeral pubkey + 16B nonce + payload + 16B Poly tag)
+  // crypto_box_seal: 80-byte output for a 32-byte payload.
+  // Overhead = crypto_box_SEALBYTES = 48 bytes: 32B ephemeral pubkey + 16B Poly1305 tag.
+  // Nonce is derived (HSalsa20 over ephemeral_pk || recipient_pk) and is NOT stored.
   return sodium.crypto_box_seal(familyKey, devicePubKey);
 }
 
