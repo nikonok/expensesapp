@@ -172,6 +172,16 @@ type Req =
       familyId: string;
     }
   | {
+      /** Reads the stored familyKey and wraps a new Envelope A + Envelope B for
+       *  the given phrase. Used by Settings → Security → Regenerate recovery code.
+       *  Returns {wrapBytes, phraseCt}. The raw familyKey stays in the worker. */
+      id: number;
+      type: "regenerateRecoveryEnvelopes";
+      phrase: string;
+      familyId: string;
+      createdAt: string;
+    }
+  | {
       /** Derives kRecovery from phrase + familyId via Argon2id. */
       id: number;
       type: "deriveRecoveryKey";
@@ -400,6 +410,23 @@ self.onmessage = async (e: MessageEvent<Req>) => {
         }
         const phrase2 = await unwrapPhraseForReveal(req.phraseCt, storedFamilyKey2, req.familyId);
         post({ id: req.id, ok: true, result: phrase2 });
+        return;
+      }
+      case "regenerateRecoveryEnvelopes": {
+        const storedFamilyKey3 = await getKey("familyKey");
+        if (!storedFamilyKey3) {
+          post({
+            id: req.id,
+            ok: false,
+            error: "NoStoredFamilyKey: no familyKey found in worker storage",
+          });
+          return;
+        }
+        const [wrapBytes3, phraseCt3] = await Promise.all([
+          wrapRecoveryEnvelope(storedFamilyKey3, req.phrase, req.familyId, req.createdAt),
+          wrapPhraseForReveal(req.phrase, storedFamilyKey3, req.familyId),
+        ]);
+        post({ id: req.id, ok: true, result: { wrapBytes: wrapBytes3, phraseCt: phraseCt3 } });
         return;
       }
       case "deriveRecoveryKey": {

@@ -145,6 +145,20 @@ export const cryptoWorker = {
     call<string>({ type: "wrapStoredFamilyKeyForDevice", devicePubKeyB64u }),
 
   /**
+   * Reads the stored familyKey and wraps a new Envelope A + Envelope B for the
+   * provided phrase (recovery code regeneration). The raw familyKey stays in
+   * the worker. Returns {wrapBytes, phraseCt}.
+   * Throws "NoStoredFamilyKey:" if no familyKey is stored.
+   */
+  regenerateRecoveryEnvelopes: (phrase: string, familyId: string, createdAt: string) =>
+    call<{ wrapBytes: Uint8Array; phraseCt: Uint8Array }>({
+      type: "regenerateRecoveryEnvelopes",
+      phrase,
+      familyId,
+      createdAt,
+    }),
+
+  /**
    * Reads the stored familyKey and decrypts the Envelope B (phrase ciphertext)
    * produced by wrapPhraseForReveal. Returns the plaintext 24-word phrase.
    * Used by Settings → Security → "Show recovery code".
