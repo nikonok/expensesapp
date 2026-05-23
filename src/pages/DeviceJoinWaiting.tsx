@@ -111,8 +111,12 @@ export default function DeviceJoinWaiting() {
 
       // 3. Self-upload: wrap stored familyKey for our own device pub key and POST it.
       if (device?.id) {
-        // Fetch our device pub key from the server.
-        const devInfo = await apiFetch<{ pubKey: string }>(`/api/v1/me/devices/${device.id}`);
+        // Fetch pub key via the list endpoint (no single-device GET exists).
+        const allDevices = await apiFetch<{ id: string; pubKey: string }[]>("/api/v1/me/devices");
+        const devInfo = allDevices.find((d) => d.id === device.id);
+        if (!devInfo) {
+          throw new Error(`Device ${device.id} not found in device list.`);
+        }
         const envelopeB64u = await cryptoWorker.wrapStoredFamilyKeyForDevice(devInfo.pubKey);
         await apiFetch(`/api/v1/family/devices/${device.id}/envelope`, {
           method: "POST",

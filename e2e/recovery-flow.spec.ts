@@ -166,15 +166,24 @@ test("recovery flow: fresh device recovers via 24-word phrase and navigates to /
     });
   });
 
-  // GET /api/v1/me/devices/:id — return a dummy device public key (base64url).
-  await page.route(`**/api/v1/me/devices/${DEVICE_ID}`, async (route) => {
+  // GET /api/v1/me/devices — return a list containing our device with a dummy pub key.
+  // DeviceJoinWaiting now uses the list endpoint and finds the entry by id.
+  await page.route("**/api/v1/me/devices", async (route) => {
     // 32-byte dummy X25519 pub key (all zeros is not a valid curve point, but the
     // wrapStoredFamilyKeyForDevice worker call is stubbed so it doesn't matter).
     const dummyPubKey = Buffer.alloc(32).toString("base64url");
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ pubKey: dummyPubKey }),
+      body: JSON.stringify([
+        {
+          id: DEVICE_ID,
+          label: "Fresh Device",
+          status: "active",
+          createdAt: "2026-05-23T00:00:00Z",
+          pubKey: dummyPubKey,
+        },
+      ]),
     });
   });
 
