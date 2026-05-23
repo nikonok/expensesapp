@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { ChevronLeft } from "lucide-react";
@@ -491,7 +491,7 @@ function StepRecoveryCode({ onNext }: { onNext: () => void }) {
   const authStore = useAuthStore();
 
   // Kick off family init on mount
-  useState(() => {
+  useEffect(() => {
     const run = async () => {
       const pubKey = useAuthStore.getState().pendingDevicePubKey;
       const privKey = useAuthStore.getState().pendingDevicePrivKey;
@@ -514,7 +514,7 @@ function StepRecoveryCode({ onNext }: { onNext: () => void }) {
       }
     };
     void run();
-  });
+  }, []);
 
   if (loading) {
     return (
