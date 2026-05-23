@@ -35,6 +35,8 @@ vi.mock("@/services/crypto/worker-client", () => ({
   cryptoWorker: {
     encryptRecordWithStoredKey: vi.fn(async () => mockEncryptResult),
     decryptRecordWithStoredKey: vi.fn(async () => mockDecryptResult),
+    unwrapAndPersistFamilyKey: vi.fn(async () => undefined),
+    wrapStoredFamilyKeyForDevice: vi.fn(async () => "wrapped-envelope-b64u"),
   },
 }));
 
@@ -44,8 +46,38 @@ vi.mock("../client", () => ({
   pullRecords: vi.fn(),
 }));
 
+// Mock apiFetch for silentlyApproveDevice.
+vi.mock("@/services/auth/client", () => ({
+  apiFetch: vi.fn(async () => ({ pubKey: "fallback-pubkey-b64u" })),
+}));
+
+// Mock the SSE module — we control the onEvent callback directly in tests.
+let capturedSSEOpts: Parameters<typeof import("../sse").connectSSE>[0] | null = null;
+vi.mock("../sse", () => ({
+  connectSSE: vi.fn((opts) => {
+    capturedSSEOpts = opts;
+    return { disconnect: vi.fn() };
+  }),
+}));
+
+// Mock device-join store.
+const mockSetPendingDeviceJoin = vi.fn();
+vi.mock("@/stores/device-join-store", () => ({
+  useDeviceJoinStore: {
+    getState: () => ({ setPendingDeviceJoin: mockSetPendingDeviceJoin }),
+  },
+}));
+
+// Mock auth session store for you.removed test.
+const mockSignOut = vi.fn(async () => {});
+vi.mock("@/services/auth/session", () => ({
+  useAuthStore: {
+    getState: () => ({ signOut: mockSignOut }),
+  },
+}));
+
 import { pushRecords, pullRecords } from "../client";
-import { enqueuePush, flushOutbox, pullSince } from "../engine";
+import { enqueuePush, flushOutbox, pullSince, startLiveSync } from "../engine";
 import { getCursor, encodeCursor } from "../cursor";
 import type { RawRecord } from "../types";
 
@@ -320,5 +352,101 @@ describe("pullSince", () => {
 
     // Should not throw.
     await expect(pullSince(familyId, undefined)).resolves.toBeDefined();
+  });
+});
+
+// ── startLiveSync ─────────────────────────────────────────────────────────────
+
+describe("startLiveSync — record.changed triggers debounced pull", () => {
+  it("calls pullSince after record.changed event (debounced)", async () => {
+    vi.useFakeTimers();
+
+    vi.mocked(pullRecords).mockResolvedValue({
+      records: [],
+      nextCursor: "cursor-live-1",
+      hasMore: false,
+    });
+
+    const disconnect = startLiveSync("family-live-001");
+    expect(capturedSSEOpts).not.toBeNull();
+
+    // Simulate multiple rapid record.changed events.
+    capturedSSEOpts!.onEvent("record.changed", {
+      seq: 1,
+      recordId: "r1",
+      recordType: "transaction",
+      version: 1,
+    });
+    capturedSSEOpts!.onEvent("record.changed", {
+      seq: 2,
+      recordId: "r2",
+      recordType: "transaction",
+      version: 1,
+    });
+
+    // pullRecords should not be called yet — still in debounce window.
+    expect(pullRecords).not.toHaveBeenCalled();
+
+    // Advance past debounce.
+    await vi.runAllTimersAsync();
+
+    expect(pullRecords).toHaveBeenCalledTimes(1);
+    disconnect();
+    vi.useRealTimers();
+  });
+});
+
+describe("startLiveSync — device.joined updates the store", () => {
+  it("dispatches setPendingDeviceJoin and schedules silentlyApproveDevice", async () => {
+    vi.useFakeTimers();
+
+    const disconnect = startLiveSync("family-live-002");
+
+    capturedSSEOpts!.onEvent("device.joined", {
+      deviceId: "dev-new-001",
+      label: "Android (2026-05-23)",
+      createdAt: "2026-05-23T10:00:00Z",
+      pubKey: "test-pub-key-b64u",
+    });
+
+    // Let the dynamic import microtask run.
+    await vi.runAllTimersAsync();
+
+    expect(mockSetPendingDeviceJoin).toHaveBeenCalledWith(
+      expect.objectContaining({ deviceId: "dev-new-001", pubKey: "test-pub-key-b64u" }),
+    );
+
+    disconnect();
+    vi.useRealTimers();
+  });
+});
+
+describe("startLiveSync — device.activated calls unwrapAndPersistFamilyKey then pulls", () => {
+  it("unwraps key and triggers pull", async () => {
+    vi.useFakeTimers();
+
+    vi.mocked(pullRecords).mockResolvedValue({
+      records: [],
+      nextCursor: "cursor-activated",
+      hasMore: false,
+    });
+
+    const disconnect = startLiveSync("family-live-003");
+
+    capturedSSEOpts!.onEvent("device.activated", {
+      deviceId: "dev-003",
+      envelope: "sealed-envelope-b64u",
+    });
+
+    await vi.runAllTimersAsync();
+
+    const { cryptoWorker } = await import("@/services/crypto/worker-client");
+    expect(vi.mocked(cryptoWorker.unwrapAndPersistFamilyKey)).toHaveBeenCalledWith(
+      "sealed-envelope-b64u",
+    );
+    expect(pullRecords).toHaveBeenCalledTimes(1);
+
+    disconnect();
+    vi.useRealTimers();
   });
 });
