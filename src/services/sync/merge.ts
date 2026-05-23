@@ -43,11 +43,19 @@ export function mergePayloads(
       continue;
     }
 
-    // Both sides have a timestamp — compare.
-    if (localTs > serverTs) {
+    // Both sides have a timestamp — compare numerically via Date parsing.
+    // String comparison fails for non-UTC offsets (+HH:MM vs Z).
+    // If parsing produces NaN treat that timestamp as -Infinity so the
+    // well-formed side always wins.
+    const localMs = new Date(localTs).getTime();
+    const serverMs = new Date(serverTs).getTime();
+    const localTime = Number.isNaN(localMs) ? -Infinity : localMs;
+    const serverTime = Number.isNaN(serverMs) ? -Infinity : serverMs;
+
+    if (localTime > serverTime) {
       mergedPayload[field] = localPayload[field];
       mergedMap[field] = localTs;
-    } else if (serverTs > localTs) {
+    } else if (serverTime > localTime) {
       // Server wins — already in mergedPayload.
     } else {
       // Exact tie — break by editedByUserId lexicographic order.

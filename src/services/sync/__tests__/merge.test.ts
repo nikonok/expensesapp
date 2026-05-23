@@ -135,6 +135,43 @@ describe("mergePayloads — LWW semantics", () => {
     expect(mergedMap.serverOnly).toBe("2025-01-01T00:00:00.000Z");
   });
 
+  it("treats UTC Z and equivalent +HH:MM offset as the same moment", () => {
+    // 2024-06-01T12:00:00.000Z === 2024-06-01T14:00:00.000+02:00
+    // Both represent the same instant; neither should consistently "win" on
+    // a direct string compare — Date parsing normalises them to the same ms.
+    const utcTs = "2024-06-01T12:00:00.000Z";
+    const offsetTs = "2024-06-01T14:00:00.000+02:00";
+
+    const local = { amount: 100 };
+    const server = { amount: 200 };
+
+    // local uses UTC, server uses +02:00 offset — same instant → tie.
+    const localMap = { amount: utcTs };
+    const serverMap = { amount: offsetTs };
+
+    const { mergedPayload: mp1 } = mergePayloads(
+      local,
+      server,
+      localMap,
+      serverMap,
+      "user-a",
+      "user-z",
+    );
+    // Tie → editedByUserId tie-break: "user-z" > "user-a" → server wins.
+    expect(mp1.amount).toBe(200);
+
+    const { mergedPayload: mp2 } = mergePayloads(
+      local,
+      server,
+      localMap,
+      serverMap,
+      "user-z",
+      "user-a",
+    );
+    // Tie → editedByUserId tie-break: "user-z" > "user-a" → local wins.
+    expect(mp2.amount).toBe(100);
+  });
+
   it("returns the full mergedMap for re-encryption", () => {
     const local = { a: 1, b: 2 };
     const server = { a: 10, b: 20 };
