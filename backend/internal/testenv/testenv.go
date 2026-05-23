@@ -22,6 +22,7 @@ import (
 	authpkg "github.com/nikonok/expensesapp/backend/internal/auth"
 	dbpkg "github.com/nikonok/expensesapp/backend/internal/db"
 	"github.com/nikonok/expensesapp/backend/internal/db/gen"
+	"github.com/nikonok/expensesapp/backend/internal/family"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
 	"github.com/nikonok/expensesapp/backend/internal/server"
 )
@@ -110,9 +111,10 @@ func New(t *testing.T, opts ...Option) *Env {
 	verifier := &MockVerifier{}
 	authH := authpkg.NewHandler(database, verifier)
 	accountH := account.NewHandler(database)
+	familyH := family.NewHandler(database)
 
 	// 4. Build router using the shared server.NewRouter (same as production).
-	r := server.NewRouter(database, authH, accountH, server.HealthConfig{}, nil)
+	r := server.NewRouter(database, authH, accountH, familyH, server.HealthConfig{}, nil)
 
 	// 5. Start httptest.Server with TLS so that Secure cookies are honoured by the jar.
 	srv := httptest.NewTLSServer(r)

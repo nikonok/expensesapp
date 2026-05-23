@@ -12,6 +12,7 @@ import (
 
 	"github.com/nikonok/expensesapp/backend/internal/account"
 	authpkg "github.com/nikonok/expensesapp/backend/internal/auth"
+	"github.com/nikonok/expensesapp/backend/internal/family"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
 	"github.com/nikonok/expensesapp/backend/internal/version"
 )
@@ -26,7 +27,7 @@ type HealthConfig struct {
 // NewRouter wires the chi router used by both production and tests.
 // Keep this in sync with the route table in architecture.md §6.2.
 // If logger is nil, slog.Default() is used.
-func NewRouter(db *sql.DB, authH *authpkg.Handler, accountH *account.Handler, cfg HealthConfig, logger *slog.Logger) http.Handler {
+func NewRouter(db *sql.DB, authH *authpkg.Handler, accountH *account.Handler, familyH *family.Handler, cfg HealthConfig, logger *slog.Logger) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -54,6 +55,17 @@ func NewRouter(db *sql.DB, authH *authpkg.Handler, accountH *account.Handler, cf
 		r.Get("/v1/me", accountH.GetMe)
 		r.Get("/v1/me/devices", accountH.GetMyDevices)
 		r.Post("/v1/me/devices/{id}/revoke", accountH.RevokeMyDevice)
+
+		// Family endpoints (Phase 3+).
+		r.Post("/v1/family/init", familyH.PostInit)
+		r.Post("/v1/family/invites", familyH.PostInvite)
+		r.Get("/v1/family/invites/incoming", familyH.GetIncomingInvites)
+		r.Post("/v1/family/invites/{id}/accept", familyH.PostAcceptInvite)
+		r.Post("/v1/family/invites/{id}/decline", familyH.PostDeclineInvite)
+		r.Post("/v1/family/migrate-solo", familyH.PostMigrateSolo)
+		r.Post("/v1/family/leave", familyH.PostLeave)
+		r.Post("/v1/family/members/{userId}/remove", familyH.PostRemoveMember)
+		r.Post("/v1/family/devices/{id}/envelope", familyH.PostDeviceEnvelope)
 	})
 
 	return r

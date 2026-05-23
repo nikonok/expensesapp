@@ -15,6 +15,7 @@ import (
 	authpkg "github.com/nikonok/expensesapp/backend/internal/auth"
 	"github.com/nikonok/expensesapp/backend/internal/config"
 	"github.com/nikonok/expensesapp/backend/internal/db"
+	"github.com/nikonok/expensesapp/backend/internal/family"
 	internallog "github.com/nikonok/expensesapp/backend/internal/log"
 	"github.com/nikonok/expensesapp/backend/internal/server"
 	"github.com/nikonok/expensesapp/backend/internal/version"
@@ -46,8 +47,9 @@ func main() {
 	verifier := authpkg.NewGoogleVerifier(cfg.GoogleOAuthClientID)
 	authH := authpkg.NewHandler(database, verifier)
 	accountH := account.NewHandler(database)
+	familyH := family.NewHandler(database)
 
-	r := server.NewRouter(database, authH, accountH, server.HealthConfig{Version: version.String()}, slog.Default())
+	r := server.NewRouter(database, authH, accountH, familyH, server.HealthConfig{Version: version.String()}, slog.Default())
 
 	srv := &http.Server{
 		Addr:    cfg.BindAddr,
