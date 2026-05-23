@@ -174,7 +174,7 @@ export function SnapshotRestore() {
                     opacity: restoring ? 0.5 : 1,
                   }}
                 >
-                  Restore
+                  {t("common.restore")}
                 </button>
               </div>
             ))}
@@ -186,7 +186,7 @@ export function SnapshotRestore() {
         isOpen={confirmDate !== null}
         title={t("settings.backup.snapshotRestore")}
         body={t("settings.backup.snapshotRestoreConfirm", { date: confirmDate ?? "" })}
-        confirmLabel="Restore"
+        confirmLabel={t("common.restore")}
         onConfirm={handleRestoreConfirm}
         onCancel={() => setConfirmDate(null)}
         variant="destructive"
