@@ -78,6 +78,23 @@ export default defineConfig({
         ].join("\n");
       },
     },
+    // Dev-only: inject 'wasm-unsafe-eval' into the <meta http-equiv="CSP"> tag so
+    // that argon2-browser (and libsodium) can compile WASM in the dev playground.
+    // Browsers intersect HTTP CSP headers with meta-tag CSP, so both must allow
+    // 'wasm-unsafe-eval' for WASM compilation to succeed. The production meta tag
+    // (index.html) stays tight — this plugin only runs during `vite dev` (apply:
+    // "serve") and is a no-op in `vite build`. The server.headers block above
+    // provides the matching HTTP header on the dev server side.
+    {
+      name: "dev-relax-csp-for-wasm",
+      apply: "serve",
+      transformIndexHtml(html: string) {
+        return html.replace(
+          /(script-src [^;]*?)'unsafe-inline'/,
+          "$1'unsafe-inline' 'wasm-unsafe-eval'",
+        );
+      },
+    },
     react(),
     tailwindcss(),
     VitePWA({
