@@ -438,6 +438,8 @@ func TestFamilyRecoveryEnvelope_HappyPath(t *testing.T) {
 	assert.NotEmpty(t, result["recoveryWrap"], "recoveryWrap must be present")
 	assert.NotEmpty(t, result["salt"], "salt must be present")
 	assert.NotNil(t, result["version"], "version must be present")
+	assert.Equal(t, familyID, result["familyId"], "familyId must match the family used during init")
+	assert.NotEmpty(t, result["createdAt"], "createdAt must be present for AAD derivation")
 }
 
 // TestFamilyRecoveryEnvelope_NoFamily verifies that a user without a family → 403.

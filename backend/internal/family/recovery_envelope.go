@@ -25,6 +25,8 @@ type recoveryEnvelopeResponse struct {
 	RecoveryWrap string `json:"recoveryWrap"` // base64url — Wrap(familyKey, kRecovery)
 	Salt         string `json:"salt"`         // base64url — 16-byte Argon2id salt
 	Version      int64  `json:"version"`      // envelope-suite version byte
+	FamilyId     string `json:"familyId"`     // UUID of the family (needed for AAD derivation)
+	CreatedAt    string `json:"createdAt"`    // families.created_at in RFC3339Ms (needed for AAD derivation)
 }
 
 // GetRecoveryEnvelope handles GET /v1/family/recovery-envelope.
@@ -53,9 +55,22 @@ func (h *Handler) GetRecoveryEnvelope(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	family, err := q.GetFamilyByID(ctx, familyID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			httpx.WriteError(w, r, http.StatusNotFound, "not-found", "family not found")
+			return
+		}
+		slog.WarnContext(ctx, "recovery-envelope: get family error", "err", err)
+		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
+		return
+	}
+
 	httpx.WriteJSON(w, http.StatusOK, recoveryEnvelopeResponse{
 		RecoveryWrap: base64.RawURLEncoding.EncodeToString(envelope.RecoveryWrap),
 		Salt:         base64.RawURLEncoding.EncodeToString(envelope.Salt),
 		Version:      envelope.Version,
+		FamilyId:     family.ID,
+		CreatedAt:    family.CreatedAt,
 	})
 }
