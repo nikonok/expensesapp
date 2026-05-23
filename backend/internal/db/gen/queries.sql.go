@@ -48,6 +48,34 @@ func (q *Queries) AdvanceFamilySeq(ctx context.Context, familyID string) (int64,
 	return column_1, err
 }
 
+const claimReauthGrant = `-- name: ClaimReauthGrant :one
+UPDATE reauth_grants
+SET used_at = ?
+WHERE id = ? AND used_at IS NULL AND expires_at > ?
+RETURNING id, session_id, purpose, expires_at, used_at
+`
+
+type ClaimReauthGrantParams struct {
+	UsedAt    sql.NullString
+	ID        string
+	ExpiresAt string
+}
+
+// Atomically mark the grant as used. Returns the row only if it was unused/unexpired.
+// Prevents TOCTOU: concurrent claims race at DB; only one gets a row back.
+func (q *Queries) ClaimReauthGrant(ctx context.Context, arg ClaimReauthGrantParams) (ReauthGrant, error) {
+	row := q.db.QueryRowContext(ctx, claimReauthGrant, arg.UsedAt, arg.ID, arg.ExpiresAt)
+	var i ReauthGrant
+	err := row.Scan(
+		&i.ID,
+		&i.SessionID,
+		&i.Purpose,
+		&i.ExpiresAt,
+		&i.UsedAt,
+	)
+	return i, err
+}
+
 const demoteAdmin = `-- name: DemoteAdmin :exec
 UPDATE users SET is_admin = 0 WHERE id = ?
 `
@@ -170,6 +198,26 @@ func (q *Queries) GetFamilyByID(ctx context.Context, id string) (Family, error) 
 	return i, err
 }
 
+const getFamilyRecoveryEnvelope = `-- name: GetFamilyRecoveryEnvelope :one
+SELECT family_id, recovery_wrap, phrase_ct, version, salt, created_at FROM family_recovery_envelopes
+WHERE family_id = ? LIMIT 1
+`
+
+// ----- family_recovery_envelopes -----
+func (q *Queries) GetFamilyRecoveryEnvelope(ctx context.Context, familyID string) (FamilyRecoveryEnvelope, error) {
+	row := q.db.QueryRowContext(ctx, getFamilyRecoveryEnvelope, familyID)
+	var i FamilyRecoveryEnvelope
+	err := row.Scan(
+		&i.FamilyID,
+		&i.RecoveryWrap,
+		&i.PhraseCt,
+		&i.Version,
+		&i.Salt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getRecordMeta = `-- name: GetRecordMeta :one
 
 SELECT record_id, family_id, record_type, blob_id, version, added_by_user, edited_by_user, updated_at_map, deleted_at, family_seq, created_at, last_modified_at FROM record_meta WHERE record_id = ? LIMIT 1
@@ -246,6 +294,42 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (
 		&i.IsAdmin,
 		&i.IsRoot,
 		&i.SuspendedAt,
+	)
+	return i, err
+}
+
+const getUnusedReauthChallenge = `-- name: GetUnusedReauthChallenge :one
+SELECT nonce, session_id, issued_at, used_at, expires_at FROM reauth_challenges
+WHERE nonce = ? AND used_at IS NULL LIMIT 1
+`
+
+func (q *Queries) GetUnusedReauthChallenge(ctx context.Context, nonce string) (ReauthChallenge, error) {
+	row := q.db.QueryRowContext(ctx, getUnusedReauthChallenge, nonce)
+	var i ReauthChallenge
+	err := row.Scan(
+		&i.Nonce,
+		&i.SessionID,
+		&i.IssuedAt,
+		&i.UsedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const getUnusedReauthGrant = `-- name: GetUnusedReauthGrant :one
+SELECT id, session_id, purpose, expires_at, used_at FROM reauth_grants
+WHERE id = ? AND used_at IS NULL LIMIT 1
+`
+
+func (q *Queries) GetUnusedReauthGrant(ctx context.Context, id string) (ReauthGrant, error) {
+	row := q.db.QueryRowContext(ctx, getUnusedReauthGrant, id)
+	var i ReauthGrant
+	err := row.Scan(
+		&i.ID,
+		&i.SessionID,
+		&i.Purpose,
+		&i.ExpiresAt,
+		&i.UsedAt,
 	)
 	return i, err
 }
@@ -507,6 +591,54 @@ func (q *Queries) InsertFamilySeq(ctx context.Context, familyID string) error {
 	return err
 }
 
+const insertReauthChallenge = `-- name: InsertReauthChallenge :exec
+
+INSERT INTO reauth_challenges (nonce, session_id, issued_at, used_at, expires_at)
+VALUES (?, ?, ?, NULL, ?)
+`
+
+type InsertReauthChallengeParams struct {
+	Nonce     string
+	SessionID string
+	IssuedAt  string
+	ExpiresAt string
+}
+
+// ----- reauth_challenges -----
+func (q *Queries) InsertReauthChallenge(ctx context.Context, arg InsertReauthChallengeParams) error {
+	_, err := q.db.ExecContext(ctx, insertReauthChallenge,
+		arg.Nonce,
+		arg.SessionID,
+		arg.IssuedAt,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const insertReauthGrant = `-- name: InsertReauthGrant :exec
+
+INSERT INTO reauth_grants (id, session_id, purpose, expires_at, used_at)
+VALUES (?, ?, ?, ?, NULL)
+`
+
+type InsertReauthGrantParams struct {
+	ID        string
+	SessionID string
+	Purpose   string
+	ExpiresAt string
+}
+
+// ----- reauth_grants -----
+func (q *Queries) InsertReauthGrant(ctx context.Context, arg InsertReauthGrantParams) error {
+	_, err := q.db.ExecContext(ctx, insertReauthGrant,
+		arg.ID,
+		arg.SessionID,
+		arg.Purpose,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
 const insertRecordMeta = `-- name: InsertRecordMeta :exec
 INSERT INTO record_meta (record_id, family_id, record_type, blob_id, version,
     added_by_user, edited_by_user, updated_at_map, deleted_at,
@@ -726,6 +858,36 @@ func (q *Queries) ListUserDevices(ctx context.Context, userID string) ([]Device,
 	return items, nil
 }
 
+const markReauthChallengeUsed = `-- name: MarkReauthChallengeUsed :exec
+UPDATE reauth_challenges SET used_at = ? WHERE nonce = ? AND session_id = ?
+`
+
+type MarkReauthChallengeUsedParams struct {
+	UsedAt    sql.NullString
+	Nonce     string
+	SessionID string
+}
+
+func (q *Queries) MarkReauthChallengeUsed(ctx context.Context, arg MarkReauthChallengeUsedParams) error {
+	_, err := q.db.ExecContext(ctx, markReauthChallengeUsed, arg.UsedAt, arg.Nonce, arg.SessionID)
+	return err
+}
+
+const markReauthGrantUsed = `-- name: MarkReauthGrantUsed :exec
+UPDATE reauth_grants SET used_at = ? WHERE id = ? AND session_id = ?
+`
+
+type MarkReauthGrantUsedParams struct {
+	UsedAt    sql.NullString
+	ID        string
+	SessionID string
+}
+
+func (q *Queries) MarkReauthGrantUsed(ctx context.Context, arg MarkReauthGrantUsedParams) error {
+	_, err := q.db.ExecContext(ctx, markReauthGrantUsed, arg.UsedAt, arg.ID, arg.SessionID)
+	return err
+}
+
 const markUserSuspended = `-- name: MarkUserSuspended :exec
 UPDATE users SET suspended_at = ? WHERE id = ?
 `
@@ -786,6 +948,31 @@ type ReparentPromoterParams struct {
 // Move all users whose promoter_id = old_promoter_id to a new promoter (used on demotion/root handoff).
 func (q *Queries) ReparentPromoter(ctx context.Context, arg ReparentPromoterParams) error {
 	_, err := q.db.ExecContext(ctx, reparentPromoter, arg.PromoterID, arg.PromoterID_2)
+	return err
+}
+
+const replaceFamilyRecoveryEnvelope = `-- name: ReplaceFamilyRecoveryEnvelope :exec
+UPDATE family_recovery_envelopes
+SET recovery_wrap = ?, phrase_ct = ?, version = ?, salt = ?
+WHERE family_id = ?
+`
+
+type ReplaceFamilyRecoveryEnvelopeParams struct {
+	RecoveryWrap []byte
+	PhraseCt     []byte
+	Version      int64
+	Salt         []byte
+	FamilyID     string
+}
+
+func (q *Queries) ReplaceFamilyRecoveryEnvelope(ctx context.Context, arg ReplaceFamilyRecoveryEnvelopeParams) error {
+	_, err := q.db.ExecContext(ctx, replaceFamilyRecoveryEnvelope,
+		arg.RecoveryWrap,
+		arg.PhraseCt,
+		arg.Version,
+		arg.Salt,
+		arg.FamilyID,
+	)
 	return err
 }
 

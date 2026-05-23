@@ -5,6 +5,7 @@ package account
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -59,6 +60,7 @@ type deviceListItem struct {
 	Status     string  `json:"status"`
 	CreatedAt  string  `json:"createdAt"`
 	LastSeenAt *string `json:"lastSeenAt"`
+	PubKey     string  `json:"pubKey"` // base64url-encoded public key (needed for envelope wrapping)
 }
 
 // GetMe handles GET /v1/me.
@@ -128,6 +130,7 @@ func (h *Handler) GetMyDevices(w http.ResponseWriter, r *http.Request) {
 			Label:     d.Label,
 			Status:    d.Status,
 			CreatedAt: d.CreatedAt,
+			PubKey:    base64.RawURLEncoding.EncodeToString(d.PubKey),
 		}
 		if d.UserAgent.Valid {
 			s := d.UserAgent.String

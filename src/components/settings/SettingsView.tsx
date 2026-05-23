@@ -14,6 +14,7 @@ import { LogSettings } from "./LogSettings";
 import { ResetAppSetting } from "./ResetAppSetting";
 import { ComingSoonStub } from "../shared/ComingSoonStub";
 import { InstallSetting } from "./InstallSetting";
+import { SecuritySettings } from "./SecuritySettings";
 
 function SectionHeader({ label }: { label: string }) {
   return (
@@ -113,6 +114,10 @@ export function SettingsView() {
 
       {/* Scrollable content */}
       <div style={{ overflowY: "auto", flex: 1 }}>
+        {/* Security section */}
+        <SectionHeader label="Security" />
+        <SecuritySettings />
+
         {/* General section */}
         <SectionHeader label={t("settings.sections.general")} />
 

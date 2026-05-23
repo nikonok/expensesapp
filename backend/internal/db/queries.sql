@@ -220,3 +220,48 @@ RETURNING next_seq - 1;
 
 -- name: IncrementFamilyUsage :exec
 UPDATE families SET usage_bytes = usage_bytes + ? WHERE id = ?;
+
+-- ----- reauth_challenges -----
+
+-- name: InsertReauthChallenge :exec
+INSERT INTO reauth_challenges (nonce, session_id, issued_at, used_at, expires_at)
+VALUES (?, ?, ?, NULL, ?);
+
+-- name: GetUnusedReauthChallenge :one
+SELECT nonce, session_id, issued_at, used_at, expires_at FROM reauth_challenges
+WHERE nonce = ? AND used_at IS NULL LIMIT 1;
+
+-- name: MarkReauthChallengeUsed :exec
+UPDATE reauth_challenges SET used_at = ? WHERE nonce = ? AND session_id = ?;
+
+-- ----- reauth_grants -----
+
+-- name: InsertReauthGrant :exec
+INSERT INTO reauth_grants (id, session_id, purpose, expires_at, used_at)
+VALUES (?, ?, ?, ?, NULL);
+
+-- name: GetUnusedReauthGrant :one
+SELECT id, session_id, purpose, expires_at, used_at FROM reauth_grants
+WHERE id = ? AND used_at IS NULL LIMIT 1;
+
+-- name: MarkReauthGrantUsed :exec
+UPDATE reauth_grants SET used_at = ? WHERE id = ? AND session_id = ?;
+
+-- name: ClaimReauthGrant :one
+-- Atomically mark the grant as used. Returns the row only if it was unused/unexpired.
+-- Prevents TOCTOU: concurrent claims race at DB; only one gets a row back.
+UPDATE reauth_grants
+SET used_at = ?
+WHERE id = ? AND used_at IS NULL AND expires_at > ?
+RETURNING id, session_id, purpose, expires_at, used_at
+
+-- ----- family_recovery_envelopes -----
+
+-- name: GetFamilyRecoveryEnvelope :one
+SELECT family_id, recovery_wrap, phrase_ct, version, salt, created_at FROM family_recovery_envelopes
+WHERE family_id = ? LIMIT 1;
+
+-- name: ReplaceFamilyRecoveryEnvelope :exec
+UPDATE family_recovery_envelopes
+SET recovery_wrap = ?, phrase_ct = ?, version = ?, salt = ?
+WHERE family_id = ?;

@@ -1,19 +1,34 @@
 // Banner shown on existing devices when a `device.joined` SSE event arrives.
-// Architecture §8.2, Phase 5e.
+// Architecture §8.2, Phase 5e / Phase 6c (revoke wired).
 //
-// Reads from useDeviceJoinStore. The Revoke action is a placeholder (Phase 6).
+// Reads from useDeviceJoinStore. The Revoke action calls POST /v1/me/devices/{id}/revoke.
 
+import { useState } from "react";
 import { useDeviceJoinStore } from "@/stores/device-join-store";
+import { apiFetch } from "@/services/auth/client";
 import { useToast } from "./Toast";
 
 export function DeviceJoinedBanner() {
   const { pendingDeviceJoin, clear } = useDeviceJoinStore();
   const { show: showToast } = useToast();
+  const [revoking, setRevoking] = useState(false);
 
   if (!pendingDeviceJoin) return null;
 
-  function handleRevoke() {
-    showToast("Revoke coming in Phase 6", "coming-soon");
+  async function handleRevoke() {
+    if (revoking) return;
+    setRevoking(true);
+    try {
+      await apiFetch(`/api/v1/me/devices/${pendingDeviceJoin!.deviceId}/revoke`, {
+        method: "POST",
+      });
+      showToast("Device revoked", "success");
+      clear();
+    } catch {
+      showToast("Failed to revoke device", "error");
+    } finally {
+      setRevoking(false);
+    }
   }
 
   return (
@@ -93,6 +108,7 @@ export function DeviceJoinedBanner() {
         </span>
         <button
           onClick={handleRevoke}
+          disabled={revoking}
           style={{
             background: "none",
             border: "1px solid var(--color-expense)",
@@ -101,12 +117,13 @@ export function DeviceJoinedBanner() {
             fontFamily: '"DM Sans", sans-serif',
             fontSize: "var(--text-caption)",
             color: "var(--color-expense)",
-            cursor: "pointer",
+            cursor: revoking ? "not-allowed" : "pointer",
+            opacity: revoking ? 0.5 : 1,
             minHeight: 32,
             minWidth: 44,
           }}
         >
-          Revoke
+          {revoking ? "…" : "Revoke"}
         </button>
       </div>
     </div>
