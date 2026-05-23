@@ -46,6 +46,7 @@ vi.mock("../client", () => ({
 
 import { pushRecords, pullRecords } from "../client";
 import { enqueuePush, flushOutbox, pullSince } from "../engine";
+import { getCursor, encodeCursor } from "../cursor";
 import type { RawRecord } from "../types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -149,6 +150,35 @@ describe("flushOutbox — accepted path", () => {
     expect(call.records).toHaveLength(1);
     expect(call.records[0].recordId).toBe(record.recordId);
     expect(call.records[0].parentVersion).toBe(3);
+  });
+
+  it("advances pull cursor to encoding of max familySeq among accepted", async () => {
+    Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+
+    const familyId = "ffffffff-0000-7000-8000-000000000001";
+
+    // Enqueue 3 records (all share the same familyId via makeRawRecord default).
+    const r1 = makeRawRecord({ recordId: "aaaaaaaa-bbbb-7ccc-8ddd-000000000010" });
+    const r2 = makeRawRecord({ recordId: "aaaaaaaa-bbbb-7ccc-8ddd-000000000011" });
+    const r3 = makeRawRecord({ recordId: "aaaaaaaa-bbbb-7ccc-8ddd-000000000012" });
+    await enqueuePush(r1);
+    await enqueuePush(r2);
+    await enqueuePush(r3);
+
+    vi.mocked(pushRecords).mockResolvedValueOnce({
+      accepted: [
+        { recordId: r1.recordId, version: 1, familySeq: 10 },
+        { recordId: r2.recordId, version: 1, familySeq: 11 },
+        { recordId: r3.recordId, version: 1, familySeq: 12 },
+      ],
+      conflicts: [],
+    });
+
+    await flushOutbox();
+
+    // Cursor must be set to encoding of 12 (the max familySeq).
+    const savedCursor = await getCursor(familyId);
+    expect(savedCursor).toBe(encodeCursor(12));
   });
 });
 

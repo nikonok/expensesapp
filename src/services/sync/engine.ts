@@ -10,7 +10,7 @@ import { db } from "@/db/database";
 import type { PendingUpload, SyncRecordType } from "@/db/models";
 import { logger } from "@/services/log.service";
 import { pushRecords, pullRecords } from "./client";
-import { getCursor, setCursor } from "./cursor";
+import { getCursor, setCursor, encodeCursor } from "./cursor";
 import { mergePayloads } from "./merge";
 import type { RawRecord, PullResponse, ConflictRecord } from "./types";
 import { useSyncStore } from "@/stores/sync-store";
@@ -182,6 +182,18 @@ export async function flushOutbox(): Promise<void> {
           err instanceof Error ? err : undefined,
         );
       }
+    }
+
+    // Advance the pull cursor to the max familySeq among accepted records.
+    // This prevents the next pullSince from redundantly re-fetching records
+    // that the client just pushed.
+    if (response.accepted.length > 0) {
+      const maxSeq = response.accepted.reduce(
+        (max, a) => (a.familySeq > max ? a.familySeq : max),
+        response.accepted[0].familySeq,
+      );
+      const familyId = batch[0].familyId;
+      await setCursor(familyId, encodeCursor(maxSeq));
     }
 
     useSyncStore.getState().setLastSyncAt(new Date().toISOString());
