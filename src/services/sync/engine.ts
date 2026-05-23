@@ -495,6 +495,8 @@ export function startLiveSync(familyId: string): () => void {
               // Sign out via auth store.
               const { useAuthStore } = await import("@/services/auth/session");
               await useAuthStore.getState().signOut();
+              // Navigate to onboarding — full reload clears in-memory state.
+              window.location.assign("/onboarding");
             } catch (err) {
               logger.error("liveSync.you.removed.failed", err instanceof Error ? err : undefined);
             }

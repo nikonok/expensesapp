@@ -52,7 +52,10 @@ export async function createInvite(inviteeEmail: string): Promise<CreateInviteRe
 
 /** GET /api/v1/family/invites/incoming — list pending invites for the current user. */
 export async function listIncomingInvites(): Promise<Invite[]> {
-  return apiFetch<Invite[]>("/api/v1/family/invites/incoming");
+  const data = await apiFetch<{ invites: Invite[] } | Invite[]>("/api/v1/family/invites/incoming");
+  // Backend returns { invites: [...] }; guard against a plain array for test mocks.
+  if (Array.isArray(data)) return data;
+  return (data as { invites: Invite[] }).invites ?? [];
 }
 
 /**
