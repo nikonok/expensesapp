@@ -21,9 +21,9 @@ interface AuthState {
   isSigningIn: boolean;
   error: string | null;
   needsFamilyInit: boolean;
-  /** Ephemeral device keypair stashed after sign-in; consumed by onboarding init step. */
+  /** Ephemeral device public key stashed after sign-in; consumed by onboarding init step.
+   *  The private key is persisted inside the crypto worker and never exposed here. */
   pendingDevicePubKey: Uint8Array | null;
-  pendingDevicePrivKey: Uint8Array | null;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshMe: () => Promise<void>;
@@ -38,7 +38,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   error: null,
   needsFamilyInit: false,
   pendingDevicePubKey: null,
-  pendingDevicePrivKey: null,
 
   signIn: async () => {
     set({ isSigningIn: true, error: null });
@@ -53,8 +52,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       const { cryptoWorker } = await import("../crypto/worker-client");
 
       // Generate device keypair — X25519 ephemeral keys for this device.
-      const keypair = await cryptoWorker.generateDeviceKeypair();
-      const devicePubKeyB64 = btoa(String.fromCharCode(...keypair.publicKey))
+      // Private key is persisted inside the worker; only the public key is returned.
+      const devicePubKey = await cryptoWorker.generateAndPersistDeviceKey();
+      const devicePubKeyB64 = btoa(String.fromCharCode(...devicePubKey))
         .replace(/\+/g, "-")
         .replace(/\//g, "_")
         .replace(/=/g, "");
@@ -76,8 +76,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         isSignedIn: true,
         isSigningIn: false,
         needsFamilyInit: resp.needsFamilyInit ?? false,
-        pendingDevicePubKey: keypair.publicKey,
-        pendingDevicePrivKey: keypair.privateKey,
+        pendingDevicePubKey: devicePubKey,
       });
     } catch (e: unknown) {
       set({ isSigningIn: false, error: e instanceof Error ? e.message : "sign-in failed" });
@@ -95,7 +94,6 @@ export const useAuthStore = create<AuthState>((set) => ({
       error: null,
       needsFamilyInit: false,
       pendingDevicePubKey: null,
-      pendingDevicePrivKey: null,
     });
   },
 
@@ -109,7 +107,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   clearPendingKeypair: () => {
-    set({ pendingDevicePubKey: null, pendingDevicePrivKey: null });
+    set({ pendingDevicePubKey: null });
   },
 }));
 

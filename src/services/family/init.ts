@@ -1,11 +1,11 @@
-// Generates familyKey + 24-word BIP39 phrase + envelopes, calls POST /api/v1/family/init,
-// then persists familyKey + devicePrivKey in IndexedDB via the cipherKeys table.
+// Generates familyKey + 24-word BIP39 phrase + envelopes, calls POST /api/v1/family/init.
+// FamilyKey generation, all wrapping operations, and key persistence happen inside the
+// crypto worker (architecture §7.2) — the main thread only ever sees ciphertexts.
 // Returns the 24-word phrase for display to the user.
 
 import * as bip39 from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
 import { apiFetch } from "../auth/client";
-import { db } from "@/db/database";
 
 /**
  * Derive the 16-byte Argon2 salt via HKDF-SHA256.
@@ -87,18 +87,12 @@ function uuidv7(): string {
 
 export async function initFamilyAndShowPhrase(opts: {
   devicePubKey: Uint8Array;
-  devicePrivKey: Uint8Array;
 }): Promise<{ familyId: string; phrase: string }> {
-  const { devicePubKey, devicePrivKey } = opts;
+  const { devicePubKey } = opts;
 
-  // 1. Generate identifiers and key material
+  // 1. Generate identifiers
   const familyId = uuidv7();
   const createdAt = new Date().toISOString();
-
-  // 32-byte random familyKey generated on main thread — entropy only, no
-  // sensitive processing; actual wrapping happens inside the worker.
-  const familyKey = new Uint8Array(32);
-  crypto.getRandomValues(familyKey);
 
   // 2. Generate 24-word BIP39 phrase (strength=256 → 24 words)
   const phrase = bip39.generateMnemonic(wordlist, 256);
@@ -106,38 +100,31 @@ export async function initFamilyAndShowPhrase(opts: {
   // Dynamic import keeps the Web Worker bundle out of the initial chunk.
   const { cryptoWorker } = await import("../crypto/worker-client");
 
-  // 3. Wrap key for device (Envelope C — sealed box, 80 bytes)
-  const deviceEnvelopeBytes = await cryptoWorker.wrapKeyForDevice(familyKey, devicePubKey);
+  // 3. Generate familyKey inside the worker, wrap for device + recovery + phrase,
+  //    persist familyKey to IndexedDB — all in one worker RPC.
+  //    The main thread only receives ciphertexts; raw familyKey stays in the worker.
+  const { deviceEnvelope, wrapBytes, phraseCt } = await cryptoWorker.wrapAndPersistFamilyKey(
+    devicePubKey,
+    phrase,
+    familyId,
+    createdAt,
+  );
 
-  // 4. Wrap recovery envelope — Envelope A: AEAD(kRecovery, familyKey)
-  const wrapBytes = await cryptoWorker.wrapRecoveryEnvelope(familyKey, phrase, familyId, createdAt);
-
-  // 5. Wrap phrase for warm reveal — Envelope B: AEAD(familyKey, phrase)
-  const phraseCt = await cryptoWorker.wrapPhraseForReveal(phrase, familyKey, familyId);
-
-  // 6. Derive the Argon2 salt (deterministic from familyId via HKDF-SHA256)
+  // 4. Derive the Argon2 salt (deterministic from familyId via HKDF-SHA256)
   const salt = await deriveArgon2Salt(familyId);
 
-  // 7. POST /api/v1/family/init
+  // 5. POST /api/v1/family/init
   await apiFetch<unknown>("/api/v1/family/init", {
     method: "POST",
     body: JSON.stringify({
       familyId,
-      deviceEnvelope: toBase64Url(deviceEnvelopeBytes),
+      deviceEnvelope: toBase64Url(deviceEnvelope),
       recovery: {
         wrap: toBase64Url(wrapBytes),
         phraseCt: toBase64Url(phraseCt),
         salt: toBase64Url(salt),
       },
     }),
-  });
-
-  // 8. Persist familyKey and device keys in IndexedDB
-  const now = new Date().toISOString();
-  await db.transaction("rw", db.cipherKeys, async () => {
-    await db.cipherKeys.put({ name: "familyKey", value: familyKey, createdAt: now });
-    await db.cipherKeys.put({ name: "devicePrivKey", value: devicePrivKey, createdAt: now });
-    await db.cipherKeys.put({ name: "devicePubKey", value: devicePubKey, createdAt: now });
   });
 
   return { familyId, phrase };

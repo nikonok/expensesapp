@@ -15,6 +15,11 @@ vi.mock("../crypto/worker-client", () => ({
     wrapKeyForDevice: vi.fn(async () => new Uint8Array(80).fill(3)),
     wrapRecoveryEnvelope: vi.fn(async () => new Uint8Array(57).fill(4)),
     wrapPhraseForReveal: vi.fn(async () => new Uint8Array(57).fill(5)),
+    wrapAndPersistFamilyKey: vi.fn(async () => ({
+      deviceEnvelope: new Uint8Array(80).fill(3),
+      wrapBytes: new Uint8Array(57).fill(4),
+      phraseCt: new Uint8Array(57).fill(5),
+    })),
   },
 }));
 
@@ -36,7 +41,6 @@ describe("initFamilyAndShowPhrase", () => {
     const { initFamilyAndShowPhrase } = await import("./init");
     const result = await initFamilyAndShowPhrase({
       devicePubKey: new Uint8Array(32).fill(1),
-      devicePrivKey: new Uint8Array(32).fill(2),
     });
 
     expect(result.phrase.split(" ")).toHaveLength(24);
@@ -49,7 +53,6 @@ describe("initFamilyAndShowPhrase", () => {
     const { initFamilyAndShowPhrase } = await import("./init");
     await initFamilyAndShowPhrase({
       devicePubKey: new Uint8Array(32).fill(1),
-      devicePrivKey: new Uint8Array(32).fill(2),
     });
 
     expect(mockFetch).toHaveBeenCalledOnce();
@@ -81,20 +84,28 @@ describe("initFamilyAndShowPhrase", () => {
     expect(body.recovery.salt.length).toBe(22);
   });
 
-  it("persists familyKey and device keys to IndexedDB cipherKeys table", async () => {
-    // Clear previous module cache so fresh db is used.
+  it("delegates key generation and persistence to the crypto worker", async () => {
+    // Key persistence now happens inside the worker (architecture §7.2).
+    // This test verifies that wrapAndPersistFamilyKey is called with the correct
+    // devicePubKey, phrase, familyId, and createdAt arguments.
+    const { cryptoWorker } = await import("../crypto/worker-client");
     const { initFamilyAndShowPhrase } = await import("./init");
-    await initFamilyAndShowPhrase({
-      devicePubKey: new Uint8Array(32).fill(1),
-      devicePrivKey: new Uint8Array(32).fill(2),
-    });
 
-    const { db } = await import("@/db/database");
-    const keys = await db.cipherKeys.toArray();
-    const names = keys.map((k) => k.name);
-    expect(names).toContain("familyKey");
-    expect(names).toContain("devicePrivKey");
-    expect(names).toContain("devicePubKey");
+    const devicePubKey = new Uint8Array(32).fill(1);
+    await initFamilyAndShowPhrase({ devicePubKey });
+
+    expect(cryptoWorker.wrapAndPersistFamilyKey).toHaveBeenCalledOnce();
+    const call = (cryptoWorker.wrapAndPersistFamilyKey as ReturnType<typeof vi.fn>).mock
+      .calls[0] as [Uint8Array, string, string, string];
+    expect(call[0]).toEqual(devicePubKey);
+    // phrase is a 24-word BIP39 mnemonic
+    expect(call[1].split(" ")).toHaveLength(24);
+    // familyId is a v7 UUID
+    expect(call[2]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    // createdAt is ISO-8601
+    expect(() => new Date(call[3]).toISOString()).not.toThrow();
   });
 
   it("throws when POST /api/v1/family/init returns an error", async () => {
@@ -106,7 +117,6 @@ describe("initFamilyAndShowPhrase", () => {
     await expect(
       initFamilyAndShowPhrase({
         devicePubKey: new Uint8Array(32).fill(1),
-        devicePrivKey: new Uint8Array(32).fill(2),
       }),
     ).rejects.toThrow();
   });

@@ -494,8 +494,7 @@ function StepRecoveryCode({ onNext }: { onNext: () => void }) {
   useEffect(() => {
     const run = async () => {
       const pubKey = useAuthStore.getState().pendingDevicePubKey;
-      const privKey = useAuthStore.getState().pendingDevicePrivKey;
-      if (!pubKey || !privKey) {
+      if (!pubKey) {
         setError(t("errors.generic"));
         setLoading(false);
         return;
@@ -503,7 +502,6 @@ function StepRecoveryCode({ onNext }: { onNext: () => void }) {
       try {
         const result = await initFamilyAndShowPhrase({
           devicePubKey: pubKey,
-          devicePrivKey: privKey,
         });
         authStore.clearPendingKeypair();
         setPhrase(result.phrase);

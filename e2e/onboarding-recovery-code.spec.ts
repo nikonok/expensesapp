@@ -50,30 +50,20 @@ test("onboarding: signed-in user sees recovery code step and can advance", async
   // Wait until the DEV shim has attached __authStore to window.
   await page.waitForFunction(() => !!(window as any).__authStore, { timeout: 5000 });
 
-  // Generate a real X25519 keypair in the browser context so the crypto worker
-  // operations in initFamilyAndShowPhrase() receive valid key material.
-  const { pubKeyBase64, pubKeyBytes, privKeyBytes } = await page.evaluate(async () => {
-    const kp = await crypto.subtle.generateKey({ name: "X25519" }, true, ["deriveKey"]);
-    const pubRaw = new Uint8Array(await crypto.subtle.exportKey("raw", kp.publicKey));
-    const privPkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", kp.privateKey));
-    const toB64 = (b: Uint8Array) =>
-      btoa(String.fromCharCode(...b))
-        .replace(/\+/g, "-")
-        .replace(/\//g, "_")
-        .replace(/=/g, "");
-    return {
-      pubKeyBase64: toB64(pubRaw),
-      pubKeyBytes: Array.from(pubRaw),
-      privKeyBytes: Array.from(privPkcs8),
-    };
+  // Generate a real libsodium X25519 keypair inside the crypto worker so the
+  // device key is persisted correctly in IndexedDB.  Only the public key is
+  // returned to the main thread.
+  const pubKeyBytes = await page.evaluate(async () => {
+    const { cryptoWorker } = await import("/src/services/crypto/worker-client.ts");
+    const pubKey = await cryptoWorker.generateAndPersistDeviceKey();
+    return Array.from(pubKey);
   });
-  void pubKeyBase64; // used only for potential debugging
 
   // Hydrate the auth store directly, bypassing the real GIS / signIn() flow.
   // Also override signIn() so clicking the "Continue with Google" button is a no-op
   // that immediately resolves — handleSignIn() in SignInStep then calls onNext().
   await page.evaluate(
-    ({ pub, priv }: { pub: number[]; priv: number[] }) => {
+    ({ pub }: { pub: number[] }) => {
       const store = (window as any).__authStore;
       store.setState({
         user: {
@@ -89,13 +79,12 @@ test("onboarding: signed-in user sees recovery code step and can advance", async
         isSignedIn: true,
         needsFamilyInit: true,
         pendingDevicePubKey: new Uint8Array(pub),
-        pendingDevicePrivKey: new Uint8Array(priv),
         error: null,
         // Override signIn so the button click becomes a no-op and onNext() fires.
         signIn: async () => {},
       });
     },
-    { pub: pubKeyBytes, priv: privKeyBytes },
+    { pub: pubKeyBytes },
   );
 
   // Click "Continue with Google" — signIn() is now a no-op, so handleSignIn()
@@ -103,10 +92,8 @@ test("onboarding: signed-in user sees recovery code step and can advance", async
   await page.getByRole("button", { name: /continue with google/i }).click();
 
   // StepRecoveryCode mounts and calls initFamilyAndShowPhrase() which:
-  //   - generates familyKey + 24-word BIP39 phrase
-  //   - calls cryptoWorker.wrap* operations (real WebCrypto in-worker)
+  //   - calls cryptoWorker.wrapAndPersistFamilyKey (generates + wraps + persists inside worker)
   //   - POSTs /api/v1/family/init (mocked above)
-  //   - persists keys in IndexedDB
   // This is async — wait until the recovery code heading is visible.
   await expect(page.locator("text=Save your recovery code")).toBeVisible({ timeout: 20000 });
 

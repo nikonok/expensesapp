@@ -51,6 +51,33 @@ export const cryptoWorker = {
 
   generateDeviceKeypair: () => call<DeviceKeypair>({ type: "generateDeviceKeypair" }),
 
+  /** Generates a device keypair, persists the private key inside the worker's
+   * IndexedDB, caches both keys in worker module state, and returns ONLY the
+   * public key.  The private key never crosses the postMessage boundary. */
+  generateAndPersistDeviceKey: () => call<Uint8Array>({ type: "generateAndPersistDeviceKey" }),
+
+  /** Returns the cached device public key from the worker's module state
+   * (populated by generateAndPersistDeviceKey). */
+  getDevicePublicKey: () => call<Uint8Array | null>({ type: "getDevicePublicKey" }),
+
+  /** Generates a 32-byte familyKey inside the worker, performs all three
+   * wrapping operations (device envelope, recovery wrap, phrase ciphertext),
+   * persists the familyKey to IndexedDB, and returns only the ciphertexts.
+   * The raw familyKey never crosses the postMessage boundary outward. */
+  wrapAndPersistFamilyKey: (
+    devicePubKey: Uint8Array,
+    phrase: string,
+    familyId: string,
+    createdAt: string,
+  ) =>
+    call<{ deviceEnvelope: Uint8Array; wrapBytes: Uint8Array; phraseCt: Uint8Array }>({
+      type: "wrapAndPersistFamilyKey",
+      devicePubKey,
+      phrase,
+      familyId,
+      createdAt,
+    }),
+
   encryptRecord: (plaintext: Uint8Array, familyKey: Uint8Array, meta: RecordMeta) =>
     call<EncryptedRecord>({ type: "encryptRecord", plaintext, familyKey, meta }),
 
