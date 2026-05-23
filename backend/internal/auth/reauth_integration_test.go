@@ -455,6 +455,110 @@ func TestFamilyRecoveryEnvelope_NoFamily(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "body: %s", body)
 }
 
+// TestRecoveryReveal_TOCTOU verifies that two concurrent reveal requests using
+// the same grant ID result in exactly one success and one 401.
+// This exercises the atomic ClaimReauthGrant UPDATE...RETURNING path.
+func TestRecoveryReveal_TOCTOU(t *testing.T) {
+	authpkg.ClearSessionCache()
+	env := testenv.New(t)
+	defer env.Close()
+
+	const email = "toctou@example.com"
+	const sub = "sub-toctou"
+
+	addToAllowlist(t, env.DB, email)
+	env.Verifier.Claims = &authpkg.Claims{Email: email, EmailVerified: true, Sub: sub, Name: "Toctou"}
+
+	base := env.Server.URL
+
+	// 1. Sign in.
+	resp := postJSON(t, env.Client, base+"/v1/auth/google", map[string]any{
+		"idToken": "tok", "deviceLabel": "Phone", "userAgent": "UA",
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	_ = readBody(t, resp)
+
+	// 2. Family init.
+	familyID := newUUIDStr(t)
+	initResp := postJSON(t, env.Client, base+"/v1/family/init", map[string]any{
+		"familyId":       familyID,
+		"deviceEnvelope": base64.RawURLEncoding.EncodeToString(make([]byte, 80)),
+		"recovery": map[string]any{
+			"wrap":     base64.RawURLEncoding.EncodeToString(make([]byte, 49)),
+			"phraseCt": base64.RawURLEncoding.EncodeToString(make([]byte, 49)),
+			"salt":     base64.RawURLEncoding.EncodeToString(make([]byte, 16)),
+		},
+	})
+	require.Equal(t, http.StatusOK, initResp.StatusCode)
+	_ = readBody(t, initResp)
+
+	// 3. Reauth challenge + verify → obtain one grantId.
+	authpkg.ClearSessionCache()
+	env.Verifier.Claims = &authpkg.Claims{Email: email, EmailVerified: true, Sub: sub}
+
+	challengeResp := postJSON(t, env.Client, base+"/v1/reauth/challenge", nil)
+	require.Equal(t, http.StatusOK, challengeResp.StatusCode)
+	var ch map[string]any
+	require.NoError(t, json.Unmarshal(readBody(t, challengeResp), &ch))
+
+	verifyResp := postJSON(t, env.Client, base+"/v1/reauth/verify", map[string]any{
+		"nonce":   ch["nonce"],
+		"idToken": "fresh-tok",
+	})
+	require.Equal(t, http.StatusOK, verifyResp.StatusCode)
+	var vr map[string]any
+	require.NoError(t, json.Unmarshal(readBody(t, verifyResp), &vr))
+	grantID := vr["grantId"].(string)
+
+	// 4. Fire two concurrent reveal requests with the same grantId.
+	type result struct {
+		status int
+	}
+	results := make(chan result, 2)
+
+	doReveal := func() {
+		// Each goroutine uses its own HTTP client sharing the same cookie jar
+		// (env.Client) to carry the session cookie.
+		req, err := http.NewRequest(http.MethodPost, base+"/v1/account/recovery/reveal", nil)
+		if err != nil {
+			results <- result{0}
+			return
+		}
+		req.Header.Set("X-Requested-With", "fetch")
+		req.Header.Set("X-Reauth-Grant", grantID)
+		authpkg.ClearSessionCache()
+		resp, err := env.Client.Do(req)
+		if err != nil {
+			results <- result{0}
+			return
+		}
+		_ = readBody(t, resp)
+		results <- result{resp.StatusCode}
+	}
+
+	go doReveal()
+	go doReveal()
+
+	r1 := <-results
+	r2 := <-results
+
+	statuses := []int{r1.status, r2.status}
+	okCount := 0
+	unauthorizedCount := 0
+	for _, s := range statuses {
+		switch s {
+		case http.StatusOK:
+			okCount++
+		case http.StatusUnauthorized:
+			unauthorizedCount++
+		}
+	}
+
+	// Exactly one succeeds, exactly one fails with 401.
+	assert.Equal(t, 1, okCount, "expected exactly one 200, got statuses: %v", statuses)
+	assert.Equal(t, 1, unauthorizedCount, "expected exactly one 401, got statuses: %v", statuses)
+}
+
 // ---- helpers ----------------------------------------------------------------
 
 // mustJSONReader marshals v to JSON and returns an io.Reader for it.

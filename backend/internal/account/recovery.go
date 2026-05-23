@@ -27,7 +27,7 @@ import (
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
 )
 
-// ErrInternal is returned by validateReauthGrant when a DB error occurs,
+// ErrInternal is returned by claimReauthGrant when a DB error occurs,
 // so callers can distinguish infrastructure failures from auth failures.
 var ErrInternal = errors.New("internal")
 
@@ -81,8 +81,10 @@ func (h *Handler) PostRecoveryReveal(w http.ResponseWriter, r *http.Request) {
 
 	q := gen.New(h.db)
 
-	// 1. Validate the grant: must exist, unused, belong to this session, correct purpose, not expired.
-	if err := validateReauthGrant(ctx, q, grantID, sessionID, now); err != nil {
+	// 1. Atomically claim the grant — this prevents TOCTOU races between concurrent
+	//    reveal requests using the same grant ID.
+	grant, err := claimReauthGrant(ctx, q, grantID, sessionID, now, nowStr)
+	if err != nil {
 		if errors.Is(err, ErrInternal) {
 			slog.WarnContext(ctx, "recovery.reveal: grant DB error", "err", err)
 			httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
@@ -116,21 +118,18 @@ func (h *Handler) PostRecoveryReveal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 4. Mark grant used and audit-log inside a single tx.
+	// 4. Audit-log the reveal inside a transaction.
+	// Grant is already claimed (marked used) by step 1.
 	if err := internaldb.WithTx(ctx, h.db, func(tx *sql.Tx) error {
 		qt := gen.New(tx)
-		if err := qt.MarkReauthGrantUsed(ctx, gen.MarkReauthGrantUsedParams{
-			UsedAt: sql.NullString{String: nowStr, Valid: true},
-			ID:     grantID,
-		}); err != nil {
-			return err
-		}
 		return recoveryAudit(ctx, qt, userID, "recovery.phrase.reveal", "family", member.FamilyID, nowStr)
 	}); err != nil {
-		slog.WarnContext(ctx, "recovery.reveal: mark-used tx error", "err", err)
+		slog.WarnContext(ctx, "recovery.reveal: audit tx error", "err", err)
 		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
 		return
 	}
+
+	_ = grant // grant already consumed; purpose was validated in claimReauthGrant
 
 	httpx.WriteJSON(w, http.StatusOK, revealRecoveryResponse{
 		PhraseCt: base64.RawURLEncoding.EncodeToString(envelope.PhraseCt),
@@ -205,8 +204,8 @@ func (h *Handler) PostRecoveryRegenerate(w http.ResponseWriter, r *http.Request)
 
 	q := gen.New(h.db)
 
-	// 1. Validate the grant.
-	if err := validateReauthGrant(ctx, q, grantID, sessionID, now); err != nil {
+	// 1. Atomically claim the grant.
+	if _, err := claimReauthGrant(ctx, q, grantID, sessionID, now, nowStr); err != nil {
 		if errors.Is(err, ErrInternal) {
 			slog.WarnContext(ctx, "recovery.regenerate: grant DB error", "err", err)
 			httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
@@ -228,15 +227,10 @@ func (h *Handler) PostRecoveryRegenerate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// 3. Atomically mark grant used + replace envelope + audit.
+	// 3. Replace envelope + audit inside a transaction.
+	// Grant is already claimed (marked used) by step 1.
 	if err := internaldb.WithTx(ctx, h.db, func(tx *sql.Tx) error {
 		qt := gen.New(tx)
-		if err := qt.MarkReauthGrantUsed(ctx, gen.MarkReauthGrantUsedParams{
-			UsedAt: sql.NullString{String: nowStr, Valid: true},
-			ID:     grantID,
-		}); err != nil {
-			return err
-		}
 		if err := qt.ReplaceFamilyRecoveryEnvelope(ctx, gen.ReplaceFamilyRecoveryEnvelopeParams{
 			RecoveryWrap: recoveryWrap,
 			PhraseCt:     phraseCt,
@@ -258,31 +252,35 @@ func (h *Handler) PostRecoveryRegenerate(w http.ResponseWriter, r *http.Request)
 
 // ---- helpers ----------------------------------------------------------------
 
-// validateReauthGrant checks that the grant exists, is unused, belongs to the
-// given session, has the correct purpose, and has not expired.
+// claimReauthGrant atomically marks the grant as used via UPDATE...RETURNING.
+// This prevents TOCTOU races: two concurrent requests with the same grant ID
+// will race at the DB level; exactly one will get the row back, the other
+// receives sql.ErrNoRows.
 //
-// Returns ErrInternal (wrapped) for DB errors so callers can respond with 500.
-// All auth-validation failures return a plain sentinel so callers respond with
-// an opaque "invalid or expired reauthentication grant" 401 — no detail leak.
-func validateReauthGrant(ctx context.Context, q *gen.Queries, grantID, sessionID string, now time.Time) error {
-	grant, err := q.GetUnusedReauthGrant(ctx, grantID)
+// Returns ErrInternal (wrapped) for unexpected DB errors.
+// Returns a plain error for auth failures (expired, wrong session/purpose).
+func claimReauthGrant(ctx context.Context, q *gen.Queries, grantID, sessionID string, _ time.Time, nowStr string) (gen.ReauthGrant, error) {
+	grant, err := q.ClaimReauthGrant(ctx, gen.ClaimReauthGrantParams{
+		UsedAt:    sql.NullString{String: nowStr, Valid: true},
+		ID:        grantID,
+		ExpiresAt: nowStr,
+	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return errors.New("not found or already used")
+			// Grant not found, already used, or expired — all opaque to the caller.
+			return gen.ReauthGrant{}, errors.New("not found, already used, or expired")
 		}
-		return fmt.Errorf("%w: get grant: %v", ErrInternal, err)
+		return gen.ReauthGrant{}, fmt.Errorf("%w: claim grant: %v", ErrInternal, err)
 	}
+	// Verify session and purpose on the returned row (these aren't in the WHERE
+	// clause because we want to distinguish grant-not-found from wrong-owner).
 	if grant.SessionID != sessionID {
-		return errors.New("session mismatch")
+		return gen.ReauthGrant{}, errors.New("session mismatch")
 	}
 	if grant.Purpose != reauthGrantPurpose {
-		return errors.New("purpose mismatch")
+		return gen.ReauthGrant{}, errors.New("purpose mismatch")
 	}
-	expiresAt, parseErr := httpx.ParseTime(grant.ExpiresAt)
-	if parseErr != nil || now.After(expiresAt) {
-		return errors.New("expired")
-	}
-	return nil
+	return grant, nil
 }
 
 // recoveryAudit writes an audit_log row inside an existing transaction.

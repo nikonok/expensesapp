@@ -48,6 +48,34 @@ func (q *Queries) AdvanceFamilySeq(ctx context.Context, familyID string) (int64,
 	return column_1, err
 }
 
+const claimReauthGrant = `-- name: ClaimReauthGrant :one
+UPDATE reauth_grants
+SET used_at = ?
+WHERE id = ? AND used_at IS NULL AND expires_at > ?
+RETURNING id, session_id, purpose, expires_at, used_at
+`
+
+type ClaimReauthGrantParams struct {
+	UsedAt    sql.NullString
+	ID        string
+	ExpiresAt string
+}
+
+// Atomically mark the grant as used. Returns the row only if it was unused/unexpired.
+// Prevents TOCTOU: concurrent claims race at DB; only one gets a row back.
+func (q *Queries) ClaimReauthGrant(ctx context.Context, arg ClaimReauthGrantParams) (ReauthGrant, error) {
+	row := q.db.QueryRowContext(ctx, claimReauthGrant, arg.UsedAt, arg.ID, arg.ExpiresAt)
+	var i ReauthGrant
+	err := row.Scan(
+		&i.ID,
+		&i.SessionID,
+		&i.Purpose,
+		&i.ExpiresAt,
+		&i.UsedAt,
+	)
+	return i, err
+}
+
 const demoteAdmin = `-- name: DemoteAdmin :exec
 UPDATE users SET is_admin = 0 WHERE id = ?
 `
@@ -171,7 +199,6 @@ func (q *Queries) GetFamilyByID(ctx context.Context, id string) (Family, error) 
 }
 
 const getFamilyRecoveryEnvelope = `-- name: GetFamilyRecoveryEnvelope :one
-
 SELECT family_id, recovery_wrap, phrase_ct, version, salt, created_at FROM family_recovery_envelopes
 WHERE family_id = ? LIMIT 1
 `
@@ -832,30 +859,32 @@ func (q *Queries) ListUserDevices(ctx context.Context, userID string) ([]Device,
 }
 
 const markReauthChallengeUsed = `-- name: MarkReauthChallengeUsed :exec
-UPDATE reauth_challenges SET used_at = ? WHERE nonce = ?
+UPDATE reauth_challenges SET used_at = ? WHERE nonce = ? AND session_id = ?
 `
 
 type MarkReauthChallengeUsedParams struct {
-	UsedAt sql.NullString
-	Nonce  string
+	UsedAt    sql.NullString
+	Nonce     string
+	SessionID string
 }
 
 func (q *Queries) MarkReauthChallengeUsed(ctx context.Context, arg MarkReauthChallengeUsedParams) error {
-	_, err := q.db.ExecContext(ctx, markReauthChallengeUsed, arg.UsedAt, arg.Nonce)
+	_, err := q.db.ExecContext(ctx, markReauthChallengeUsed, arg.UsedAt, arg.Nonce, arg.SessionID)
 	return err
 }
 
 const markReauthGrantUsed = `-- name: MarkReauthGrantUsed :exec
-UPDATE reauth_grants SET used_at = ? WHERE id = ?
+UPDATE reauth_grants SET used_at = ? WHERE id = ? AND session_id = ?
 `
 
 type MarkReauthGrantUsedParams struct {
-	UsedAt sql.NullString
-	ID     string
+	UsedAt    sql.NullString
+	ID        string
+	SessionID string
 }
 
 func (q *Queries) MarkReauthGrantUsed(ctx context.Context, arg MarkReauthGrantUsedParams) error {
-	_, err := q.db.ExecContext(ctx, markReauthGrantUsed, arg.UsedAt, arg.ID)
+	_, err := q.db.ExecContext(ctx, markReauthGrantUsed, arg.UsedAt, arg.ID, arg.SessionID)
 	return err
 }
 

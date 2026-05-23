@@ -232,7 +232,7 @@ SELECT nonce, session_id, issued_at, used_at, expires_at FROM reauth_challenges
 WHERE nonce = ? AND used_at IS NULL LIMIT 1;
 
 -- name: MarkReauthChallengeUsed :exec
-UPDATE reauth_challenges SET used_at = ? WHERE nonce = ?;
+UPDATE reauth_challenges SET used_at = ? WHERE nonce = ? AND session_id = ?;
 
 -- ----- reauth_grants -----
 
@@ -245,7 +245,15 @@ SELECT id, session_id, purpose, expires_at, used_at FROM reauth_grants
 WHERE id = ? AND used_at IS NULL LIMIT 1;
 
 -- name: MarkReauthGrantUsed :exec
-UPDATE reauth_grants SET used_at = ? WHERE id = ?;
+UPDATE reauth_grants SET used_at = ? WHERE id = ? AND session_id = ?;
+
+-- name: ClaimReauthGrant :one
+-- Atomically mark the grant as used. Returns the row only if it was unused/unexpired.
+-- Prevents TOCTOU: concurrent claims race at DB; only one gets a row back.
+UPDATE reauth_grants
+SET used_at = ?
+WHERE id = ? AND used_at IS NULL AND expires_at > ?
+RETURNING id, session_id, purpose, expires_at, used_at
 
 -- ----- family_recovery_envelopes -----
 

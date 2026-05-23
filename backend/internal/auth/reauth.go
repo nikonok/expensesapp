@@ -183,8 +183,9 @@ func (h *ReauthHandler) PostVerify(w http.ResponseWriter, r *http.Request) {
 	if err := internaldb.WithTx(ctx, h.db, func(tx *sql.Tx) error {
 		qt := gen.New(tx)
 		if err := qt.MarkReauthChallengeUsed(ctx, gen.MarkReauthChallengeUsedParams{
-			UsedAt: sql.NullString{String: nowStr, Valid: true},
-			Nonce:  req.Nonce,
+			UsedAt:    sql.NullString{String: nowStr, Valid: true},
+			Nonce:     req.Nonce,
+			SessionID: sessionID,
 		}); err != nil {
 			return err
 		}
