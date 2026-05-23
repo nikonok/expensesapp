@@ -691,6 +691,56 @@ func TestRemove_HappyPath(t *testing.T) {
 // TestRemove_CoolDown
 // --------------------------------------------------------------------------
 
+// --------------------------------------------------------------------------
+// TestMigrateSolo_NotInTargetFamily
+// --------------------------------------------------------------------------
+
+// TestMigrateSolo_NotInTargetFamily verifies that supplying a targetFamilyId
+// the caller does not belong to returns 403 not-in-target-family.
+func TestMigrateSolo_NotInTargetFamily(t *testing.T) {
+	authpkg.ClearSessionCache()
+	env := testenv.New(t)
+	defer env.Close()
+
+	addToAllowlist(t, env.DB, "alice@example.com")
+	addToAllowlist(t, env.DB, "bob@example.com")
+
+	// Alice: init her own family (caller does NOT belong here).
+	clientA := env.Client
+	aliceFamilyID := initFamilyForUser(t, env, clientA, "alice@example.com", "sub-alice-ntf")
+	_ = aliceFamilyID
+
+	// Bob: sign in and init his own solo family (this is his source family).
+	authpkg.ClearSessionCache()
+	clientB := env.NewClient()
+	initFamilyForUser(t, env, clientB, "bob@example.com", "sub-bob-ntf")
+
+	// Re-auth Bob so his session cookie is current.
+	authpkg.ClearSessionCache()
+	env.Verifier.Claims = &authpkg.Claims{
+		Email: "bob@example.com", EmailVerified: true, Sub: "sub-bob-ntf",
+	}
+	_ = signInUser(t, env, clientB)
+
+	// Bob tries to migrate into Alice's family — he is NOT a member there.
+	migrateBody := map[string]any{
+		"migrationId":    newUUIDStr(t),
+		"targetFamilyId": aliceFamilyID,
+		"records":        []any{},
+	}
+	resp := postJSON(t, clientB, env.Server.URL+"/v1/family/migrate-solo", migrateBody)
+	body := readBody(t, resp)
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "expected 403 not-in-target-family: %s", body)
+
+	var errBody map[string]any
+	_ = json.Unmarshal(body, &errBody)
+	assert.Contains(t, errBody["title"], "not-in-target-family")
+}
+
+// --------------------------------------------------------------------------
+// TestRemove_CoolDown
+// --------------------------------------------------------------------------
+
 // TestRemove_CoolDown verifies that removing a member within 24h of a previous
 // removal returns 429 cool-down.
 func TestRemove_CoolDown(t *testing.T) {

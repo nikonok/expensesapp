@@ -51,6 +51,10 @@ var ErrCoolDown = errors.New("remove cool-down has not elapsed")
 // ErrNotSameFamily is returned when the caller and target are not in the same family.
 var ErrNotSameFamily = errors.New("caller and target are not in the same family")
 
+// ErrNotInTargetFamily is returned by MigrateSolo when the caller is not a
+// member of the targetFamilyId supplied in the request body.
+var ErrNotInTargetFamily = errors.New("caller not in target family")
+
 // checkMemberCap returns ErrFamilyFull when the family already has
 // maxFamilyMembers active members.
 func checkMemberCap(ctx context.Context, qt *gen.Queries, familyID string) error {

@@ -417,6 +417,15 @@ func (s *Service) MigrateSolo(ctx context.Context, p MigrateSoloParams) (Migrate
 			return fmt.Errorf("check migration idempotency: %w", err)
 		}
 
+		// Verify that the caller is actually a member of the target family.
+		_, err = qt.GetFamilyMemberByUserID(ctx, p.TargetFamilyID, p.CallerUserID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotInTargetFamily
+		}
+		if err != nil {
+			return fmt.Errorf("check target membership: %w", err)
+		}
+
 		// Insert all records into target family.
 		var totalBytes int64
 		for _, rec := range p.Records {
