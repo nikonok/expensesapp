@@ -22,7 +22,7 @@ vi.mock("../crypto/worker-client", () => ({
 const mockFetch = vi.fn(
   async (_url: string, _init: RequestInit) => new Response(JSON.stringify({}), { status: 200 }),
 );
-global.fetch = mockFetch as typeof global.fetch;
+globalThis.fetch = mockFetch as typeof globalThis.fetch;
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
