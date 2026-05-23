@@ -18,6 +18,7 @@ import (
 	"github.com/nikonok/expensesapp/backend/internal/family"
 	internallog "github.com/nikonok/expensesapp/backend/internal/log"
 	"github.com/nikonok/expensesapp/backend/internal/server"
+	syncp "github.com/nikonok/expensesapp/backend/internal/sync"
 	"github.com/nikonok/expensesapp/backend/internal/version"
 )
 
@@ -48,8 +49,9 @@ func main() {
 	authH := authpkg.NewHandler(database, verifier)
 	accountH := account.NewHandler(database)
 	familyH := family.NewHandler(database)
+	syncH := syncp.NewHandler(database)
 
-	r := server.NewRouter(database, authH, accountH, familyH, server.HealthConfig{Version: version.String()}, slog.Default())
+	r := server.NewRouter(database, authH, accountH, familyH, syncH, server.HealthConfig{Version: version.String()}, slog.Default())
 
 	srv := &http.Server{
 		Addr:    cfg.BindAddr,

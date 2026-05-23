@@ -25,6 +25,7 @@ import (
 	"github.com/nikonok/expensesapp/backend/internal/family"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
 	"github.com/nikonok/expensesapp/backend/internal/server"
+	syncp "github.com/nikonok/expensesapp/backend/internal/sync"
 )
 
 // clientTLSConfig extracts the TLS client config from an httptest.Server's
@@ -112,9 +113,10 @@ func New(t *testing.T, opts ...Option) *Env {
 	authH := authpkg.NewHandler(database, verifier)
 	accountH := account.NewHandler(database)
 	familyH := family.NewHandler(database)
+	syncH := syncp.NewHandler(database)
 
 	// 4. Build router using the shared server.NewRouter (same as production).
-	r := server.NewRouter(database, authH, accountH, familyH, server.HealthConfig{}, nil)
+	r := server.NewRouter(database, authH, accountH, familyH, syncH, server.HealthConfig{}, nil)
 
 	// 5. Start httptest.Server with TLS so that Secure cookies are honoured by the jar.
 	srv := httptest.NewTLSServer(r)
