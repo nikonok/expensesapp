@@ -482,7 +482,7 @@ export function startLiveSync(familyId: string): () => void {
         case "you.removed": {
           (async () => {
             try {
-              // Clear all local data.
+              // Clear all local data (crypto keys + sync state + domain records).
               await Promise.all([
                 db.transactions.clear(),
                 db.accounts.clear(),
@@ -490,6 +490,7 @@ export function startLiveSync(familyId: string): () => void {
                 db.budgets.clear(),
                 db.pendingUploads.clear(),
                 db.syncCursors.clear(),
+                db.cipherKeys.clear(),
               ]);
               // Sign out via auth store.
               const { useAuthStore } = await import("@/services/auth/session");
