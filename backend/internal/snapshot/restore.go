@@ -13,18 +13,19 @@ import (
 	"github.com/nikonok/expensesapp/backend/internal/db/gen"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
 	"github.com/nikonok/expensesapp/backend/internal/live"
+	syncp "github.com/nikonok/expensesapp/backend/internal/sync"
 )
 
 // RestoreResult is returned by a successful RestoreSnapshot call.
 type RestoreResult struct {
-	// NewCursor is the family_seq value after the last change applied during
-	// restore. Clients should use this as their new sync cursor.
-	NewCursor int64
+	// NewCursor is the base64url-encoded family_seq after the last change
+	// applied during restore. Clients should use this as their new sync cursor.
+	NewCursor string
 }
 
 // syncBarrierPayload is the JSON payload for the "sync.barrier" SSE event.
 type syncBarrierPayload struct {
-	Cursor int64 `json:"cursor"`
+	Cursor string `json:"cursor"`
 }
 
 // RestoreSnapshot restores familyID to the state recorded in snapshotID.
@@ -153,7 +154,7 @@ func (s *Service) RestoreSnapshot(ctx context.Context, familyID, snapshotID, cal
 
 	// Emit sync.barrier SSE event to family scope (best-effort, outside tx).
 	if hub != nil {
-		payload := syncBarrierPayload{Cursor: finalCursor}
+		payload := syncBarrierPayload{Cursor: syncp.EncodeCursor(finalCursor)}
 		data, marshalErr := json.Marshal(payload)
 		if marshalErr != nil {
 			slog.WarnContext(ctx, "snapshot.restore: marshal sync.barrier payload failed", "err", marshalErr)
@@ -165,7 +166,7 @@ func (s *Service) RestoreSnapshot(ctx context.Context, familyID, snapshotID, cal
 		}
 	}
 
-	return &RestoreResult{NewCursor: finalCursor}, nil
+	return &RestoreResult{NewCursor: syncp.EncodeCursor(finalCursor)}, nil
 }
 
 // insertAudit writes a single audit_log row using an already-open *gen.Queries.

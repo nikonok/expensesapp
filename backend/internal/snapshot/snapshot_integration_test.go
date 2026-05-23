@@ -21,6 +21,7 @@ import (
 
 	authpkg "github.com/nikonok/expensesapp/backend/internal/auth"
 	"github.com/nikonok/expensesapp/backend/internal/snapshot"
+	syncp "github.com/nikonok/expensesapp/backend/internal/sync"
 	"github.com/nikonok/expensesapp/backend/internal/testenv"
 )
 
@@ -537,7 +538,13 @@ func TestSnapshot_RestoreEmitsBarrier(t *testing.T) {
 
 	var payload map[string]any
 	require.NoError(t, json.Unmarshal([]byte(ev.Data), &payload))
-	assert.Greater(t, payload["cursor"].(float64), float64(0), "sync.barrier cursor must be > 0")
+
+	// cursor must be a base64url string, not a number.
+	cursorStr, ok := payload["cursor"].(string)
+	require.True(t, ok, "sync.barrier cursor must be a string, got %T", payload["cursor"])
+	seq, err := syncp.DecodeCursor(cursorStr)
+	require.NoError(t, err, "sync.barrier cursor must be decodable")
+	assert.Greater(t, seq, int64(0), "decoded sync.barrier cursor must be > 0")
 }
 
 // TestSnapshot_RestoreRequiresConfirm verifies that POST without ?confirm=true
