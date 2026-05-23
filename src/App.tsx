@@ -17,9 +17,12 @@ import OnboardingPage from "./pages/OnboardingPage";
 import TrashedAccounts from "./components/accounts/TrashedAccounts";
 import { InstallPopup } from "./components/shared/InstallPopup";
 import { OnboardingCompletePopup } from "./components/shared/OnboardingCompletePopup";
+import { DeviceJoinedBanner } from "./components/shared/DeviceJoinedBanner";
+import { useAuthStore } from "./services/auth/session";
 const BudgetPage = lazy(() => import("./pages/BudgetPage"));
 const OverviewPage = lazy(() => import("./pages/OverviewPage"));
 const TransactionInput = lazy(() => import("./components/transactions/TransactionInput"));
+const DeviceJoinWaiting = lazy(() => import("./pages/DeviceJoinWaiting"));
 const CryptoDemoPage = import.meta.env.DEV ? lazy(() => import("./pages/CryptoDemoPage")) : null;
 
 function AppRoutes() {
@@ -32,6 +35,7 @@ function AppRoutes() {
     notificationEnabled,
     notificationTime,
   } = useSettingsStore();
+  const { isSignedIn, awaitingEnvelope } = useAuthStore();
   const [integrityError, setIntegrityError] = useState(false);
   const coldStartPathRef = useRef(window.location.pathname);
 
@@ -124,15 +128,24 @@ function AppRoutes() {
       navigate("/onboarding", { replace: true });
       return;
     }
+    // New device waiting for envelope — takes priority over startup-screen redirect.
+    if (isSignedIn && awaitingEnvelope) {
+      navigate("/devices/waiting", { replace: true });
+      return;
+    }
     // On PWA cold start, always redirect to the configured startup tab unless already on it.
     const path = coldStartPathRef.current;
     if (path) {
       coldStartPathRef.current = "";
-      if (!path.startsWith("/dev/") && path !== `/${startupScreen}`) {
+      if (
+        !path.startsWith("/dev/") &&
+        path !== "/devices/waiting" &&
+        path !== `/${startupScreen}`
+      ) {
         navigate(`/${startupScreen}`, { replace: true });
       }
     }
-  }, [isLoaded, hasCompletedOnboarding, navigate, startupScreen]);
+  }, [isLoaded, hasCompletedOnboarding, isSignedIn, awaitingEnvelope, navigate, startupScreen]);
 
   if (integrityError) {
     return <IntegrityErrorScreen />;
@@ -209,6 +222,7 @@ function AppRoutes() {
         <Route path="transactions/:id/edit" element={<TransactionInput />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="onboarding" element={<OnboardingPage />} />
+        <Route path="devices/waiting" element={<DeviceJoinWaiting />} />
         {import.meta.env.DEV && CryptoDemoPage && (
           <Route path="dev/crypto-demo" element={<CryptoDemoPage />} />
         )}
@@ -225,6 +239,7 @@ export default function App() {
         <AppRoutes />
         <InstallPopup />
         <OnboardingCompletePopup />
+        <DeviceJoinedBanner />
       </ToastProvider>
     </BrowserRouter>
   );

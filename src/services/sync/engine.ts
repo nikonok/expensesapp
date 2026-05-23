@@ -5,6 +5,7 @@
 //   enqueuePush(record)  — encrypt + store in outbox + fire flushOutbox()
 //   flushOutbox()        — batch-push up to 50 pending records, handle conflicts
 //   pullSince(cursor)    — fetch + decrypt + write to local DB tables + update cursor
+//   startLiveSync(familyId) — connect SSE, wire events, return disconnect fn
 
 import { db } from "@/db/database";
 import type { PendingUpload, SyncRecordType } from "@/db/models";
@@ -14,6 +15,9 @@ import { getCursor, setCursor, encodeCursor } from "./cursor";
 import { mergePayloads } from "./merge";
 import type { RawRecord, PullResponse, ConflictRecord } from "./types";
 import { useSyncStore } from "@/stores/sync-store";
+import { connectSSE } from "./sse";
+import type { SSEEventType, SSEPayloadMap } from "./sse";
+import { apiFetch } from "@/services/auth/client";
 
 const PUSH_BATCH_SIZE = 50;
 
@@ -379,6 +383,168 @@ async function writeDecryptedRecord(
     default:
       logger.warn("pullSince: unknown recordType " + recordType);
   }
+}
+
+// ── startLiveSync ─────────────────────────────────────────────────────────────
+
+/** Minimum interval between SSE-triggered pulls (ms). */
+const PULL_DEBOUNCE_MS = 500;
+
+/**
+ * Connects SSE, wires event handlers, and returns a disconnect function.
+ * - `record.changed` → debounced pullSince (max 1 pull per 500ms).
+ * - `device.joined`  → updates useDeviceJoinStore so the UI can react.
+ * - `device.activated` → unwraps + persists familyKey via crypto worker, then
+ *                        triggers a full pull so the new device is caught up.
+ * - `you.removed`    → clears local Dexie data + signs out.
+ */
+export function startLiveSync(familyId: string): () => void {
+  let pullTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastPullAt = 0;
+
+  function schedulePull() {
+    if (pullTimer !== null) {
+      clearTimeout(pullTimer);
+    }
+    const now = Date.now();
+    const elapsed = now - lastPullAt;
+    const delay = Math.max(0, PULL_DEBOUNCE_MS - elapsed);
+    pullTimer = setTimeout(async () => {
+      pullTimer = null;
+      lastPullAt = Date.now();
+      try {
+        const cursor = await getCursor(familyId);
+        await pullSince(familyId, cursor);
+      } catch (err) {
+        logger.warn("startLiveSync.pull.failed", err instanceof Error ? err : undefined);
+      }
+    }, delay);
+  }
+
+  const handle = connectSSE({
+    onOpen: () => {
+      logger.info("liveSync.connected", { familyId });
+    },
+    onError: () => {
+      logger.warn("liveSync.sse.error");
+    },
+    onEvent: <T extends SSEEventType>(type: T, payload: SSEPayloadMap[T]) => {
+      switch (type) {
+        case "record.changed": {
+          schedulePull();
+          break;
+        }
+        case "device.joined": {
+          const p = payload as SSEPayloadMap["device.joined"];
+          // Dynamically import the store to avoid circular deps at module load time.
+          import("@/stores/device-join-store")
+            .then(({ useDeviceJoinStore }) => {
+              useDeviceJoinStore.getState().setPendingDeviceJoin({
+                deviceId: p.deviceId,
+                label: p.label,
+                pubKey: p.pubKey ?? null,
+              });
+            })
+            .catch((err) => {
+              logger.warn("liveSync.device.joined.store", err instanceof Error ? err : undefined);
+            });
+          // After 500ms delay, silently wrap + POST envelope to new device.
+          setTimeout(() => {
+            silentlyApproveDevice(p.deviceId, p.pubKey ?? null).catch((err) => {
+              logger.warn("liveSync.silentApprove.failed", err instanceof Error ? err : undefined);
+            });
+          }, 500);
+          break;
+        }
+        case "device.activated": {
+          const p = payload as SSEPayloadMap["device.activated"];
+          (async () => {
+            try {
+              const { cryptoWorker } = await import("@/services/crypto/worker-client");
+              await cryptoWorker.unwrapAndPersistFamilyKey(p.envelope);
+              logger.info("liveSync.familyKey.persisted");
+              // Signal that this device is no longer waiting for its envelope.
+              // DeviceJoinWaiting watches this flag and navigates away when cleared.
+              const { useAuthStore } = await import("@/services/auth/session");
+              useAuthStore.getState().clearAwaitingEnvelope();
+              // Trigger full pull now that we have the key.
+              const cursor = await getCursor(familyId);
+              await pullSince(familyId, cursor);
+            } catch (err) {
+              logger.error(
+                "liveSync.device.activated.failed",
+                err instanceof Error ? err : undefined,
+              );
+            }
+          })();
+          break;
+        }
+        case "you.removed": {
+          (async () => {
+            try {
+              // Clear all local data.
+              await Promise.all([
+                db.transactions.clear(),
+                db.accounts.clear(),
+                db.categories.clear(),
+                db.budgets.clear(),
+                db.pendingUploads.clear(),
+                db.syncCursors.clear(),
+              ]);
+              // Sign out via auth store.
+              const { useAuthStore } = await import("@/services/auth/session");
+              await useAuthStore.getState().signOut();
+            } catch (err) {
+              logger.error("liveSync.you.removed.failed", err instanceof Error ? err : undefined);
+            }
+          })();
+          break;
+        }
+        default:
+          break;
+      }
+    },
+  });
+
+  return () => {
+    if (pullTimer !== null) clearTimeout(pullTimer);
+    handle.disconnect();
+  };
+}
+
+// ── silentlyApproveDevice ─────────────────────────────────────────────────────
+
+/**
+ * Wraps the stored familyKey for a new device's pubKey and POSTs the envelope
+ * to /api/v1/family/devices/{deviceId}/envelope.
+ *
+ * pubKey may be provided directly from the SSE event payload (preferred).
+ * If null, falls back to GET /api/v1/me/devices/{deviceId} to retrieve it.
+ *
+ * NOTE: The pubKey-in-SSE-event field (`pubKey`) is a Phase 5 addition.
+ * If the backend worker omits it, this function falls back to a GET request.
+ */
+export async function silentlyApproveDevice(
+  deviceId: string,
+  pubKeyB64u: string | null,
+): Promise<void> {
+  const { cryptoWorker } = await import("@/services/crypto/worker-client");
+
+  let resolvedPubKey = pubKeyB64u;
+  if (!resolvedPubKey) {
+    // Fallback: fetch pubKey from backend.
+    const resp = await apiFetch<{ pubKey: string }>(`/api/v1/me/devices/${deviceId}`);
+    resolvedPubKey = resp.pubKey;
+  }
+
+  const envelopeB64u = await cryptoWorker.wrapStoredFamilyKeyForDevice(resolvedPubKey);
+
+  await apiFetch(`/api/v1/family/devices/${deviceId}/envelope`, {
+    method: "POST",
+    body: JSON.stringify({ envelope: envelopeB64u }),
+  });
+
+  logger.info("liveSync.envelope.posted", { deviceId });
 }
 
 // ── Re-export cursor read for callers that only need the current cursor ────────

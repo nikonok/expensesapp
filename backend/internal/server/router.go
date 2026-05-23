@@ -14,6 +14,7 @@ import (
 	authpkg "github.com/nikonok/expensesapp/backend/internal/auth"
 	"github.com/nikonok/expensesapp/backend/internal/family"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
+	"github.com/nikonok/expensesapp/backend/internal/live"
 	syncp "github.com/nikonok/expensesapp/backend/internal/sync"
 	"github.com/nikonok/expensesapp/backend/internal/version"
 )
@@ -28,7 +29,7 @@ type HealthConfig struct {
 // NewRouter wires the chi router used by both production and tests.
 // Keep this in sync with the route table in architecture.md §6.2.
 // If logger is nil, slog.Default() is used.
-func NewRouter(db *sql.DB, authH *authpkg.Handler, accountH *account.Handler, familyH *family.Handler, syncH *syncp.Handler, cfg HealthConfig, logger *slog.Logger) http.Handler {
+func NewRouter(db *sql.DB, authH *authpkg.Handler, accountH *account.Handler, familyH *family.Handler, syncH *syncp.Handler, liveH *live.Handler, cfg HealthConfig, logger *slog.Logger) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -68,11 +69,12 @@ func NewRouter(db *sql.DB, authH *authpkg.Handler, accountH *account.Handler, fa
 		r.Post("/v1/family/members/{userId}/remove", familyH.PostRemoveMember)
 		r.Post("/v1/family/devices/{id}/envelope", familyH.PostDeviceEnvelope)
 
-		// Sync endpoints (Phase 4+) — require active family membership.
+		// Sync + live endpoints (Phase 4+) — require active family membership.
 		r.Group(func(r chi.Router) {
 			r.Use(authpkg.RequireFamilyMembership(db))
 			r.Post("/v1/sync/push", syncH.PostPush)
 			r.Get("/v1/sync/pull", syncH.GetPull)
+			r.Get("/v1/sync/live", liveH.GetLive)
 		})
 	})
 

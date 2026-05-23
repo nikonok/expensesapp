@@ -147,6 +147,20 @@ type Req =
       type: "decryptRecordWithStoredKey";
       blob: Uint8Array;
       meta: Omit<RecordMeta, "nonce">;
+    }
+  | {
+      /** Unwraps the 80-byte sealed box from SSE `device.activated`, persists
+       *  the resulting familyKey to IndexedDB under "familyKey". */
+      id: number;
+      type: "unwrapAndPersistFamilyKey";
+      envelopeB64u: string;
+    }
+  | {
+      /** Reads the stored familyKey and wraps it for a new device's pubKey,
+       *  returning the 80-byte sealed box as base64url. */
+      id: number;
+      type: "wrapStoredFamilyKeyForDevice";
+      devicePubKeyB64u: string;
     };
 
 type Res = { id: number; ok: true; result?: unknown } | { id: number; ok: false; error: string };
@@ -293,6 +307,59 @@ self.onmessage = async (e: MessageEvent<Req>) => {
           meta: req.meta,
         });
         post({ id: req.id, ok: true, result });
+        return;
+      }
+      case "unwrapAndPersistFamilyKey": {
+        // Decode base64url envelope.
+        const padded = req.envelopeB64u.replace(/-/g, "+").replace(/_/g, "/");
+        const padLen = (4 - (padded.length % 4)) % 4;
+        const b64 = padded + "=".repeat(padLen);
+        const binary = atob(b64);
+        const envelopeBytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) envelopeBytes[i] = binary.charCodeAt(i);
+
+        // Load device keys from IndexedDB (private key stays in worker).
+        const storedPub = cachedDevicePubKey ?? (await getKey("devicePubKey"));
+        const storedPriv = cachedDevicePrivKey ?? (await getKey("devicePrivKey"));
+        if (!storedPub || !storedPriv) {
+          post({
+            id: req.id,
+            ok: false,
+            error: "NoDeviceKey: device keypair not found in worker storage",
+          });
+          return;
+        }
+
+        const familyKey = await unwrapKeyForDevice(envelopeBytes, storedPub, storedPriv);
+        await putKey("familyKey", familyKey);
+        post({ id: req.id, ok: true });
+        return;
+      }
+      case "wrapStoredFamilyKeyForDevice": {
+        const storedFamilyKey = await getKey("familyKey");
+        if (!storedFamilyKey) {
+          post({
+            id: req.id,
+            ok: false,
+            error: "NoStoredFamilyKey: no familyKey found in worker storage",
+          });
+          return;
+        }
+
+        // Decode target device public key.
+        const padded2 = req.devicePubKeyB64u.replace(/-/g, "+").replace(/_/g, "/");
+        const padLen2 = (4 - (padded2.length % 4)) % 4;
+        const b642 = padded2 + "=".repeat(padLen2);
+        const binary2 = atob(b642);
+        const targetPubKey = new Uint8Array(binary2.length);
+        for (let i = 0; i < binary2.length; i++) targetPubKey[i] = binary2.charCodeAt(i);
+
+        const envelope = await wrapKeyForDevice(storedFamilyKey, targetPubKey);
+
+        // Encode result as base64url (no padding).
+        const envB64 = btoa(String.fromCharCode(...envelope));
+        const envB64u = envB64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+        post({ id: req.id, ok: true, result: envB64u });
         return;
       }
       default: {

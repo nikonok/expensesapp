@@ -16,6 +16,7 @@ import (
 	"github.com/nikonok/expensesapp/backend/internal/config"
 	"github.com/nikonok/expensesapp/backend/internal/db"
 	"github.com/nikonok/expensesapp/backend/internal/family"
+	"github.com/nikonok/expensesapp/backend/internal/live"
 	internallog "github.com/nikonok/expensesapp/backend/internal/log"
 	"github.com/nikonok/expensesapp/backend/internal/server"
 	syncp "github.com/nikonok/expensesapp/backend/internal/sync"
@@ -45,13 +46,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	hub := live.NewHub()
+
 	verifier := authpkg.NewGoogleVerifier(cfg.GoogleOAuthClientID)
 	authH := authpkg.NewHandler(database, verifier)
+	authH.SetHub(hub)
 	accountH := account.NewHandler(database)
 	familyH := family.NewHandler(database)
+	familyH.SetHub(hub)
 	syncH := syncp.NewHandler(database)
+	syncH.SetEventBus(syncp.NewEventBus(hub))
+	liveH := live.NewHandler(hub)
 
-	r := server.NewRouter(database, authH, accountH, familyH, syncH, server.HealthConfig{Version: version.String()}, slog.Default())
+	r := server.NewRouter(database, authH, accountH, familyH, syncH, liveH, server.HealthConfig{Version: version.String()}, slog.Default())
 
 	srv := &http.Server{
 		Addr:    cfg.BindAddr,
