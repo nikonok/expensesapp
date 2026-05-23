@@ -15,6 +15,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -25,6 +26,10 @@ import (
 	"github.com/nikonok/expensesapp/backend/internal/db/gen"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
 )
+
+// ErrInternal is returned by validateReauthGrant when a DB error occurs,
+// so callers can distinguish infrastructure failures from auth failures.
+var ErrInternal = errors.New("internal")
 
 const (
 	// reauthGrantHeader is the request header carrying the grant ID.
@@ -78,7 +83,12 @@ func (h *Handler) PostRecoveryReveal(w http.ResponseWriter, r *http.Request) {
 
 	// 1. Validate the grant: must exist, unused, belong to this session, correct purpose, not expired.
 	if err := validateReauthGrant(ctx, q, grantID, sessionID, now); err != nil {
-		httpx.WriteError(w, r, http.StatusUnauthorized, "invalid-grant", err.Error())
+		if errors.Is(err, ErrInternal) {
+			slog.WarnContext(ctx, "recovery.reveal: grant DB error", "err", err)
+			httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
+			return
+		}
+		httpx.WriteError(w, r, http.StatusUnauthorized, "invalid-grant", "invalid or expired reauthentication grant")
 		return
 	}
 
@@ -197,7 +207,12 @@ func (h *Handler) PostRecoveryRegenerate(w http.ResponseWriter, r *http.Request)
 
 	// 1. Validate the grant.
 	if err := validateReauthGrant(ctx, q, grantID, sessionID, now); err != nil {
-		httpx.WriteError(w, r, http.StatusUnauthorized, "invalid-grant", err.Error())
+		if errors.Is(err, ErrInternal) {
+			slog.WarnContext(ctx, "recovery.regenerate: grant DB error", "err", err)
+			httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
+			return
+		}
+		httpx.WriteError(w, r, http.StatusUnauthorized, "invalid-grant", "invalid or expired reauthentication grant")
 		return
 	}
 
@@ -245,24 +260,27 @@ func (h *Handler) PostRecoveryRegenerate(w http.ResponseWriter, r *http.Request)
 
 // validateReauthGrant checks that the grant exists, is unused, belongs to the
 // given session, has the correct purpose, and has not expired.
-// Returns a human-readable error detail string on failure (not nil on success).
+//
+// Returns ErrInternal (wrapped) for DB errors so callers can respond with 500.
+// All auth-validation failures return a plain sentinel so callers respond with
+// an opaque "invalid or expired reauthentication grant" 401 — no detail leak.
 func validateReauthGrant(ctx context.Context, q *gen.Queries, grantID, sessionID string, now time.Time) error {
 	grant, err := q.GetUnusedReauthGrant(ctx, grantID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return errors.New("grant not found or already used")
+			return errors.New("not found or already used")
 		}
-		return err
+		return fmt.Errorf("%w: get grant: %v", ErrInternal, err)
 	}
 	if grant.SessionID != sessionID {
-		return errors.New("grant belongs to a different session")
+		return errors.New("session mismatch")
 	}
 	if grant.Purpose != reauthGrantPurpose {
-		return errors.New("grant has incorrect purpose")
+		return errors.New("purpose mismatch")
 	}
 	expiresAt, parseErr := httpx.ParseTime(grant.ExpiresAt)
 	if parseErr != nil || now.After(expiresAt) {
-		return errors.New("grant has expired")
+		return errors.New("expired")
 	}
 	return nil
 }
