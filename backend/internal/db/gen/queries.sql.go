@@ -32,6 +32,22 @@ func (q *Queries) AddAllowlistEntry(ctx context.Context, arg AddAllowlistEntryPa
 	return err
 }
 
+const advanceFamilySeq = `-- name: AdvanceFamilySeq :one
+
+UPDATE family_seq SET next_seq = next_seq + 1
+WHERE family_id = ?
+RETURNING next_seq - 1
+`
+
+// ----- family_seq -----
+// Atomically claim the next family_seq and return it. Must run inside a write tx.
+func (q *Queries) AdvanceFamilySeq(ctx context.Context, familyID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, advanceFamilySeq, familyID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const demoteAdmin = `-- name: DemoteAdmin :exec
 UPDATE users SET is_admin = 0 WHERE id = ?
 `
@@ -64,6 +80,23 @@ func (q *Queries) GetActiveFamilyMember(ctx context.Context, userID string) (Fam
 		&i.JoinedAt,
 		&i.LeftAt,
 		&i.LastRemovedAt,
+	)
+	return i, err
+}
+
+const getBlobByID = `-- name: GetBlobByID :one
+SELECT id, family_id, ciphertext, byte_count, created_at FROM blobs WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetBlobByID(ctx context.Context, id string) (Blob, error) {
+	row := q.db.QueryRowContext(ctx, getBlobByID, id)
+	var i Blob
+	err := row.Scan(
+		&i.ID,
+		&i.FamilyID,
+		&i.Ciphertext,
+		&i.ByteCount,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -134,6 +167,32 @@ func (q *Queries) GetFamilyByID(ctx context.Context, id string) (Family, error) 
 	row := q.db.QueryRowContext(ctx, getFamilyByID, id)
 	var i Family
 	err := row.Scan(&i.ID, &i.CreatedAt, &i.UsageBytes)
+	return i, err
+}
+
+const getRecordMeta = `-- name: GetRecordMeta :one
+
+SELECT record_id, family_id, record_type, blob_id, version, added_by_user, edited_by_user, updated_at_map, deleted_at, family_seq, created_at, last_modified_at FROM record_meta WHERE record_id = ? LIMIT 1
+`
+
+// ----- record_meta -----
+func (q *Queries) GetRecordMeta(ctx context.Context, recordID string) (RecordMetum, error) {
+	row := q.db.QueryRowContext(ctx, getRecordMeta, recordID)
+	var i RecordMetum
+	err := row.Scan(
+		&i.RecordID,
+		&i.FamilyID,
+		&i.RecordType,
+		&i.BlobID,
+		&i.Version,
+		&i.AddedByUser,
+		&i.EditedByUser,
+		&i.UpdatedAtMap,
+		&i.DeletedAt,
+		&i.FamilySeq,
+		&i.CreatedAt,
+		&i.LastModifiedAt,
+	)
 	return i, err
 }
 
@@ -237,6 +296,22 @@ func (q *Queries) GetUserByID(ctx context.Context, id string) (User, error) {
 	return i, err
 }
 
+const incrementFamilyUsage = `-- name: IncrementFamilyUsage :exec
+
+UPDATE families SET usage_bytes = usage_bytes + ? WHERE id = ?
+`
+
+type IncrementFamilyUsageParams struct {
+	UsageBytes int64
+	ID         string
+}
+
+// ----- quota -----
+func (q *Queries) IncrementFamilyUsage(ctx context.Context, arg IncrementFamilyUsageParams) error {
+	_, err := q.db.ExecContext(ctx, incrementFamilyUsage, arg.UsageBytes, arg.ID)
+	return err
+}
+
 const insertAuditEntry = `-- name: InsertAuditEntry :exec
 
 INSERT INTO audit_log (id, actor_user_id, actor_email, action, target_kind, target_id, detail_json, created_at)
@@ -264,6 +339,32 @@ func (q *Queries) InsertAuditEntry(ctx context.Context, arg InsertAuditEntryPara
 		arg.TargetKind,
 		arg.TargetID,
 		arg.DetailJson,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const insertBlob = `-- name: InsertBlob :exec
+
+INSERT INTO blobs (id, family_id, ciphertext, byte_count, created_at)
+VALUES (?, ?, ?, ?, ?)
+`
+
+type InsertBlobParams struct {
+	ID         string
+	FamilyID   string
+	Ciphertext []byte
+	ByteCount  int64
+	CreatedAt  string
+}
+
+// ----- blobs -----
+func (q *Queries) InsertBlob(ctx context.Context, arg InsertBlobParams) error {
+	_, err := q.db.ExecContext(ctx, insertBlob,
+		arg.ID,
+		arg.FamilyID,
+		arg.Ciphertext,
+		arg.ByteCount,
 		arg.CreatedAt,
 	)
 	return err
@@ -406,6 +507,46 @@ func (q *Queries) InsertFamilySeq(ctx context.Context, familyID string) error {
 	return err
 }
 
+const insertRecordMeta = `-- name: InsertRecordMeta :exec
+INSERT INTO record_meta (record_id, family_id, record_type, blob_id, version,
+    added_by_user, edited_by_user, updated_at_map, deleted_at,
+    family_seq, created_at, last_modified_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type InsertRecordMetaParams struct {
+	RecordID       string
+	FamilyID       string
+	RecordType     string
+	BlobID         string
+	Version        int64
+	AddedByUser    string
+	EditedByUser   string
+	UpdatedAtMap   string
+	DeletedAt      sql.NullString
+	FamilySeq      int64
+	CreatedAt      string
+	LastModifiedAt string
+}
+
+func (q *Queries) InsertRecordMeta(ctx context.Context, arg InsertRecordMetaParams) error {
+	_, err := q.db.ExecContext(ctx, insertRecordMeta,
+		arg.RecordID,
+		arg.FamilyID,
+		arg.RecordType,
+		arg.BlobID,
+		arg.Version,
+		arg.AddedByUser,
+		arg.EditedByUser,
+		arg.UpdatedAtMap,
+		arg.DeletedAt,
+		arg.FamilySeq,
+		arg.CreatedAt,
+		arg.LastModifiedAt,
+	)
+	return err
+}
+
 const insertSession = `-- name: InsertSession :exec
 
 INSERT INTO sessions (id, device_id, token_hash, created_at, last_used_at, revoked_at)
@@ -463,6 +604,76 @@ func (q *Queries) ListAllowlist(ctx context.Context) ([]Allowlist, error) {
 			&i.AddedBy,
 			&i.AddedAt,
 			&i.Note,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecordsSinceSeq = `-- name: ListRecordsSinceSeq :many
+SELECT
+    rm.record_id,
+    rm.record_type,
+    rm.version,
+    rm.family_seq,
+    rm.updated_at_map,
+    rm.deleted_at,
+    rm.added_by_user,
+    rm.edited_by_user,
+    b.ciphertext
+FROM record_meta rm
+JOIN blobs b ON b.id = rm.blob_id
+WHERE rm.family_id = ? AND rm.family_seq > ?
+ORDER BY rm.family_seq ASC
+LIMIT ?
+`
+
+type ListRecordsSinceSeqParams struct {
+	FamilyID  string
+	FamilySeq int64
+	Limit     int64
+}
+
+type ListRecordsSinceSeqRow struct {
+	RecordID     string
+	RecordType   string
+	Version      int64
+	FamilySeq    int64
+	UpdatedAtMap string
+	DeletedAt    sql.NullString
+	AddedByUser  string
+	EditedByUser string
+	Ciphertext   []byte
+}
+
+// Returns records for a family with family_seq > afterSeq, ordered by family_seq ASC.
+func (q *Queries) ListRecordsSinceSeq(ctx context.Context, arg ListRecordsSinceSeqParams) ([]ListRecordsSinceSeqRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRecordsSinceSeq, arg.FamilyID, arg.FamilySeq, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRecordsSinceSeqRow{}
+	for rows.Next() {
+		var i ListRecordsSinceSeqRow
+		if err := rows.Scan(
+			&i.RecordID,
+			&i.RecordType,
+			&i.Version,
+			&i.FamilySeq,
+			&i.UpdatedAtMap,
+			&i.DeletedAt,
+			&i.AddedByUser,
+			&i.EditedByUser,
+			&i.Ciphertext,
 		); err != nil {
 			return nil, err
 		}
@@ -694,6 +905,39 @@ UPDATE users SET suspended_at = NULL WHERE id = ?
 
 func (q *Queries) UnsuspendUser(ctx context.Context, id string) error {
 	_, err := q.db.ExecContext(ctx, unsuspendUser, id)
+	return err
+}
+
+const updateRecordMeta = `-- name: UpdateRecordMeta :exec
+UPDATE record_meta
+SET blob_id = ?, version = ?, edited_by_user = ?,
+    updated_at_map = ?, deleted_at = ?,
+    family_seq = ?, last_modified_at = ?
+WHERE record_id = ?
+`
+
+type UpdateRecordMetaParams struct {
+	BlobID         string
+	Version        int64
+	EditedByUser   string
+	UpdatedAtMap   string
+	DeletedAt      sql.NullString
+	FamilySeq      int64
+	LastModifiedAt string
+	RecordID       string
+}
+
+func (q *Queries) UpdateRecordMeta(ctx context.Context, arg UpdateRecordMetaParams) error {
+	_, err := q.db.ExecContext(ctx, updateRecordMeta,
+		arg.BlobID,
+		arg.Version,
+		arg.EditedByUser,
+		arg.UpdatedAtMap,
+		arg.DeletedAt,
+		arg.FamilySeq,
+		arg.LastModifiedAt,
+		arg.RecordID,
+	)
 	return err
 }
 
