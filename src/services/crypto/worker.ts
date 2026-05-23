@@ -135,6 +135,18 @@ type Req =
       envelope: Uint8Array;
       familyKey: Uint8Array;
       familyId: string;
+    }
+  | {
+      id: number;
+      type: "encryptRecordWithStoredKey";
+      plaintext: Uint8Array;
+      meta: RecordMeta;
+    }
+  | {
+      id: number;
+      type: "decryptRecordWithStoredKey";
+      blob: Uint8Array;
+      meta: Omit<RecordMeta, "nonce">;
     };
 
 type Res = { id: number; ok: true; result?: unknown } | { id: number; ok: false; error: string };
@@ -247,6 +259,39 @@ self.onmessage = async (e: MessageEvent<Req>) => {
       }
       case "unwrapPhraseForReveal": {
         const result = await unwrapPhraseForReveal(req.envelope, req.familyKey, req.familyId);
+        post({ id: req.id, ok: true, result });
+        return;
+      }
+      case "encryptRecordWithStoredKey": {
+        // Retrieve familyKey from IndexedDB — stays in worker scope.
+        const storedKey = await getKey("familyKey");
+        if (!storedKey) {
+          post({
+            id: req.id,
+            ok: false,
+            error: "NoStoredFamilyKey: no familyKey found in worker storage",
+          });
+          return;
+        }
+        const result = await encryptRecord(req.plaintext, storedKey, req.meta);
+        post({ id: req.id, ok: true, result });
+        return;
+      }
+      case "decryptRecordWithStoredKey": {
+        const storedKey = await getKey("familyKey");
+        if (!storedKey) {
+          post({
+            id: req.id,
+            ok: false,
+            error: "NoStoredFamilyKey: no familyKey found in worker storage",
+          });
+          return;
+        }
+        const result = await decryptRecord({
+          blob: req.blob,
+          familyKey: storedKey,
+          meta: req.meta,
+        });
         post({ id: req.id, ok: true, result });
         return;
       }

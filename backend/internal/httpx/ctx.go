@@ -9,6 +9,7 @@ const (
 	keyUserID
 	keyDeviceID
 	keySessionID
+	keyFamilyID
 )
 
 // WithRequestID returns a child context carrying the given request ID.
@@ -52,5 +53,16 @@ func WithSessionID(ctx context.Context, id string) context.Context {
 // SessionID retrieves the session ID from ctx, or "" if not present.
 func SessionID(ctx context.Context) string {
 	v, _ := ctx.Value(keySessionID).(string)
+	return v
+}
+
+// WithFamilyID returns a child context carrying the given family ID.
+func WithFamilyID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, keyFamilyID, id)
+}
+
+// FamilyID retrieves the family ID from ctx, or "" if not present.
+func FamilyID(ctx context.Context) string {
+	v, _ := ctx.Value(keyFamilyID).(string)
 	return v
 }

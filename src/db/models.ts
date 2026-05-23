@@ -162,3 +162,41 @@ export interface CipherKey {
   value: Uint8Array; // raw key bytes
   createdAt: string; // ISO-8601 UTC
 }
+
+// ── Sync outbox (Phase 4e — pending record uploads) ──────────────────────────
+
+export type SyncRecordType = "transaction" | "account" | "category" | "budget" | "settings";
+
+/** A record queued in the local outbox, waiting to be pushed to the backend. */
+export interface PendingUpload {
+  /** Auto-incremented primary key. */
+  id?: number;
+  /** UUIDv7 — stable across retry attempts for the same logical write. */
+  recordId: string;
+  recordType: SyncRecordType;
+  /** base64url-encoded encrypted blob. */
+  blob: string;
+  updatedAtMap: Record<string, string>;
+  deletedAt?: string;
+  /** 0 for new records; last-seen server version for updates. */
+  parentVersion: number;
+  plaintextByteCount: number;
+  /** Number of failed push attempts (non-conflict 4xx errors). */
+  attempts: number;
+  /** ISO-8601 UTC of last failure; null if never failed. */
+  lastFailedAt: string | null;
+  /** familyId for key-lookup during re-encryption on conflict merge. */
+  familyId: string;
+}
+
+// ── Sync cursors (Phase 4e — per-family pull position) ───────────────────────
+
+/** Stores the opaque pull cursor returned by the backend per family. */
+export interface SyncCursor {
+  /** Primary key = familyId (unique index &familyId). */
+  familyId: string;
+  /** Opaque base64url cursor from the last successful pull response. */
+  cursor: string | undefined;
+  /** ISO-8601 UTC of when this cursor was last updated. */
+  updatedAt: string;
+}

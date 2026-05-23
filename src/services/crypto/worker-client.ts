@@ -109,4 +109,20 @@ export const cryptoWorker = {
 
   unwrapPhraseForReveal: (envelope: Uint8Array, familyKey: Uint8Array, familyId: string) =>
     call<string>({ type: "unwrapPhraseForReveal", envelope, familyKey, familyId }),
+
+  /**
+   * Encrypt a record using the familyKey stored in the worker's IndexedDB.
+   * Throws a typed error (message starts with "NoStoredFamilyKey:") if no
+   * familyKey has been persisted yet (e.g., family not yet initialised).
+   */
+  encryptRecordWithStoredKey: (plaintext: Uint8Array, meta: RecordMeta) =>
+    call<EncryptedRecord>({ type: "encryptRecordWithStoredKey", plaintext, meta }),
+
+  /**
+   * Decrypt a record using the familyKey stored in the worker's IndexedDB.
+   * Throws a typed error (message starts with "NoStoredFamilyKey:") if no
+   * familyKey has been persisted yet.
+   */
+  decryptRecordWithStoredKey: (blob: Uint8Array, meta: Omit<RecordMeta, "nonce">) =>
+    call<Uint8Array>({ type: "decryptRecordWithStoredKey", blob, meta }),
 };

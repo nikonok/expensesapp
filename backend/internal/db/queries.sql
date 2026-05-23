@@ -162,3 +162,61 @@ SELECT * FROM family_members WHERE user_id = ? AND left_at IS NULL LIMIT 1;
 
 -- name: GetFamilyByID :one
 SELECT * FROM families WHERE id = ? LIMIT 1;
+
+-- ----- blobs -----
+
+-- name: InsertBlob :exec
+INSERT INTO blobs (id, family_id, ciphertext, byte_count, created_at)
+VALUES (?, ?, ?, ?, ?);
+
+-- name: GetBlobByID :one
+SELECT * FROM blobs WHERE id = ? LIMIT 1;
+
+-- ----- record_meta -----
+
+-- name: GetRecordMeta :one
+SELECT * FROM record_meta WHERE record_id = ? LIMIT 1;
+
+-- name: InsertRecordMeta :exec
+INSERT INTO record_meta (record_id, family_id, record_type, blob_id, version,
+    added_by_user, edited_by_user, updated_at_map, deleted_at,
+    family_seq, created_at, last_modified_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: UpdateRecordMeta :exec
+UPDATE record_meta
+SET blob_id = ?, version = ?, edited_by_user = ?,
+    updated_at_map = ?, deleted_at = ?,
+    family_seq = ?, last_modified_at = ?
+WHERE record_id = ?;
+
+-- name: ListRecordsSinceSeq :many
+-- Returns records for a family with family_seq > afterSeq, ordered by family_seq ASC.
+SELECT
+    rm.record_id,
+    rm.record_type,
+    rm.version,
+    rm.family_seq,
+    rm.updated_at_map,
+    rm.deleted_at,
+    rm.added_by_user,
+    rm.edited_by_user,
+    b.ciphertext
+FROM record_meta rm
+JOIN blobs b ON b.id = rm.blob_id
+WHERE rm.family_id = ? AND rm.family_seq > ?
+ORDER BY rm.family_seq ASC
+LIMIT ?;
+
+-- ----- family_seq -----
+
+-- name: AdvanceFamilySeq :one
+-- Atomically claim the next family_seq and return it. Must run inside a write tx.
+UPDATE family_seq SET next_seq = next_seq + 1
+WHERE family_id = ?
+RETURNING next_seq - 1;
+
+-- ----- quota -----
+
+-- name: IncrementFamilyUsage :exec
+UPDATE families SET usage_bytes = usage_bytes + ? WHERE id = ?;
