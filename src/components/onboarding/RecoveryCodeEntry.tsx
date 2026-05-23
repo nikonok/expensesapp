@@ -76,7 +76,10 @@ export function RecoveryCodeEntry({ onSubmit, disabled = false }: RecoveryCodeEn
     onSubmit(trimmed.join(" "));
   }
 
-  const allFilled = words.every((w) => w.trim().length > 0);
+  const allValid = words.every((w) => {
+    const trimmed = w.trim();
+    return trimmed.length > 0 && isValidWord(trimmed.toLowerCase());
+  });
 
   return (
     <form onSubmit={handleSubmit} style={{ width: "100%" }}>
@@ -174,21 +177,21 @@ export function RecoveryCodeEntry({ onSubmit, disabled = false }: RecoveryCodeEn
 
       <button
         type="submit"
-        disabled={disabled || !allFilled}
+        disabled={disabled || !allValid}
         style={{
           minHeight: "52px",
           width: "100%",
           background:
-            allFilled && !disabled ? "var(--color-primary)" : "var(--color-surface-raised)",
-          color: allFilled && !disabled ? "var(--color-bg)" : "var(--color-text-disabled)",
+            allValid && !disabled ? "var(--color-primary)" : "var(--color-surface-raised)",
+          color: allValid && !disabled ? "var(--color-bg)" : "var(--color-text-disabled)",
           border: "none",
           borderRadius: "var(--radius-btn)",
           fontFamily: '"Syne", sans-serif',
           fontWeight: 700,
           fontSize: "1rem",
           letterSpacing: "0.05em",
-          cursor: allFilled && !disabled ? "pointer" : "not-allowed",
-          boxShadow: allFilled && !disabled ? "0 4px 16px oklch(72% 0.22 210 / 30%)" : "none",
+          cursor: allValid && !disabled ? "pointer" : "not-allowed",
+          boxShadow: allValid && !disabled ? "0 4px 16px oklch(72% 0.22 210 / 30%)" : "none",
           transition: "background 150ms ease-out, color 150ms ease-out, box-shadow 150ms ease-out",
         }}
       >

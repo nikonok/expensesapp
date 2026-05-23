@@ -43,7 +43,7 @@ describe("RecoveryCodeEntry", () => {
     expect(onSubmit).toHaveBeenCalledWith(VALID_PHRASE);
   });
 
-  it("shows an error when an invalid BIP39 word is submitted", () => {
+  it("submit button is disabled when a word is not a valid BIP39 word", () => {
     const onSubmit = vi.fn();
     render(<RecoveryCodeEntry onSubmit={onSubmit} />);
     const inputs = screen.getAllByRole("textbox");
@@ -56,12 +56,10 @@ describe("RecoveryCodeEntry", () => {
     // Override word 1 with an invalid value.
     fireEvent.change(inputs[0], { target: { value: "notaword" } });
 
-    const btn = screen.getByRole("button");
-    fireEvent.click(btn);
-
+    const btn = screen.getByRole("button") as HTMLButtonElement;
+    // Button must be disabled — Fix 6: prevent submission of invalid words.
+    expect(btn.disabled).toBe(true);
     expect(onSubmit).not.toHaveBeenCalled();
-    const alert = screen.getByRole("alert");
-    expect(alert.textContent?.toLowerCase()).toContain("word 1");
   });
 
   it("shows an error when not all 24 words are filled", () => {
