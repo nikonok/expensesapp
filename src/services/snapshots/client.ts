@@ -37,7 +37,7 @@ export async function listSnapshots(): Promise<SnapshotEntry[]> {
 /**
  * POST /api/v1/snapshots/{date}/restore?confirm=true|false
  * Restores the family state to the given date snapshot.
- * Pass confirm=true to execute; confirm=false (default) is a dry-run.
+ * Pass confirm=true to execute. Omitting or passing false returns 400 confirm-required.
  */
 export async function restoreSnapshot(
   date: string,
