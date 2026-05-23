@@ -259,6 +259,13 @@ func (h *Handler) PostGoogle(w http.ResponseWriter, r *http.Request) {
 	isRoot := returnedUser.IsRoot != 0 || shouldBeRoot
 	isAdmin := returnedUser.IsAdmin != 0 || shouldBeRoot
 
+	// Determine whether the user still needs to initialise a family.
+	// A user needs family init when they have no active family_members row.
+	needsFamilyInit := true
+	if member, lookupErr := q.GetActiveFamilyMember(ctx, returnedUser.ID); lookupErr == nil && member.FamilyID != "" {
+		needsFamilyInit = false
+	}
+
 	httpx.WriteJSON(w, http.StatusOK, signInResponse{
 		User: signInUserResponse{
 			ID:          returnedUser.ID,
@@ -268,7 +275,7 @@ func (h *Handler) PostGoogle(w http.ResponseWriter, r *http.Request) {
 			IsRoot:      isRoot,
 		},
 		Device:          signInDeviceResponse{ID: deviceID, Label: req.DeviceLabel},
-		NeedsFamilyInit: true, // Phase 3+ — always true in Phase 1
+		NeedsFamilyInit: needsFamilyInit,
 	})
 }
 

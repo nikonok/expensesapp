@@ -154,3 +154,11 @@ export interface Log {
   message: string;
   context?: Record<string, unknown> | null;
 }
+
+// ── Cipher Keys (Phase 3 — device key material, architecture §9.2) ──
+
+export interface CipherKey {
+  name: string; // primary key, e.g. "familyKey", "devicePrivKey", "devicePubKey"
+  value: Uint8Array; // raw key bytes
+  createdAt: string; // ISO-8601 UTC
+}

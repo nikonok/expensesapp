@@ -20,9 +20,14 @@ interface AuthState {
   isSignedIn: boolean;
   isSigningIn: boolean;
   error: string | null;
+  needsFamilyInit: boolean;
+  /** Ephemeral device public key stashed after sign-in; consumed by onboarding init step.
+   *  The private key is persisted inside the crypto worker and never exposed here. */
+  pendingDevicePubKey: Uint8Array | null;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshMe: () => Promise<void>;
+  clearPendingKeypair: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -31,6 +36,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   isSignedIn: false,
   isSigningIn: false,
   error: null,
+  needsFamilyInit: false,
+  pendingDevicePubKey: null,
 
   signIn: async () => {
     set({ isSigningIn: true, error: null });
@@ -38,14 +45,39 @@ export const useAuthStore = create<AuthState>((set) => ({
       const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
       if (!clientId) throw new Error("VITE_GOOGLE_OAUTH_CLIENT_ID not set");
       const { idToken } = await signInWithGoogle({ clientId });
+
+      // Dynamic import keeps the Web Worker bundle out of the initial chunk.
+      // The worker is only materialised on sign-in, matching the existing pattern
+      // used by CryptoDemoPage (which also dynamic-imports worker-client).
+      const { cryptoWorker } = await import("../crypto/worker-client");
+
+      // Generate device keypair — X25519 ephemeral keys for this device.
+      // Private key is persisted inside the worker; only the public key is returned.
+      const devicePubKey = await cryptoWorker.generateAndPersistDeviceKey();
+      const devicePubKeyB64 = btoa(String.fromCharCode(...devicePubKey))
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=/g, "");
+
       const deviceLabel = inferDeviceLabel();
       const userAgent = navigator.userAgent;
-      // Phase 1 placeholder: real X25519 pubkey lands in Phase 2.
-      const resp = await apiFetch<{ user: AuthUser; device: AuthDevice }>("/api/v1/auth/google", {
+      const resp = await apiFetch<{
+        user: AuthUser;
+        device: AuthDevice;
+        needsFamilyInit?: boolean;
+      }>("/api/v1/auth/google", {
         method: "POST",
-        body: JSON.stringify({ idToken, devicePubKey: null, deviceLabel, userAgent }),
+        body: JSON.stringify({ idToken, devicePubKey: devicePubKeyB64, deviceLabel, userAgent }),
       });
-      set({ user: resp.user, device: resp.device, isSignedIn: true, isSigningIn: false });
+
+      set({
+        user: resp.user,
+        device: resp.device,
+        isSignedIn: true,
+        isSigningIn: false,
+        needsFamilyInit: resp.needsFamilyInit ?? false,
+        pendingDevicePubKey: devicePubKey,
+      });
     } catch (e: unknown) {
       set({ isSigningIn: false, error: e instanceof Error ? e.message : "sign-in failed" });
     }
@@ -55,7 +87,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       await apiFetch("/api/v1/auth/signout", { method: "POST" });
     } catch {}
-    set({ user: null, device: null, isSignedIn: false, error: null });
+    set({
+      user: null,
+      device: null,
+      isSignedIn: false,
+      error: null,
+      needsFamilyInit: false,
+      pendingDevicePubKey: null,
+    });
   },
 
   refreshMe: async () => {
@@ -65,6 +104,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch {
       set({ user: null, device: null, isSignedIn: false });
     }
+  },
+
+  clearPendingKeypair: () => {
+    set({ pendingDevicePubKey: null });
   },
 }));
 

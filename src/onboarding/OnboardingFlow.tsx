@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { ChevronLeft } from "lucide-react";
@@ -14,10 +14,12 @@ import { evaluateExpression } from "../services/math-parser";
 import { getCanInstall } from "../sw-register";
 import { useUIStore } from "../stores/ui-store";
 import { SignInStep } from "./SignInStep";
+import { RecoveryCodeSetup } from "../components/onboarding/RecoveryCodeSetup";
+import { useAuthStore } from "../services/auth/session";
+import { initFamilyAndShowPhrase } from "../services/family/init";
 
-// Step order: 0=Sign-in, 1=Welcome, 2=Currency, 3=First-account, 4=Categories
-// position 2: reserved for Phase 3 recovery code step (will shift remaining steps)
-const TOTAL_STEPS = 5;
+// Step order: 0=Sign-in, 1=RecoveryCode(conditional), 2=Welcome, 3=Currency, 4=First-account, 5=Categories
+const TOTAL_STEPS = 6;
 
 function detectLocaleCurrency(): string {
   try {
@@ -123,7 +125,7 @@ const skipLinkStyle: React.CSSProperties = {
   justifyContent: "center",
 };
 
-// ── Step 1: Welcome ────────────────────────────────────────────────────────────
+// ── Step 2: Welcome ────────────────────────────────────────────────────────────
 
 function StepWelcome({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
   const { t } = useTranslation();
@@ -198,7 +200,7 @@ function StepWelcome({ onNext, onSkip }: { onNext: () => void; onSkip: () => voi
   );
 }
 
-// ── Step 2: Currency ───────────────────────────────────────────────────────────
+// ── Step 3: Currency ───────────────────────────────────────────────────────────
 
 function StepCurrency({
   currency,
@@ -259,7 +261,7 @@ function StepCurrency({
   );
 }
 
-// ── Step 3: First Account ──────────────────────────────────────────────────────
+// ── Step 4: First Account ──────────────────────────────────────────────────────
 
 function StepAccount({
   accountName,
@@ -361,7 +363,7 @@ function StepAccount({
   );
 }
 
-// ── Step 4: Category Presets ───────────────────────────────────────────────────
+// ── Step 5: Category Presets ───────────────────────────────────────────────────
 
 function StepCategories({
   selected,
@@ -479,6 +481,112 @@ function StepCategories({
   );
 }
 
+// ── Step 1: Recovery Code ──────────────────────────────────────────────────────
+
+function StepRecoveryCode({ onNext }: { onNext: () => void }) {
+  const { t } = useTranslation();
+  const [phrase, setPhrase] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const authStore = useAuthStore();
+
+  // Kick off family init on mount
+  useEffect(() => {
+    const run = async () => {
+      const pubKey = useAuthStore.getState().pendingDevicePubKey;
+      if (!pubKey) {
+        setError(t("errors.generic"));
+        setLoading(false);
+        return;
+      }
+      try {
+        const result = await initFamilyAndShowPhrase({
+          devicePubKey: pubKey,
+        });
+        authStore.clearPendingKeypair();
+        setPhrase(result.phrase);
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : t("errors.generic"));
+      } finally {
+        setLoading(false);
+      }
+    };
+    void run();
+  }, []);
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          flexDirection: "column",
+          gap: "var(--space-4)",
+          padding: "0 var(--space-6)",
+        }}
+      >
+        <span
+          style={{
+            display: "inline-block",
+            width: "32px",
+            height: "32px",
+            border: "3px solid var(--color-border-strong)",
+            borderTopColor: "var(--color-primary)",
+            borderRadius: "50%",
+            animation: "spin 600ms linear infinite",
+          }}
+        />
+        <p
+          style={{
+            fontFamily: '"DM Sans", sans-serif',
+            fontSize: "var(--text-body)",
+            color: "var(--color-text-secondary)",
+            margin: 0,
+            textAlign: "center",
+          }}
+        >
+          {t("onboarding.recovery.generating")}
+        </p>
+      </div>
+    );
+  }
+
+  if (error || !phrase) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          flexDirection: "column",
+          gap: "var(--space-4)",
+          padding: "0 var(--space-6)",
+          textAlign: "center",
+        }}
+      >
+        <p
+          style={{
+            fontFamily: '"DM Sans", sans-serif',
+            fontSize: "var(--text-body)",
+            color: "var(--color-expense)",
+            margin: 0,
+          }}
+        >
+          {error ?? t("errors.generic")}
+        </p>
+        <button style={skipLinkStyle} onClick={onNext}>
+          {t("common.skip")}
+        </button>
+      </div>
+    );
+  }
+
+  return <RecoveryCodeSetup phrase={phrase} onContinue={onNext} />;
+}
+
 // ── Slide container ────────────────────────────────────────────────────────────
 
 function SlideContainer({
@@ -528,7 +636,7 @@ export default function OnboardingFlow() {
   const handleNumpadSave = (result: number) => {
     setStartingBalance(result);
     setNumpadValue(String(result / 100));
-    goToStep(4);
+    goToStep(5);
   };
 
   const goToStep = (n: number) => {
@@ -612,6 +720,16 @@ export default function OnboardingFlow() {
     }
   };
 
+  // After sign-in completes (step 0), determine next step based on needsFamilyInit
+  const handleSignInNext = () => {
+    const { isSignedIn, needsFamilyInit } = useAuthStore.getState();
+    if (isSignedIn && needsFamilyInit) {
+      goToStep(1); // Recovery code step
+    } else {
+      goToStep(2); // Skip to Welcome
+    }
+  };
+
   return (
     <>
       <style>{`
@@ -623,6 +741,7 @@ export default function OnboardingFlow() {
           from { opacity: 0; transform: translateX(-32px); }
           to   { opacity: 1; transform: translateX(0); }
         }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
       <div
         style={{
@@ -649,17 +768,18 @@ export default function OnboardingFlow() {
           }}
         >
           <SlideContainer step={step} direction={direction}>
-            {step === 0 && <SignInStep onNext={() => goToStep(1)} onSkip={() => goToStep(1)} />}
-            {step === 1 && <StepWelcome onNext={() => goToStep(2)} onSkip={skipToComplete} />}
-            {step === 2 && (
+            {step === 0 && <SignInStep onNext={handleSignInNext} onSkip={() => goToStep(2)} />}
+            {step === 1 && <StepRecoveryCode onNext={() => goToStep(2)} />}
+            {step === 2 && <StepWelcome onNext={() => goToStep(3)} onSkip={skipToComplete} />}
+            {step === 3 && (
               <StepCurrency
                 currency={currency}
                 onChange={setCurrency}
-                onNext={() => goToStep(3)}
+                onNext={() => goToStep(4)}
                 onSkip={skipToComplete}
               />
             )}
-            {step === 3 && (
+            {step === 4 && (
               <StepAccount
                 accountName={accountName}
                 onAccountNameChange={setAccountName}
@@ -676,12 +796,12 @@ export default function OnboardingFlow() {
                     setStartingBalance(0);
                     setNumpadValue("");
                   }
-                  goToStep(4);
+                  goToStep(5);
                 }}
                 onSkip={skipToComplete}
               />
             )}
-            {step === 4 && (
+            {step === 5 && (
               <StepCategories
                 selected={categorySelected}
                 onToggle={handleToggleCategory}
@@ -693,6 +813,32 @@ export default function OnboardingFlow() {
             )}
           </SlideContainer>
         </div>
+        {error && (
+          <p
+            style={{
+              fontFamily: '"DM Sans", sans-serif',
+              fontSize: "var(--text-caption)",
+              color: "var(--color-expense)",
+              margin: "0 var(--space-4) var(--space-4)",
+              textAlign: "center",
+            }}
+          >
+            {error}
+          </p>
+        )}
+        {isSaving && (
+          <p
+            style={{
+              fontFamily: '"DM Sans", sans-serif',
+              fontSize: "var(--text-caption)",
+              color: "var(--color-text-secondary)",
+              margin: "0 var(--space-4) var(--space-4)",
+              textAlign: "center",
+            }}
+          >
+            {t("common.save")}…
+          </p>
+        )}
       </div>
     </>
   );

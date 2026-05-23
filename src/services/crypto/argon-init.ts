@@ -20,7 +20,10 @@ let hashFn: HashFn | null = null;
 async function argonReady(): Promise<HashFn> {
   if (hashFn) return hashFn;
   // Dynamic import triggers WASM load only on recovery paths.
-  const mod = await import("argon2-browser");
+  // @vite-ignore: keep this import dynamic at runtime; don't try to bundle argon2-browser
+  // into the worker chunk at build time — it contains a Node-only require('../dist/argon2.wasm')
+  // that rolldown cannot resolve as a static asset.
+  const mod = await import(/* @vite-ignore */ "argon2-browser");
   // argon2-browser ships as a CJS module; the hash function may be on the
   // default export or as a named export depending on the bundler.
   hashFn = (mod.hash ?? (mod as unknown as { default: { hash: HashFn } }).default?.hash) as HashFn;

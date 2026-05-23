@@ -135,3 +135,30 @@ ON CONFLICT(id) DO UPDATE SET bootstrap_email = excluded.bootstrap_email, applie
 -- name: InsertAuditEntry :exec
 INSERT INTO audit_log (id, actor_user_id, actor_email, action, target_kind, target_id, detail_json, created_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+-- ----- families -----
+
+-- name: InsertFamily :exec
+INSERT INTO families (id, created_at, usage_bytes) VALUES (?, ?, 0);
+
+-- name: InsertFamilyMember :exec
+INSERT INTO family_members (family_id, user_id, joined_at, left_at, last_removed_at)
+VALUES (?, ?, ?, NULL, NULL);
+
+-- name: InsertDeviceEnvelope :exec
+INSERT INTO device_envelopes (device_id, family_id, wrapped_key, version, created_at)
+VALUES (?, ?, ?, ?, ?);
+
+-- name: InsertFamilyRecoveryEnvelope :exec
+INSERT INTO family_recovery_envelopes (family_id, recovery_wrap, phrase_ct, version, salt, created_at)
+VALUES (?, ?, ?, ?, ?, ?);
+
+-- name: InsertFamilySeq :exec
+INSERT INTO family_seq (family_id, next_seq) VALUES (?, 1);
+
+-- name: GetActiveFamilyMember :one
+-- Returns the active family_members row for a user (left_at IS NULL).
+SELECT * FROM family_members WHERE user_id = ? AND left_at IS NULL LIMIT 1;
+
+-- name: GetFamilyByID :one
+SELECT * FROM families WHERE id = ? LIMIT 1;

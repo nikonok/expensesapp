@@ -298,6 +298,12 @@
       "title": "You're all set",
       "body": "Your data has been saved. You can start tracking expenses now.",
       "cancel": "Cancel & start over"
+    },
+    "recovery": {
+      "title": "Save your recovery code",
+      "subtitle": "These 24 words are the only way to recover your data if you lose access. Write them down and keep them safe.",
+      "confirmLabel": "I've saved my recovery code in a safe place",
+      "generating": "Setting up encryption…"
     }
   },
   "errors": {
