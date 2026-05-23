@@ -212,24 +212,27 @@ function MigrationDialog({
         </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-          <button
-            onClick={handleMoveData}
-            disabled={loading}
-            style={{
-              minHeight: "44px",
-              background: "var(--color-primary)",
-              color: "var(--color-bg)",
-              border: "none",
-              borderRadius: "var(--radius-btn)",
-              fontFamily: '"DM Sans", sans-serif',
-              fontWeight: 500,
-              fontSize: "var(--text-body)",
-              cursor: loading ? "not-allowed" : "pointer",
-              opacity: loading ? 0.6 : 1,
-            }}
-          >
-            {loading ? "Moving…" : "Move my data"}
-          </button>
+          <ComingSoonStub>
+            <button
+              onClick={handleMoveData}
+              disabled={loading}
+              style={{
+                minHeight: "44px",
+                width: "100%",
+                background: "var(--color-primary)",
+                color: "var(--color-bg)",
+                border: "none",
+                borderRadius: "var(--radius-btn)",
+                fontFamily: '"DM Sans", sans-serif',
+                fontWeight: 500,
+                fontSize: "var(--text-body)",
+                cursor: loading ? "not-allowed" : "pointer",
+                opacity: loading ? 0.6 : 1,
+              }}
+            >
+              {loading ? "Moving…" : "Move my data"}
+            </button>
+          </ComingSoonStub>
 
           <button
             onClick={onClose}
