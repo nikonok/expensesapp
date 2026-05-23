@@ -125,4 +125,22 @@ export const cryptoWorker = {
    */
   decryptRecordWithStoredKey: (blob: Uint8Array, meta: Omit<RecordMeta, "nonce">) =>
     call<Uint8Array>({ type: "decryptRecordWithStoredKey", blob, meta }),
+
+  /**
+   * Unwraps the 80-byte sealed-box envelope from a `device.activated` SSE event
+   * using the stored device keypair, then persists the resulting familyKey to
+   * worker IndexedDB. The raw familyKey never crosses the postMessage boundary.
+   * Throws "NoDeviceKey:" if no device keypair is stored.
+   */
+  unwrapAndPersistFamilyKey: (envelopeB64u: string) =>
+    call<void>({ type: "unwrapAndPersistFamilyKey", envelopeB64u }),
+
+  /**
+   * Reads the stored familyKey from worker IndexedDB and wraps it for a new
+   * device's public key (base64url). Returns the 80-byte sealed-box envelope
+   * as base64url. The raw familyKey never crosses the postMessage boundary.
+   * Throws "NoStoredFamilyKey:" if no familyKey is stored.
+   */
+  wrapStoredFamilyKeyForDevice: (devicePubKeyB64u: string) =>
+    call<string>({ type: "wrapStoredFamilyKeyForDevice", devicePubKeyB64u }),
 };
