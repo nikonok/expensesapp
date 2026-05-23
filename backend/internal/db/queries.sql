@@ -265,3 +265,61 @@ WHERE family_id = ? LIMIT 1;
 UPDATE family_recovery_envelopes
 SET recovery_wrap = ?, phrase_ct = ?, version = ?, salt = ?
 WHERE family_id = ?;
+
+-- ----- family_invites -----
+
+-- name: InsertFamilyInvite :exec
+INSERT INTO family_invites (id, family_id, invited_by, invitee_email, created_at, expires_at, status, decided_at)
+VALUES (?, ?, ?, ?, ?, ?, 'pending', NULL);
+
+-- name: GetFamilyInvite :one
+SELECT * FROM family_invites WHERE id = ? LIMIT 1;
+
+-- name: ListIncomingInvites :many
+-- Returns pending, non-expired invites for the given invitee email.
+SELECT * FROM family_invites
+WHERE invitee_email = ? COLLATE NOCASE
+  AND status = 'pending'
+  AND expires_at > ?
+ORDER BY created_at DESC;
+
+-- name: GetPendingInviteForEmail :one
+-- Returns an existing pending invite for this family + email combo (for duplicate check).
+SELECT * FROM family_invites
+WHERE family_id = ? AND invitee_email = ? COLLATE NOCASE AND status = 'pending'
+LIMIT 1;
+
+-- name: UpdateInviteStatus :exec
+UPDATE family_invites SET status = ?, decided_at = ? WHERE id = ?;
+
+-- ----- family member queries -----
+
+-- name: CountActiveFamilyMembers :one
+-- Returns the count of active (left_at IS NULL) members for a family.
+SELECT COUNT(*) FROM family_members WHERE family_id = ? AND left_at IS NULL;
+
+-- name: GetFamilyMemberByUserID :one
+-- Returns any family_members row (including left) for given family + user.
+SELECT * FROM family_members WHERE family_id = ? AND user_id = ? LIMIT 1;
+
+-- name: JoinFamily :exec
+-- Insert a new active family_members row. Used in invite-accept path.
+INSERT INTO family_members (family_id, user_id, joined_at, left_at, last_removed_at)
+VALUES (?, ?, ?, NULL, NULL);
+
+-- name: MarkFamilyMemberLeft :exec
+-- Soft-leave: set left_at for the given family + user.
+UPDATE family_members SET left_at = ? WHERE family_id = ? AND user_id = ? AND left_at IS NULL;
+
+-- name: SetMemberLastRemoved :exec
+-- Record the removal timestamp for cool-down tracking.
+UPDATE family_members SET left_at = ?, last_removed_at = ? WHERE family_id = ? AND user_id = ?;
+
+-- ----- migrations (solo-to-family idempotency) -----
+
+-- name: InsertMigrationRecord :exec
+INSERT INTO migrations (id, user_id, source_family_id, target_family_id, record_count, committed_at)
+VALUES (?, ?, ?, ?, ?, ?);
+
+-- name: GetMigrationRecord :one
+SELECT * FROM migrations WHERE id = ? LIMIT 1;

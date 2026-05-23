@@ -201,3 +201,12 @@ type User struct {
 	CreatedAt    string
 	LastSigninAt sql.NullString
 }
+
+type Migration struct {
+	ID             string
+	UserID         string
+	SourceFamilyID sql.NullString
+	TargetFamilyID string
+	RecordCount    int64
+	CommittedAt    string
+}
