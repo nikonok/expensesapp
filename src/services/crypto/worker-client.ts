@@ -143,4 +143,39 @@ export const cryptoWorker = {
    */
   wrapStoredFamilyKeyForDevice: (devicePubKeyB64u: string) =>
     call<string>({ type: "wrapStoredFamilyKeyForDevice", devicePubKeyB64u }),
+
+  /**
+   * Reads the stored familyKey and decrypts the Envelope B (phrase ciphertext)
+   * produced by wrapPhraseForReveal. Returns the plaintext 24-word phrase.
+   * Used by Settings → Security → "Show recovery code".
+   * Throws "NoStoredFamilyKey:" if no familyKey is stored.
+   */
+  unwrapStoredPhraseForReveal: (phraseCt: Uint8Array, familyId: string) =>
+    call<string>({ type: "unwrapStoredPhraseForReveal", phraseCt, familyId }),
+
+  /**
+   * Derives a 32-byte kRecovery from the BIP39 phrase and familyId via Argon2id.
+   * The key is returned to the caller (it does NOT persist to IndexedDB here).
+   */
+  deriveRecoveryKey: (phrase: string, familyId: string) =>
+    call<Uint8Array>({ type: "deriveRecoveryKey", phrase, familyId }),
+
+  /**
+   * Unwraps Envelope A (cold recovery) using kRecovery derived from phrase + familyId,
+   * then persists the resulting familyKey to worker IndexedDB.
+   * The raw familyKey never crosses the postMessage boundary.
+   */
+  unwrapRecoveryEnvelopeAndPersist: (
+    recoveryWrap: Uint8Array,
+    phrase: string,
+    familyId: string,
+    createdAt: string,
+  ) =>
+    call<void>({
+      type: "unwrapRecoveryEnvelopeAndPersist",
+      recoveryWrap,
+      phrase,
+      familyId,
+      createdAt,
+    }),
 };

@@ -13,6 +13,7 @@ import {
   wrapPhraseForReveal,
   unwrapPhraseForReveal,
 } from "./recovery";
+import { deriveRecoveryKey } from "./argon-init";
 
 // ── Module-level key state (stays in worker memory) ──────────────────────────
 
@@ -161,6 +162,31 @@ type Req =
       id: number;
       type: "wrapStoredFamilyKeyForDevice";
       devicePubKeyB64u: string;
+    }
+  | {
+      /** Reads the stored familyKey and unwraps Envelope B (phrase ciphertext)
+       *  for reveal in Settings → Security. Returns plaintext phrase. */
+      id: number;
+      type: "unwrapStoredPhraseForReveal";
+      phraseCt: Uint8Array;
+      familyId: string;
+    }
+  | {
+      /** Derives kRecovery from phrase + familyId via Argon2id. */
+      id: number;
+      type: "deriveRecoveryKey";
+      phrase: string;
+      familyId: string;
+    }
+  | {
+      /** Unwraps Envelope A (recovery wrap) using kRecovery derived from phrase,
+       *  then persists the resulting familyKey to IndexedDB. */
+      id: number;
+      type: "unwrapRecoveryEnvelopeAndPersist";
+      recoveryWrap: Uint8Array;
+      phrase: string;
+      familyId: string;
+      createdAt: string;
     };
 
 type Res = { id: number; ok: true; result?: unknown } | { id: number; ok: false; error: string };
@@ -360,6 +386,37 @@ self.onmessage = async (e: MessageEvent<Req>) => {
         const envB64 = btoa(String.fromCharCode(...envelope));
         const envB64u = envB64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
         post({ id: req.id, ok: true, result: envB64u });
+        return;
+      }
+      case "unwrapStoredPhraseForReveal": {
+        const storedFamilyKey2 = await getKey("familyKey");
+        if (!storedFamilyKey2) {
+          post({
+            id: req.id,
+            ok: false,
+            error: "NoStoredFamilyKey: no familyKey found in worker storage",
+          });
+          return;
+        }
+        const phrase2 = await unwrapPhraseForReveal(req.phraseCt, storedFamilyKey2, req.familyId);
+        post({ id: req.id, ok: true, result: phrase2 });
+        return;
+      }
+      case "deriveRecoveryKey": {
+        const kRecovery = await deriveRecoveryKey(req.phrase, req.familyId);
+        post({ id: req.id, ok: true, result: kRecovery });
+        return;
+      }
+      case "unwrapRecoveryEnvelopeAndPersist": {
+        // unwrapRecoveryEnvelope internally calls deriveRecoveryKey — no double derivation needed.
+        const familyKey2 = await unwrapRecoveryEnvelope(
+          req.recoveryWrap,
+          req.phrase,
+          req.familyId,
+          req.createdAt,
+        );
+        await putKey("familyKey", familyKey2);
+        post({ id: req.id, ok: true });
         return;
       }
       default: {
