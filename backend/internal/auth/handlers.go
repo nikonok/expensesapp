@@ -20,17 +20,25 @@ import (
 	internaldb "github.com/nikonok/expensesapp/backend/internal/db"
 	"github.com/nikonok/expensesapp/backend/internal/db/gen"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
+	"github.com/nikonok/expensesapp/backend/internal/live"
 )
 
 // Handler holds dependencies for auth HTTP endpoints.
 type Handler struct {
 	db       *sql.DB
 	verifier Verifier
+	hub      *live.Hub // optional; nil disables SSE publish
 }
 
 // NewHandler constructs an auth Handler.
 func NewHandler(db *sql.DB, verifier Verifier) *Handler {
 	return &Handler{db: db, verifier: verifier}
+}
+
+// SetHub wires the SSE hub into the handler for device.joined notifications.
+// Must be called before the server starts serving requests.
+func (h *Handler) SetHub(hub *live.Hub) {
+	h.hub = hub
 }
 
 // googleSignInRequest is the JSON body for POST /v1/auth/google.
@@ -58,9 +66,10 @@ type signInDeviceResponse struct {
 
 // signInResponse is the JSON body returned by POST /v1/auth/google.
 type signInResponse struct {
-	User            signInUserResponse   `json:"user"`
-	Device          signInDeviceResponse `json:"device"`
-	NeedsFamilyInit bool                 `json:"needsFamilyInit"`
+	User             signInUserResponse   `json:"user"`
+	Device           signInDeviceResponse `json:"device"`
+	NeedsFamilyInit  bool                 `json:"needsFamilyInit"`
+	AwaitingEnvelope bool                 `json:"awaitingEnvelope"`
 }
 
 // PostGoogle handles POST /v1/auth/google.
@@ -167,6 +176,7 @@ func (h *Handler) PostGoogle(w http.ResponseWriter, r *http.Request) {
 	// stranded device row but no session. Next sign-in will insert a new device
 	// and session — acceptable at our scale.
 	var returnedUser gen.User
+	var awaitingEnvelope bool
 
 	txErr := internaldb.WithTx(ctx, h.db, func(tx *sql.Tx) error {
 		qt := gen.New(tx)
@@ -213,6 +223,17 @@ func (h *Handler) PostGoogle(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// Determine device status: new devices for users who already have an
+		// active family are created as 'pending' so that an existing device
+		// must upload the encrypted family key (envelope) before this device
+		// becomes 'active'. First-time sign-in (no family yet) keeps 'active'.
+		deviceStatus := "active"
+		if member, lookupErr := qt.GetActiveFamilyMember(ctx, u.ID); lookupErr == nil && member.FamilyID != "" {
+			// User already belongs to a family — new device must await envelope.
+			deviceStatus = "pending"
+			awaitingEnvelope = true
+		}
+
 		// Insert the device.
 		if _, err := qt.InsertDevice(ctx, gen.InsertDeviceParams{
 			ID:         deviceID,
@@ -220,7 +241,7 @@ func (h *Handler) PostGoogle(w http.ResponseWriter, r *http.Request) {
 			Label:      req.DeviceLabel,
 			UserAgent:  sql.NullString{String: req.UserAgent, Valid: true},
 			PubKey:     pubKeyBytes,
-			Status:     "active",
+			Status:     deviceStatus,
 			CreatedAt:  nowStr,
 			LastSeenAt: sql.NullString{String: nowStr, Valid: true},
 		}); err != nil {
@@ -266,6 +287,28 @@ func (h *Handler) PostGoogle(w http.ResponseWriter, r *http.Request) {
 		needsFamilyInit = false
 	}
 
+	// If this is a new pending device, publish a device.joined SSE event to
+	// the user scope so existing active devices can offer the envelope upload.
+	if awaitingEnvelope && h.hub != nil {
+		type deviceJoinedPayload struct {
+			DeviceID  string `json:"deviceId"`
+			Label     string `json:"label"`
+			CreatedAt string `json:"createdAt"`
+		}
+		if data, err := json.Marshal(deviceJoinedPayload{
+			DeviceID:  deviceID,
+			Label:     req.DeviceLabel,
+			CreatedAt: nowStr,
+		}); err == nil {
+			h.hub.Publish("user:"+returnedUser.ID, live.Event{
+				Type: "device.joined",
+				Data: data,
+			})
+		} else {
+			slog.WarnContext(ctx, "auth: marshal device.joined payload failed", "err", err)
+		}
+	}
+
 	httpx.WriteJSON(w, http.StatusOK, signInResponse{
 		User: signInUserResponse{
 			ID:          returnedUser.ID,
@@ -274,8 +317,9 @@ func (h *Handler) PostGoogle(w http.ResponseWriter, r *http.Request) {
 			IsAdmin:     isAdmin,
 			IsRoot:      isRoot,
 		},
-		Device:          signInDeviceResponse{ID: deviceID, Label: req.DeviceLabel},
-		NeedsFamilyInit: needsFamilyInit,
+		Device:           signInDeviceResponse{ID: deviceID, Label: req.DeviceLabel},
+		NeedsFamilyInit:  needsFamilyInit,
+		AwaitingEnvelope: awaitingEnvelope,
 	})
 }
 
