@@ -488,6 +488,7 @@ export function startLiveSync(familyId: string): () => void {
                 db.accounts.clear(),
                 db.categories.clear(),
                 db.budgets.clear(),
+                db.settings.clear(),
                 db.pendingUploads.clear(),
                 db.syncCursors.clear(),
                 db.cipherKeys.clear(),
