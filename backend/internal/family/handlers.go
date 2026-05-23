@@ -403,6 +403,14 @@ func (h *Handler) PostMigrateSolo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Look up caller email for the target-access check.
+	callerUser, err := q.GetUserByID(ctx, userID)
+	if err != nil {
+		slog.WarnContext(ctx, "family.migrate-solo: get caller user", "err", err)
+		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
+		return
+	}
+
 	// Decode blobs.
 	records := make([]MigrateSoloRecord, 0, len(req.Records))
 	for i, rec := range req.Records {
@@ -431,6 +439,7 @@ func (h *Handler) PostMigrateSolo(w http.ResponseWriter, r *http.Request) {
 	result, svcErr := h.svc.MigrateSolo(ctx, MigrateSoloParams{
 		MigrationID:    req.MigrationID,
 		CallerUserID:   userID,
+		CallerEmail:    callerUser.Email,
 		SourceFamilyID: sourceMember.FamilyID,
 		TargetFamilyID: req.TargetFamilyID,
 		Records:        records,

@@ -387,6 +387,7 @@ type MigrateSoloRecord struct {
 type MigrateSoloParams struct {
 	MigrationID    string
 	CallerUserID   string
+	CallerEmail    string
 	SourceFamilyID string
 	TargetFamilyID string
 	Records        []MigrateSoloRecord
@@ -422,13 +423,20 @@ func (s *Service) MigrateSolo(ctx context.Context, p MigrateSoloParams) (Migrate
 			return fmt.Errorf("check migration idempotency: %w", err)
 		}
 
-		// Verify that the caller is actually a member of the target family.
-		_, err = qt.GetFamilyMemberByUserID(ctx, p.TargetFamilyID, p.CallerUserID)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotInTargetFamily
-		}
-		if err != nil {
-			return fmt.Errorf("check target membership: %w", err)
+		// Verify that the caller has a right to migrate into the target family:
+		// either already a member (e.g. idempotent re-try) or holds a pending invite.
+		_, memberErr := qt.GetFamilyMemberByUserID(ctx, p.TargetFamilyID, p.CallerUserID)
+		if errors.Is(memberErr, sql.ErrNoRows) {
+			// Not a member — check for a pending invite.
+			_, inviteErr := qt.GetPendingInviteForEmail(ctx, p.TargetFamilyID, p.CallerEmail)
+			if errors.Is(inviteErr, sql.ErrNoRows) {
+				return ErrNotInTargetFamily
+			}
+			if inviteErr != nil {
+				return fmt.Errorf("check target invite: %w", inviteErr)
+			}
+		} else if memberErr != nil {
+			return fmt.Errorf("check target membership: %w", memberErr)
 		}
 
 		// Insert all records into target family.
