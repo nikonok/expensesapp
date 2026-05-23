@@ -140,10 +140,9 @@ func (s *Service) RestoreSnapshot(ctx context.Context, familyID, snapshotID, cal
 			finalCursor = seq
 		}
 
-		// Write audit entry.
+		// Write audit entry. Failure aborts the transaction.
 		if auditErr := insertAudit(ctx, qt, callerUserID, "snapshot.restore", "snapshot", snapshotID, nowStr); auditErr != nil {
-			// Non-fatal — log and continue.
-			slog.WarnContext(ctx, "snapshot.restore: audit insert failed", "err", auditErr)
+			return auditErr
 		}
 
 		return nil
