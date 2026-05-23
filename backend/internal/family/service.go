@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/google/uuid"
 	internaldb "github.com/nikonok/expensesapp/backend/internal/db"
 	"github.com/nikonok/expensesapp/backend/internal/db/gen"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
@@ -107,7 +108,25 @@ func (s *Service) Init(ctx context.Context, p InitParams) error {
 		}
 
 		// Seed family_seq.
-		return qt.InsertFamilySeq(ctx, p.FamilyID)
+		if err := qt.InsertFamilySeq(ctx, p.FamilyID); err != nil {
+			return err
+		}
+
+		// Audit: family.create — final atomic step per architecture §8.1.
+		auditID, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		return qt.InsertAuditEntry(ctx, gen.InsertAuditEntryParams{
+			ID:          auditID.String(),
+			ActorUserID: nullString(p.UserID),
+			ActorEmail:  sql.NullString{},
+			Action:      "family.create",
+			TargetKind:  nullString("family"),
+			TargetID:    nullString(p.FamilyID),
+			DetailJson:  sql.NullString{},
+			CreatedAt:   now,
+		})
 	})
 }
 

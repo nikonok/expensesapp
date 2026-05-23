@@ -151,10 +151,6 @@ func (h *Handler) PostInit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Audit.
-	now := httpx.FormatTime(nowUTC())
-	_ = insertAudit(ctx, h.db, userID, "", "family.create", "family", req.FamilyID, now)
-
 	httpx.WriteJSON(w, http.StatusOK, initFamilyResponse{FamilyID: req.FamilyID})
 }
 
