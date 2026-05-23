@@ -9,6 +9,8 @@ import type {
   Backup,
   Log,
   CipherKey,
+  PendingUpload,
+  SyncCursor,
 } from "./models";
 
 const db = new Dexie("expenses-app-db") as Dexie & {
@@ -21,6 +23,8 @@ const db = new Dexie("expenses-app-db") as Dexie & {
   backups: EntityTable<Backup, "id">;
   logs: EntityTable<Log, "id">;
   cipherKeys: EntityTable<CipherKey, "name">;
+  pendingUploads: EntityTable<PendingUpload, "id">;
+  syncCursors: EntityTable<SyncCursor, "familyId">;
 };
 
 // v1 — initial release schema (all development migrations collapsed)
@@ -60,6 +64,22 @@ db.version(3).stores({
   backups: "++id, createdAt",
   logs: "++id, timestamp, level",
   cipherKeys: "name",
+});
+
+// v4 — add sync outbox + cursor tables (Phase 4e, architecture §6.2)
+db.version(4).stores({
+  accounts: "++id, type, name, isTrashed, currency",
+  categories: "++id, type, name, isTrashed, displayOrder",
+  transactions:
+    "++id, date, accountId, categoryId, type, isTrashed, [date+displayOrder], [accountId+date], transferGroupId, toAccountId",
+  budgets: "++id, categoryId, accountId, month, [categoryId+month], [accountId+month]",
+  exchangeRates: "++id, baseCurrency, &[baseCurrency+date]",
+  settings: "key",
+  backups: "++id, createdAt",
+  logs: "++id, timestamp, level",
+  cipherKeys: "name",
+  pendingUploads: "++id, recordId, attempts",
+  syncCursors: "&familyId",
 });
 
 export { db };
