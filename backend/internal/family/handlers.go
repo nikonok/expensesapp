@@ -23,6 +23,10 @@ import (
 // errNotImplemented is the sentinel returned by Phase 7 stubs.
 var errNotImplemented = errors.New("not implemented")
 
+// errDeviceNotPending is returned when activating a device whose status is no
+// longer 'pending' (e.g. a duplicate envelope POST or a race).
+var errDeviceNotPending = errors.New("device not pending")
+
 // nowUTC is a package-level variable so tests can override it.
 var nowUTC = func() time.Time { return time.Now().UTC() }
 

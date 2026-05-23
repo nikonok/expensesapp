@@ -132,13 +132,27 @@ func (h *Handler) PostDeviceEnvelope(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 
-		_, err := tx.ExecContext(ctx,
+		res, err := tx.ExecContext(ctx,
 			`UPDATE devices SET status = 'active' WHERE id = ? AND status = 'pending'`,
 			targetDeviceID,
 		)
-		return err
+		if err != nil {
+			return err
+		}
+		rows, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if rows == 0 {
+			return errDeviceNotPending
+		}
+		return nil
 	})
 	if txErr != nil {
+		if errors.Is(txErr, errDeviceNotPending) {
+			httpx.WriteError(w, r, http.StatusConflict, "device-not-pending", "target device is no longer in pending state")
+			return
+		}
 		slog.WarnContext(ctx, "family.devices: envelope tx error", "err", txErr)
 		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
 		return
