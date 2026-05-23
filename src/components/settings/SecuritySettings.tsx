@@ -129,9 +129,10 @@ export function SecuritySettings() {
         method: "POST",
         headers: { "X-Reauth-Grant": grantId },
         body: JSON.stringify({
-          wrap: toB64u(wrapBytes),
+          recoveryWrap: toB64u(wrapBytes),
           phraseCt: toB64u(phraseCt),
           salt: toB64u(salt),
+          version: 0x10,
         }),
       });
 
