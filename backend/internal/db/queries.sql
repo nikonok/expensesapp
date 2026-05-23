@@ -363,3 +363,14 @@ WHERE id NOT IN (SELECT blob_id FROM record_meta)
 -- name: ListFamilies :many
 -- Returns all family IDs (for the daily snapshot job).
 SELECT id FROM families ORDER BY id;
+
+-- name: ListNonDeletedRecordMetaForFamily :many
+SELECT record_id, blob_id, record_type, version, updated_at_map
+FROM record_meta
+WHERE family_id = ? AND deleted_at IS NULL;
+
+-- name: ListAllRecordMetaForFamily :many
+SELECT record_id, blob_id, record_type, version, updated_at_map,
+       deleted_at, added_by_user, edited_by_user, family_seq, created_at, last_modified_at
+FROM record_meta
+WHERE family_id = ?;
