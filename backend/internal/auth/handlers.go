@@ -294,11 +294,14 @@ func (h *Handler) PostGoogle(w http.ResponseWriter, r *http.Request) {
 			DeviceID  string `json:"deviceId"`
 			Label     string `json:"label"`
 			CreatedAt string `json:"createdAt"`
+			PubKey    string `json:"pubKey,omitempty"`
 		}
+		pubKeyB64u := base64.RawURLEncoding.EncodeToString(pubKeyBytes)
 		if data, err := json.Marshal(deviceJoinedPayload{
 			DeviceID:  deviceID,
 			Label:     req.DeviceLabel,
 			CreatedAt: nowStr,
+			PubKey:    pubKeyB64u,
 		}); err == nil {
 			h.hub.Publish("user:"+returnedUser.ID, live.Event{
 				Type: "device.joined",
