@@ -51,6 +51,7 @@ func main() {
 	verifier := authpkg.NewGoogleVerifier(cfg.GoogleOAuthClientID)
 	authH := authpkg.NewHandler(database, verifier)
 	authH.SetHub(hub)
+	reauthH := authpkg.NewReauthHandler(database, verifier)
 	accountH := account.NewHandler(database)
 	familyH := family.NewHandler(database)
 	familyH.SetHub(hub)
@@ -58,7 +59,7 @@ func main() {
 	syncH.SetEventBus(syncp.NewEventBus(hub))
 	liveH := live.NewHandler(hub)
 
-	r := server.NewRouter(database, authH, accountH, familyH, syncH, liveH, server.HealthConfig{Version: version.String()}, slog.Default())
+	r := server.NewRouter(database, authH, reauthH, accountH, familyH, syncH, liveH, server.HealthConfig{Version: version.String()}, slog.Default())
 
 	srv := &http.Server{
 		Addr:    cfg.BindAddr,

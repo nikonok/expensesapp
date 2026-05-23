@@ -29,7 +29,7 @@ type HealthConfig struct {
 // NewRouter wires the chi router used by both production and tests.
 // Keep this in sync with the route table in architecture.md §6.2.
 // If logger is nil, slog.Default() is used.
-func NewRouter(db *sql.DB, authH *authpkg.Handler, accountH *account.Handler, familyH *family.Handler, syncH *syncp.Handler, liveH *live.Handler, cfg HealthConfig, logger *slog.Logger) http.Handler {
+func NewRouter(db *sql.DB, authH *authpkg.Handler, reauthH *authpkg.ReauthHandler, accountH *account.Handler, familyH *family.Handler, syncH *syncp.Handler, liveH *live.Handler, cfg HealthConfig, logger *slog.Logger) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -58,6 +58,14 @@ func NewRouter(db *sql.DB, authH *authpkg.Handler, accountH *account.Handler, fa
 		r.Get("/v1/me/devices", accountH.GetMyDevices)
 		r.Post("/v1/me/devices/{id}/revoke", accountH.RevokeMyDevice)
 
+		// Reauth endpoints (Phase 6+).
+		r.Post("/v1/reauth/challenge", reauthH.PostChallenge)
+		r.Post("/v1/reauth/verify", reauthH.PostVerify)
+
+		// Recovery endpoints (Phase 6+).
+		r.Post("/v1/account/recovery/reveal", accountH.PostRecoveryReveal)
+		r.Post("/v1/account/recovery/regenerate", accountH.PostRecoveryRegenerate)
+
 		// Family endpoints (Phase 3+).
 		r.Post("/v1/family/init", familyH.PostInit)
 		r.Post("/v1/family/invites", familyH.PostInvite)
@@ -69,12 +77,13 @@ func NewRouter(db *sql.DB, authH *authpkg.Handler, accountH *account.Handler, fa
 		r.Post("/v1/family/members/{userId}/remove", familyH.PostRemoveMember)
 		r.Post("/v1/family/devices/{id}/envelope", familyH.PostDeviceEnvelope)
 
-		// Sync + live endpoints (Phase 4+) — require active family membership.
+		// Sync + live + family-envelope endpoints (Phase 4+) — require active family membership.
 		r.Group(func(r chi.Router) {
 			r.Use(authpkg.RequireFamilyMembership(db))
 			r.Post("/v1/sync/push", syncH.PostPush)
 			r.Get("/v1/sync/pull", syncH.GetPull)
 			r.Get("/v1/sync/live", liveH.GetLive)
+			r.Get("/v1/family/recovery-envelope", familyH.GetRecoveryEnvelope)
 		})
 	})
 
