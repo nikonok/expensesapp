@@ -32,6 +32,7 @@ interface AuthState {
   signOut: () => Promise<void>;
   refreshMe: () => Promise<void>;
   clearPendingKeypair: () => void;
+  clearAwaitingEnvelope: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -116,6 +117,10 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   clearPendingKeypair: () => {
     set({ pendingDevicePubKey: null });
+  },
+
+  clearAwaitingEnvelope: () => {
+    set({ awaitingEnvelope: false });
   },
 }));
 

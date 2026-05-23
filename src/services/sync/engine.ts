@@ -461,6 +461,10 @@ export function startLiveSync(familyId: string): () => void {
               const { cryptoWorker } = await import("@/services/crypto/worker-client");
               await cryptoWorker.unwrapAndPersistFamilyKey(p.envelope);
               logger.info("liveSync.familyKey.persisted");
+              // Signal that this device is no longer waiting for its envelope.
+              // DeviceJoinWaiting watches this flag and navigates away when cleared.
+              const { useAuthStore } = await import("@/services/auth/session");
+              useAuthStore.getState().clearAwaitingEnvelope();
               // Trigger full pull now that we have the key.
               const cursor = await getCursor(familyId);
               await pullSince(familyId, cursor);

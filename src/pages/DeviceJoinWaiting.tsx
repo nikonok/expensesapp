@@ -7,15 +7,31 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
+import { useAuthStore } from "@/services/auth/session";
 
 export default function DeviceJoinWaiting() {
   const navigate = useNavigate();
   const [showRecovery, setShowRecovery] = useState(false);
+  const awaitingEnvelope = useAuthStore((s) => s.awaitingEnvelope);
+  const [wasAwaiting, setWasAwaiting] = useState(awaitingEnvelope);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowRecovery(true), 30_000);
     return () => clearTimeout(timer);
   }, []);
+
+  // Track when we first render with awaitingEnvelope=true.
+  useEffect(() => {
+    if (awaitingEnvelope) setWasAwaiting(true);
+  }, [awaitingEnvelope]);
+
+  // Navigate to the main app once the family key has been received and persisted
+  // (awaitingEnvelope transitions from true → false).
+  useEffect(() => {
+    if (wasAwaiting && !awaitingEnvelope) {
+      navigate("/accounts", { replace: true });
+    }
+  }, [wasAwaiting, awaitingEnvelope, navigate]);
 
   return (
     <div

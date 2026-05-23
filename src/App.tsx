@@ -130,7 +130,11 @@ function AppRoutes() {
     const path = coldStartPathRef.current;
     if (path) {
       coldStartPathRef.current = "";
-      if (!path.startsWith("/dev/") && path !== `/${startupScreen}`) {
+      if (
+        !path.startsWith("/dev/") &&
+        path !== "/devices/waiting" &&
+        path !== `/${startupScreen}`
+      ) {
         navigate(`/${startupScreen}`, { replace: true });
       }
     }

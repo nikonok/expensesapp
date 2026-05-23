@@ -68,11 +68,12 @@ vi.mock("@/stores/device-join-store", () => ({
   },
 }));
 
-// Mock auth session store for you.removed test.
+// Mock auth session store for you.removed and device.activated tests.
 const mockSignOut = vi.fn(async () => {});
+const mockClearAwaitingEnvelope = vi.fn();
 vi.mock("@/services/auth/session", () => ({
   useAuthStore: {
-    getState: () => ({ signOut: mockSignOut }),
+    getState: () => ({ signOut: mockSignOut, clearAwaitingEnvelope: mockClearAwaitingEnvelope }),
   },
 }));
 
@@ -444,6 +445,7 @@ describe("startLiveSync — device.activated calls unwrapAndPersistFamilyKey the
     expect(vi.mocked(cryptoWorker.unwrapAndPersistFamilyKey)).toHaveBeenCalledWith(
       "sealed-envelope-b64u",
     );
+    expect(mockClearAwaitingEnvelope).toHaveBeenCalledTimes(1);
     expect(pullRecords).toHaveBeenCalledTimes(1);
 
     disconnect();
