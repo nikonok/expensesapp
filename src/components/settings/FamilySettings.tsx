@@ -16,7 +16,6 @@ import {
   listIncomingInvites,
   listFamilyMembers,
   acceptInvite,
-  acceptInviteStartFresh,
   declineInvite,
   leaveFamily,
   removeMember,
@@ -147,19 +146,6 @@ function MigrationDialog({
     }
   }
 
-  async function handleStartFresh() {
-    setLoading(true);
-    try {
-      await acceptInviteStartFresh(inviteId);
-      showToast("Joined family — starting fresh", "success");
-      onDone();
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to join", "error");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   if (!isOpen) return null;
 
   return (
@@ -243,25 +229,6 @@ function MigrationDialog({
             }}
           >
             {loading ? "Moving…" : "Move my data"}
-          </button>
-
-          <button
-            onClick={handleStartFresh}
-            disabled={loading}
-            style={{
-              minHeight: "44px",
-              background: "var(--color-surface-raised)",
-              color: "var(--color-text-secondary)",
-              border: "1px solid var(--color-border-strong)",
-              borderRadius: "var(--radius-btn)",
-              fontFamily: '"DM Sans", sans-serif',
-              fontWeight: 500,
-              fontSize: "var(--text-body)",
-              cursor: loading ? "not-allowed" : "pointer",
-              opacity: loading ? 0.6 : 1,
-            }}
-          >
-            Start fresh
           </button>
 
           <button

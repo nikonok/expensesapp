@@ -85,16 +85,6 @@ export async function acceptInvite(inviteId: string): Promise<void> {
   }
 }
 
-/**
- * POST /api/v1/family/invites/{inviteId}/accept?startFresh=true — accept and
- * discard the user's solo data on the server side.
- */
-export async function acceptInviteStartFresh(inviteId: string): Promise<void> {
-  await apiFetch<void>(`/api/v1/family/invites/${inviteId}/accept?startFresh=true`, {
-    method: "POST",
-  });
-}
-
 /** POST /api/v1/family/invites/{inviteId}/decline — decline an incoming invite. */
 export async function declineInvite(inviteId: string): Promise<void> {
   await apiFetch<void>(`/api/v1/family/invites/${inviteId}/decline`, { method: "POST" });
