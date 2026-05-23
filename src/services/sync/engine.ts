@@ -504,6 +504,21 @@ export function startLiveSync(familyId: string): () => void {
           })();
           break;
         }
+        case "sync.barrier": {
+          const p = payload as SSEPayloadMap["sync.barrier"];
+          (async () => {
+            try {
+              // Replace the local cursor with the barrier cursor, then trigger
+              // a full pull from scratch so the DB reflects the restored snapshot.
+              await setCursor(familyId, p.cursor);
+              await pullSince(familyId, undefined);
+              logger.info("liveSync.sync.barrier.applied", { cursor: p.cursor });
+            } catch (err) {
+              logger.error("liveSync.sync.barrier.failed", err instanceof Error ? err : undefined);
+            }
+          })();
+          break;
+        }
         default:
           break;
       }

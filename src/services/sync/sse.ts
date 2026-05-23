@@ -20,7 +20,8 @@ export type SSEEventType =
   | "device.joined"
   | "device.activated"
   | "device.revoked"
-  | "you.removed";
+  | "you.removed"
+  | "sync.barrier";
 
 export interface SSERecordChangedPayload {
   seq: number;
@@ -51,12 +52,17 @@ export interface SSEYouRemovedPayload {
   reason: string;
 }
 
+export interface SSESyncBarrierPayload {
+  cursor: string;
+}
+
 export type SSEPayloadMap = {
   "record.changed": SSERecordChangedPayload;
   "device.joined": SSEDeviceJoinedPayload;
   "device.activated": SSEDeviceActivatedPayload;
   "device.revoked": SSEDeviceRevokedPayload;
   "you.removed": SSEYouRemovedPayload;
+  "sync.barrier": SSESyncBarrierPayload;
 };
 
 export interface SSEConnectionHandle {
@@ -110,6 +116,7 @@ export function connectSSE(opts: ConnectSSEOptions): SSEConnectionHandle {
       "device.activated",
       "device.revoked",
       "you.removed",
+      "sync.barrier",
     ];
 
     for (const eventType of TYPES) {
