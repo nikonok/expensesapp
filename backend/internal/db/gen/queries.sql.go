@@ -50,6 +50,24 @@ func (q *Queries) DowngradeFromRoot(ctx context.Context, id string) error {
 	return err
 }
 
+const getActiveFamilyMember = `-- name: GetActiveFamilyMember :one
+SELECT family_id, user_id, joined_at, left_at, last_removed_at FROM family_members WHERE user_id = ? AND left_at IS NULL LIMIT 1
+`
+
+// Returns the active family_members row for a user (left_at IS NULL).
+func (q *Queries) GetActiveFamilyMember(ctx context.Context, userID string) (FamilyMember, error) {
+	row := q.db.QueryRowContext(ctx, getActiveFamilyMember, userID)
+	var i FamilyMember
+	err := row.Scan(
+		&i.FamilyID,
+		&i.UserID,
+		&i.JoinedAt,
+		&i.LeftAt,
+		&i.LastRemovedAt,
+	)
+	return i, err
+}
+
 const getBootstrapState = `-- name: GetBootstrapState :one
 
 SELECT id, bootstrap_email, applied_at FROM bootstrap_state WHERE id = 1 LIMIT 1
@@ -105,6 +123,17 @@ func (q *Queries) GetDeviceByID(ctx context.Context, id string) (Device, error) 
 		&i.RevokedAt,
 		&i.RevokeReason,
 	)
+	return i, err
+}
+
+const getFamilyByID = `-- name: GetFamilyByID :one
+SELECT id, created_at, usage_bytes FROM families WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetFamilyByID(ctx context.Context, id string) (Family, error) {
+	row := q.db.QueryRowContext(ctx, getFamilyByID, id)
+	var i Family
+	err := row.Scan(&i.ID, &i.CreatedAt, &i.UsageBytes)
 	return i, err
 }
 
@@ -284,6 +313,97 @@ func (q *Queries) InsertDevice(ctx context.Context, arg InsertDeviceParams) (Dev
 		&i.RevokeReason,
 	)
 	return i, err
+}
+
+const insertDeviceEnvelope = `-- name: InsertDeviceEnvelope :exec
+INSERT INTO device_envelopes (device_id, family_id, wrapped_key, version, created_at)
+VALUES (?, ?, ?, ?, ?)
+`
+
+type InsertDeviceEnvelopeParams struct {
+	DeviceID   string
+	FamilyID   string
+	WrappedKey []byte
+	Version    int64
+	CreatedAt  string
+}
+
+func (q *Queries) InsertDeviceEnvelope(ctx context.Context, arg InsertDeviceEnvelopeParams) error {
+	_, err := q.db.ExecContext(ctx, insertDeviceEnvelope,
+		arg.DeviceID,
+		arg.FamilyID,
+		arg.WrappedKey,
+		arg.Version,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const insertFamily = `-- name: InsertFamily :exec
+
+INSERT INTO families (id, created_at, usage_bytes) VALUES (?, ?, 0)
+`
+
+type InsertFamilyParams struct {
+	ID        string
+	CreatedAt string
+}
+
+// ----- families -----
+func (q *Queries) InsertFamily(ctx context.Context, arg InsertFamilyParams) error {
+	_, err := q.db.ExecContext(ctx, insertFamily, arg.ID, arg.CreatedAt)
+	return err
+}
+
+const insertFamilyMember = `-- name: InsertFamilyMember :exec
+INSERT INTO family_members (family_id, user_id, joined_at, left_at, last_removed_at)
+VALUES (?, ?, ?, NULL, NULL)
+`
+
+type InsertFamilyMemberParams struct {
+	FamilyID string
+	UserID   string
+	JoinedAt string
+}
+
+func (q *Queries) InsertFamilyMember(ctx context.Context, arg InsertFamilyMemberParams) error {
+	_, err := q.db.ExecContext(ctx, insertFamilyMember, arg.FamilyID, arg.UserID, arg.JoinedAt)
+	return err
+}
+
+const insertFamilyRecoveryEnvelope = `-- name: InsertFamilyRecoveryEnvelope :exec
+INSERT INTO family_recovery_envelopes (family_id, recovery_wrap, phrase_ct, version, salt, created_at)
+VALUES (?, ?, ?, ?, ?, ?)
+`
+
+type InsertFamilyRecoveryEnvelopeParams struct {
+	FamilyID     string
+	RecoveryWrap []byte
+	PhraseCt     []byte
+	Version      int64
+	Salt         []byte
+	CreatedAt    string
+}
+
+func (q *Queries) InsertFamilyRecoveryEnvelope(ctx context.Context, arg InsertFamilyRecoveryEnvelopeParams) error {
+	_, err := q.db.ExecContext(ctx, insertFamilyRecoveryEnvelope,
+		arg.FamilyID,
+		arg.RecoveryWrap,
+		arg.PhraseCt,
+		arg.Version,
+		arg.Salt,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const insertFamilySeq = `-- name: InsertFamilySeq :exec
+INSERT INTO family_seq (family_id, next_seq) VALUES (?, 1)
+`
+
+func (q *Queries) InsertFamilySeq(ctx context.Context, familyID string) error {
+	_, err := q.db.ExecContext(ctx, insertFamilySeq, familyID)
+	return err
 }
 
 const insertSession = `-- name: InsertSession :exec
