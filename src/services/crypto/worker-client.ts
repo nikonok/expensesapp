@@ -27,6 +27,12 @@ function ensureWorker(): Worker {
     if (ok) slot.resolve(result);
     else slot.reject(new Error(error ?? "worker error"));
   };
+  worker.onerror = (e: ErrorEvent) => {
+    const msg = e.message ?? "worker crashed";
+    for (const slot of pending.values()) slot.reject(new Error(msg));
+    pending.clear();
+    worker = null; // allow re-spawn on next call
+  };
   return worker;
 }
 
