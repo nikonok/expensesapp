@@ -459,6 +459,13 @@ WHERE family_id = ? AND last_modified_at >= ?;
 -- Set delete_after to 14 days from now. Returns the updated user row.
 UPDATE users SET delete_after = ? WHERE id = ? RETURNING *;
 
+-- name: SetUserDeleteAfterIfNull :one
+-- Conditional UPDATE: only sets delete_after when it is currently NULL.
+-- Returns the updated row; sql.ErrNoRows if already set (idempotent TOCTOU guard).
+UPDATE users SET delete_after = ?
+WHERE id = ? AND delete_after IS NULL
+RETURNING *;
+
 -- name: ClearUserDeleteAfter :exec
 UPDATE users SET delete_after = NULL WHERE id = ?;
 

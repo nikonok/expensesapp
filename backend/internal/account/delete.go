@@ -22,37 +22,37 @@ var ErrDeletionNotPending = errors.New("no pending deletion")
 
 // RequestDeletion sets delete_after = now + 14d for userID.
 // Idempotent: if already set, the existing value is returned unchanged.
+// Uses a conditional UPDATE to eliminate the read-then-write TOCTOU window.
 // Returns the deleteAfter timestamp string.
 func RequestDeletion(ctx context.Context, db *sql.DB, userID string) (string, error) {
-	q := gen.New(db)
-
-	// Check if already pending — idempotent: return existing deleteAfter.
-	existing, err := q.GetUserByID(ctx, userID)
-	if err != nil {
-		return "", err
-	}
-	if existing.DeleteAfter.Valid {
-		return existing.DeleteAfter.String, nil
-	}
-
 	now := time.Now().UTC()
 	deleteAfter := now.Add(deletionGracePeriod)
 	deleteAfterStr := httpx.FormatTime(deleteAfter)
 	nowStr := httpx.FormatTime(now)
 
 	var updatedUser gen.User
-	if err := internaldb.WithTx(ctx, db, func(tx *sql.Tx) error {
+	err := internaldb.WithTx(ctx, db, func(tx *sql.Tx) error {
 		qt := gen.New(tx)
-		u, err := qt.SetUserDeleteAfter(ctx, gen.SetUserDeleteAfterParams{
+		u, err := qt.SetUserDeleteAfterIfNull(ctx, gen.SetUserDeleteAfterIfNullParams{
 			DeleteAfter: deleteAfterStr,
 			ID:          userID,
 		})
+		if errors.Is(err, sql.ErrNoRows) {
+			// Already pending — fetch and return the existing deleteAfter.
+			existing, fetchErr := qt.GetUserByID(ctx, userID)
+			if fetchErr != nil {
+				return fetchErr
+			}
+			updatedUser = existing
+			return nil
+		}
 		if err != nil {
 			return err
 		}
 		updatedUser = u
 		return insertAuditTx(ctx, qt, userID, "user.delete.requested", "user", userID, nowStr)
-	}); err != nil {
+	})
+	if err != nil {
 		return "", err
 	}
 

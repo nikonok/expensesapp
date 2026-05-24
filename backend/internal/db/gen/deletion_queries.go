@@ -38,6 +38,38 @@ func (q *Queries) SetUserDeleteAfter(ctx context.Context, arg SetUserDeleteAfter
 	return i, err
 }
 
+const setUserDeleteAfterIfNull = `-- name: SetUserDeleteAfterIfNull :one
+UPDATE users SET delete_after = ?
+WHERE id = ? AND delete_after IS NULL
+RETURNING id, email, google_sub, display_name, is_admin, is_root, promoter_id, suspended_at, delete_after, created_at, last_signin_at
+`
+
+type SetUserDeleteAfterIfNullParams struct {
+	DeleteAfter string
+	ID          string
+}
+
+// SetUserDeleteAfterIfNull sets delete_after only when it is currently NULL.
+// Returns sql.ErrNoRows if delete_after was already set.
+func (q *Queries) SetUserDeleteAfterIfNull(ctx context.Context, arg SetUserDeleteAfterIfNullParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, setUserDeleteAfterIfNull, arg.DeleteAfter, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.GoogleSub,
+		&i.DisplayName,
+		&i.IsAdmin,
+		&i.IsRoot,
+		&i.PromoterID,
+		&i.SuspendedAt,
+		&i.DeleteAfter,
+		&i.CreatedAt,
+		&i.LastSigninAt,
+	)
+	return i, err
+}
+
 const clearUserDeleteAfter = `-- name: ClearUserDeleteAfter :exec
 UPDATE users SET delete_after = NULL WHERE id = ?
 `
