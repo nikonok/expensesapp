@@ -200,6 +200,61 @@ func (h *Handler) RevokeMyDevice(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// requestDeletionResponse is returned by POST /v1/account/request-deletion.
+type requestDeletionResponse struct {
+	DeleteAfter string `json:"deleteAfter"`
+}
+
+// PostRequestDeletion handles POST /v1/account/request-deletion.
+// Idempotent: if already pending, returns the existing deleteAfter.
+func (h *Handler) PostRequestDeletion(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := httpx.UserID(ctx)
+
+	deleteAfter, err := RequestDeletion(ctx, h.db, userID)
+	if err != nil {
+		slog.WarnContext(ctx, "request-deletion error", "err", err)
+		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, requestDeletionResponse{DeleteAfter: deleteAfter})
+}
+
+// PostCancelDeletion handles POST /v1/account/cancel-deletion.
+// Returns 400 if no deletion is pending.
+func (h *Handler) PostCancelDeletion(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := httpx.UserID(ctx)
+
+	if err := CancelDeletion(ctx, h.db, userID); err != nil {
+		if errors.Is(err, ErrDeletionNotPending) {
+			httpx.WriteError(w, r, http.StatusBadRequest, "not-pending", "no pending deletion to cancel")
+			return
+		}
+		slog.WarnContext(ctx, "cancel-deletion error", "err", err)
+		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// PostAdminDeleteImmediate handles POST /v1/admin/account/delete-immediate.
+// Admin self-only: immediately purges the authenticated admin's own account.
+func (h *Handler) PostAdminDeleteImmediate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := httpx.UserID(ctx)
+
+	if err := PurgeOne(ctx, h.db, userID); err != nil {
+		slog.WarnContext(ctx, "admin delete-immediate error", "err", err)
+		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 // insertAudit writes a single audit_log row. Errors are non-fatal.
 func insertAudit(ctx context.Context, db *sql.DB, actorUserID, actorEmail, action, targetKind, targetID, createdAt string) error {
 	q := gen.New(db)

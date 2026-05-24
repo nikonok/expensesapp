@@ -210,3 +210,10 @@ type Migration struct {
 	RecordCount    int64
 	CommittedAt    string
 }
+
+type SupportLog struct {
+	ID        string
+	UserID    string
+	Payload   []byte
+	CreatedAt string
+}
