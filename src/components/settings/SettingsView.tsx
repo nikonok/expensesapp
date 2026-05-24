@@ -19,6 +19,7 @@ import { SecuritySettings } from "./SecuritySettings";
 import { FamilySettings } from "./FamilySettings";
 import { AccountDeletion } from "./AccountDeletion";
 import { SupportLogs } from "./SupportLogs";
+import { SyncSettings } from "./SyncSettings";
 
 function SectionHeader({ label }: { label: string }) {
   return (
@@ -169,6 +170,10 @@ export function SettingsView() {
         {/* Notifications section */}
         <SectionHeader label={t("settings.sections.notifications")} />
         <NotificationSetting />
+
+        {/* Sync section */}
+        <SectionHeader label="Sync" />
+        <SyncSettings />
 
         {/* Data section */}
         <SectionHeader label={t("settings.sections.data")} />
