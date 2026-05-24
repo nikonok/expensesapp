@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "../../stores/settings-store";
 import { useToast } from "../shared/Toast";
-import { ensurePushSubscription } from "../../services/push/subscribe";
+import { ensurePushSubscription, disablePush } from "../../services/push/subscribe";
 import {
   getNotificationSettings,
   patchNotificationSettings,
@@ -219,6 +219,14 @@ export function NotificationSetting() {
   async function handlePushToggle() {
     if (pushEnabled) {
       setPushEnabled(false);
+      if (pushSubscriptionId) {
+        try {
+          await disablePush(pushSubscriptionId);
+        } catch (err) {
+          console.warn("handlePushToggle: disablePush failed", err);
+        }
+        setPushSubscriptionId("");
+      }
       return;
     }
     try {
