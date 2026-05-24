@@ -56,13 +56,14 @@ export function BudgetStats({ categoryId, accountId, month }: BudgetStatsProps) 
       return { avgMonthly: null, lastMonth: null, lastBudget: null };
     }
 
-    // Average monthly spend
-    const dates = allTxs.map((tx) => tx.date).sort();
-    const firstDate = parseISO(dates[0]);
-    const lastDate = parseISO(dates[dates.length - 1]);
-    const numMonths = Math.max(1, differenceInCalendarMonths(lastDate, firstDate) + 1);
-    const totalSum = allTxs.reduce((sum, tx) => sum + tx.amountMainCurrency, 0);
-    const avgMonthly = totalSum / numMonths;
+    // Average monthly spend — limited to last 6 months to avoid stale history
+    const today = new Date();
+    const sixMonthsAgo = subMonths(today, 6);
+    const sixMonthsAgoStr = format(sixMonthsAgo, "yyyy-MM-dd");
+    const recentTxs = allTxs.filter((tx) => tx.date >= sixMonthsAgoStr);
+    const numMonths = Math.max(1, differenceInCalendarMonths(today, sixMonthsAgo) + 1);
+    const totalSum = recentTxs.reduce((sum, tx) => sum + tx.amountMainCurrency, 0);
+    const avgMonthly = recentTxs.length > 0 ? totalSum / numMonths : null;
 
     // Last month actual
     const lastMonthTxs = allTxs.filter((tx) => tx.date >= prevStart && tx.date <= prevEnd);

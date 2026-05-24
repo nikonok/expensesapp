@@ -13,6 +13,9 @@ class ResetService {
         db.settings,
         db.backups,
         db.logs,
+        db.cipherKeys,
+        db.pendingUploads,
+        db.syncCursors,
       ],
       async () => {
         await db.accounts.clear();
@@ -23,6 +26,9 @@ class ResetService {
         await db.settings.clear();
         await db.backups.clear();
         await db.logs.clear();
+        await db.cipherKeys.clear();
+        await db.pendingUploads.clear();
+        await db.syncCursors.clear();
       },
     );
     window.dispatchEvent(new CustomEvent("backup-restored"));

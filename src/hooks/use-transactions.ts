@@ -36,7 +36,7 @@ export function useTransactions(opts: UseTransactionsOptions): Transaction[] {
 
       if (noteContains && noteContains.trim() !== "") {
         const lower = noteContains.toLowerCase();
-        results = results.filter((t) => t.note.toLowerCase().includes(lower));
+        results = results.filter((t) => (t.note ?? "").toLowerCase().includes(lower));
       }
 
       results.sort((a, b) => {

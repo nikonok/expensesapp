@@ -6,6 +6,7 @@ import {
   isWithinInterval,
   isBefore,
   isAfter,
+  isSameDay,
 } from "date-fns";
 import { formatAmount } from "../../utils/currency-utils";
 import { getLocalDateString, getWeekRange } from "../../utils/date-utils";
@@ -61,7 +62,7 @@ function StatRow({ label, amount, currency }: StatRowProps) {
 }
 
 export default function DailyAverages({ transactions, start, end, currency }: DailyAveragesProps) {
-  const { calendarDays, averagePerDay, todaySpend, thisWeekSpend } = useMemo(() => {
+  const { calendarDays, averagePerDay, todaySpend, thisWeekSpend, isPartial } = useMemo(() => {
     const expenses = transactions.filter(isExpenseForReporting);
     const totalExpense = expenses.reduce((sum, t) => sum + t.amountMainCurrency, 0);
 
@@ -101,7 +102,10 @@ export default function DailyAverages({ transactions, start, end, currency }: Da
           .reduce((sum, t) => sum + t.amountMainCurrency, 0)
       : null;
 
-    return { calendarDays, averagePerDay, todaySpend, thisWeekSpend };
+    const today = new Date();
+    const isPartial = calendarDays > 1 && isSameDay(end, today);
+
+    return { calendarDays, averagePerDay, todaySpend, thisWeekSpend, isPartial };
   }, [transactions, start, end]);
 
   return (
@@ -121,7 +125,7 @@ export default function DailyAverages({ transactions, start, end, currency }: Da
       </div>
       <div>
         <StatRow
-          label={`Avg / day (${calendarDays}d)`}
+          label={`Avg / day (${calendarDays}d${isPartial ? ", partial" : ""})`}
           amount={averagePerDay}
           currency={currency}
         />

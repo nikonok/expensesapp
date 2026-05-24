@@ -10,6 +10,7 @@
 import { db } from "@/db/database";
 import type { PendingUpload, SyncRecordType } from "@/db/models";
 import { logger } from "@/services/log.service";
+import { transactionSchema, accountSchema, categorySchema, budgetSchema } from "@/utils/validation";
 import { pushRecords, pullRecords } from "./client";
 import { getCursor, setCursor, encodeCursor } from "./cursor";
 import { mergePayloads } from "./merge";
@@ -364,18 +365,50 @@ async function writeDecryptedRecord(
   payload: Record<string, unknown>,
 ): Promise<void> {
   switch (recordType) {
-    case "transaction":
+    case "transaction": {
+      const result = transactionSchema.safeParse(payload);
+      if (!result.success) {
+        logger.warn("pullSince: invalid transaction payload, skipping", {
+          issues: result.error.issues.map((i) => i.message).join("; "),
+        });
+        return;
+      }
       await db.transactions.put(payload as Parameters<typeof db.transactions.put>[0]);
       break;
-    case "account":
+    }
+    case "account": {
+      const result = accountSchema.safeParse(payload);
+      if (!result.success) {
+        logger.warn("pullSince: invalid account payload, skipping", {
+          issues: result.error.issues.map((i) => i.message).join("; "),
+        });
+        return;
+      }
       await db.accounts.put(payload as Parameters<typeof db.accounts.put>[0]);
       break;
-    case "category":
+    }
+    case "category": {
+      const result = categorySchema.safeParse(payload);
+      if (!result.success) {
+        logger.warn("pullSince: invalid category payload, skipping", {
+          issues: result.error.issues.map((i) => i.message).join("; "),
+        });
+        return;
+      }
       await db.categories.put(payload as Parameters<typeof db.categories.put>[0]);
       break;
-    case "budget":
+    }
+    case "budget": {
+      const result = budgetSchema.safeParse(payload);
+      if (!result.success) {
+        logger.warn("pullSince: invalid budget payload, skipping", {
+          issues: result.error.issues.map((i) => i.message).join("; "),
+        });
+        return;
+      }
       await db.budgets.put(payload as Parameters<typeof db.budgets.put>[0]);
       break;
+    }
     case "settings":
       // Settings payload: { key: string; value: unknown }
       await db.settings.put(payload as Parameters<typeof db.settings.put>[0]);

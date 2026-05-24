@@ -53,40 +53,48 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   load: async () => {
     if (get().isLoaded) return;
-    const rows = await db.settings.toArray();
-    const map: Record<string, unknown> = {};
-    for (const row of rows) {
-      map[row.key] = row.value;
+    try {
+      const rows = await db.settings.toArray();
+      const map: Record<string, unknown> = {};
+      for (const row of rows) {
+        map[row.key] = row.value;
+      }
+
+      const VALID_STARTUP_SCREENS = new Set([
+        "accounts",
+        "categories",
+        "transactions",
+        "budget",
+        "overview",
+      ]);
+
+      set({
+        mainCurrency: (map["mainCurrency"] as string) ?? DEFAULTS.mainCurrency,
+        language: (map["language"] as string) ?? DEFAULTS.language,
+        startupScreen: VALID_STARTUP_SCREENS.has(map["startupScreen"] as string)
+          ? (map["startupScreen"] as string)
+          : DEFAULTS.startupScreen,
+        notificationEnabled:
+          (map["notificationEnabled"] as boolean) ?? DEFAULTS.notificationEnabled,
+        notificationTime: (map["notificationTime"] as string) ?? DEFAULTS.notificationTime,
+        hapticFeedbackEnabled:
+          (map["hapticFeedbackEnabled"] as boolean) ?? DEFAULTS.hapticFeedbackEnabled,
+        lastUsedAccountId:
+          (map["lastUsedAccountId"] as number | null) ?? DEFAULTS.lastUsedAccountId,
+        autoBackupIntervalHours:
+          (map["autoBackupIntervalHours"] as number | null) ?? DEFAULTS.autoBackupIntervalHours,
+        lastAutoBackupAt: (map["lastAutoBackupAt"] as string | null) ?? DEFAULTS.lastAutoBackupAt,
+        hasCompletedOnboarding:
+          (map["hasCompletedOnboarding"] as boolean) ?? DEFAULTS.hasCompletedOnboarding,
+        logLevel: (["all", "errors"] as const).includes(map["logLevel"] as "all" | "errors")
+          ? (map["logLevel"] as "all" | "errors")
+          : DEFAULTS.logLevel,
+        isLoaded: true,
+      });
+    } catch (err) {
+      // Leave isLoaded: false so callers can retry. Defaults remain in place.
+      console.error("Failed to load settings:", err);
     }
-
-    const VALID_STARTUP_SCREENS = new Set([
-      "accounts",
-      "categories",
-      "transactions",
-      "budget",
-      "overview",
-    ]);
-
-    set({
-      mainCurrency: (map["mainCurrency"] as string) ?? DEFAULTS.mainCurrency,
-      language: (map["language"] as string) ?? DEFAULTS.language,
-      startupScreen: VALID_STARTUP_SCREENS.has(map["startupScreen"] as string)
-        ? (map["startupScreen"] as string)
-        : DEFAULTS.startupScreen,
-      notificationEnabled: (map["notificationEnabled"] as boolean) ?? DEFAULTS.notificationEnabled,
-      notificationTime: (map["notificationTime"] as string) ?? DEFAULTS.notificationTime,
-      hapticFeedbackEnabled: (map["hapticFeedbackEnabled"] as boolean) ?? DEFAULTS.hapticFeedbackEnabled,
-      lastUsedAccountId: (map["lastUsedAccountId"] as number | null) ?? DEFAULTS.lastUsedAccountId,
-      autoBackupIntervalHours:
-        (map["autoBackupIntervalHours"] as number | null) ?? DEFAULTS.autoBackupIntervalHours,
-      lastAutoBackupAt: (map["lastAutoBackupAt"] as string | null) ?? DEFAULTS.lastAutoBackupAt,
-      hasCompletedOnboarding:
-        (map["hasCompletedOnboarding"] as boolean) ?? DEFAULTS.hasCompletedOnboarding,
-      logLevel: (["all", "errors"] as const).includes(map["logLevel"] as "all" | "errors")
-        ? (map["logLevel"] as "all" | "errors")
-        : DEFAULTS.logLevel,
-      isLoaded: true,
-    });
   },
 
   update: async (key: string, value: unknown) => {

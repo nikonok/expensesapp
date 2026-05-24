@@ -46,14 +46,19 @@ class BackupService {
 
   private async _buildSnapshot(): Promise<BackupJSON> {
     const [accounts, categories, transactions, budgets, exchangeRates, settings] =
-      await Promise.all([
-        db.accounts.toArray(),
-        db.categories.toArray(),
-        db.transactions.toArray(),
-        db.budgets.toArray(),
-        db.exchangeRates.toArray(),
-        db.settings.toArray(),
-      ]);
+      await db.transaction(
+        "r",
+        [db.accounts, db.categories, db.transactions, db.budgets, db.exchangeRates, db.settings],
+        async () =>
+          Promise.all([
+            db.accounts.toArray(),
+            db.categories.toArray(),
+            db.transactions.toArray(),
+            db.budgets.toArray(),
+            db.exchangeRates.toArray(),
+            db.settings.toArray(),
+          ]),
+      );
     return {
       version: 1,
       exportedAt: new Date().toISOString(),
