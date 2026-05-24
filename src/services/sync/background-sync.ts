@@ -55,7 +55,10 @@ async function runCatchUp(): Promise<void> {
   catchUpInProgress = true;
   try {
     const familyId = await getLocalFamilyId();
-    if (!familyId) return;
+    if (!familyId) {
+      lastCatchUpAt = Date.now();
+      return;
+    }
 
     const cursor = await getCursor(familyId);
     await pullSince(familyId, cursor);
