@@ -519,6 +519,32 @@ export function startLiveSync(familyId: string): () => void {
           })();
           break;
         }
+        case "notification.dismiss": {
+          const p = payload as SSEPayloadMap["notification.dismiss"];
+          (async () => {
+            try {
+              if ("serviceWorker" in navigator) {
+                const registration = await navigator.serviceWorker.ready;
+                const notifications = await registration.getNotifications({
+                  tag: p.notificationId,
+                });
+                for (const n of notifications) {
+                  n.close();
+                }
+                logger.info("liveSync.notification.dismiss", {
+                  notificationId: p.notificationId,
+                  closed: notifications.length,
+                });
+              }
+            } catch (err) {
+              logger.warn(
+                "liveSync.notification.dismiss.failed",
+                err instanceof Error ? err : undefined,
+              );
+            }
+          })();
+          break;
+        }
         default:
           break;
       }
