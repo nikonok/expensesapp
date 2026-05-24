@@ -270,6 +270,46 @@ func TestNotificationSettings(t *testing.T) {
 	})
 }
 
+func TestPushSubscribeDelete_OtherUserBlocked(t *testing.T) {
+	env := testenv.New(t)
+	defer env.Close()
+
+	addToAllowlist(t, env, "owner@example.com")
+	addToAllowlist(t, env, "other@example.com")
+
+	ownerClient := env.NewClient()
+	signIn(t, env, ownerClient, "owner@example.com")
+
+	otherClient := env.NewClient()
+	signIn(t, env, otherClient, "other@example.com")
+
+	base := env.Server.URL
+
+	// Owner creates a subscription.
+	body := map[string]string{
+		"endpoint": "https://fcm.example.com/push/owner-sub",
+		"p256dh":   "BGa0YJeaVoRZvCE9oaRTgXNa3B3Ixgh1AAx2dOaOe5OqkKvBRkBNWTIHblsUjyFyVKYPfQvLyuTLV8E9BdnSf7M",
+		"auth":     "zqbxT6JKstKSY9JKibZLSA",
+	}
+	resp := postJSON(t, ownerClient, base+"/v1/push/subscribe", body)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	var out map[string]string
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	resp.Body.Close()
+	subID := out["id"]
+	require.NotEmpty(t, subID)
+
+	// Other user attempts to delete owner's subscription — must get 404.
+	delResp := deleteReq(t, otherClient, base+"/v1/push/subscribe/"+subID)
+	delResp.Body.Close()
+	assert.Equal(t, http.StatusNotFound, delResp.StatusCode)
+
+	// Owner can still delete their own subscription.
+	ownerDelResp := deleteReq(t, ownerClient, base+"/v1/push/subscribe/"+subID)
+	ownerDelResp.Body.Close()
+	assert.Equal(t, http.StatusNoContent, ownerDelResp.StatusCode)
+}
+
 func TestNotificationDismiss(t *testing.T) {
 	env := testenv.New(t)
 	defer env.Close()

@@ -88,12 +88,34 @@ func (h *Handler) PostSubscribe(w http.ResponseWriter, r *http.Request) {
 // DELETE /v1/push/subscribe/{id}
 // --------------------------------------------------------------------------
 
-// DeleteSubscribe soft-deletes (actually hard-deletes) a push subscription.
+// DeleteSubscribe hard-deletes a push subscription after verifying ownership.
+// Returns 404 for missing or foreign subscriptions (no existence leak).
 func (h *Handler) DeleteSubscribe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	deviceID := httpx.DeviceID(ctx)
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		httpx.WriteError(w, r, http.StatusBadRequest, "bad-request", "id is required")
+		return
+	}
+
+	// Ownership check: the subscription must belong to the caller's device.
+	subs, err := gen.New(h.db).ListPushSubscriptionsForDevice(ctx, deviceID)
+	if err != nil {
+		slog.WarnContext(ctx, "push.Handler: list device subs for ownership check failed", "err", err)
+		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
+		return
+	}
+	found := false
+	for _, sub := range subs {
+		if sub.ID == id {
+			found = true
+			break
+		}
+	}
+	if !found {
+		// 404 — don't reveal whether the id exists at all.
+		httpx.WriteError(w, r, http.StatusNotFound, "not-found", "subscription not found")
 		return
 	}
 
