@@ -83,6 +83,8 @@ services:
     depends_on:
       app:
         condition: service_healthy
+      api:
+        condition: service_healthy
 
   # ── Future: PostgreSQL ──────────────────────────────────────────────────────
   # Uncomment this service when a backend is added to the project.
@@ -111,50 +113,52 @@ services:
   #     timeout: 5s
   #     retries: 5
 
-# ───────────────────────────────────────────────────────────────────
-# Phase 0 stub — uncomment when Phase 13 freeze is done.
-# See docs/backend/architecture.md §11.6 for the canonical spec.
-# ───────────────────────────────────────────────────────────────────
-# api:
-#   build:
-#     context: .
-#     dockerfile: backend/Dockerfile
-#   image: expensesapp-api:local
-#   container_name: expensesapp-api
-#   restart: unless-stopped
-#   expose: ["8080"]
-#   read_only: true
-#   cap_drop: [ALL]
-#   security_opt: ["no-new-privileges:true"]
-#   tmpfs: ["/tmp"]
-#   volumes:
-#     - apidata:/var/lib/expensesapp
-#   environment:
-#     BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:?required}
-#     GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:?required}
-#     VAPID_PUBLIC_KEY:  ${VAPID_PUBLIC_KEY:?required}
-#     VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:?required}
-#     VAPID_SUBJECT:     ${VAPID_SUBJECT:?required}
-#     COOKIE_DOMAIN:     ${COOKIE_DOMAIN:?required}
-#     ALLOWED_ORIGINS:   ${ALLOWED_ORIGINS:?required}
-#   deploy:
-#     resources:
-#       limits:
-#         cpus: "0.5"
-#         memory: 256M
-#   logging:
-#     driver: json-file
-#     options:
-#       max-size: "10m"
-#       max-file: "3"
-#   networks:
-#     - tunnel
-#   healthcheck:
-#     test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/v1/health"]
-#     interval: 30s
-#     timeout: 5s
-#     retries: 3
-#     start_period: 10s
+  # ── API backend ────────────────────────────────────────────────────────────
+  # Go API service. cloudflared routes /api/* → api:8080 (set in CF dashboard).
+  # See docs/backend/operator-runbook.md for first-boot instructions.
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: expensesapp-api:local
+    container_name: expensesapp-api
+    restart: unless-stopped
+    expose:
+      - "8080"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    tmpfs:
+      - /tmp
+    volumes:
+      - apidata:/var/lib/expensesapp
+    environment:
+      DB_PATH: /var/lib/expensesapp/data.db
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:?BOOTSTRAP_ADMIN_EMAIL must be set}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:?GOOGLE_OAUTH_CLIENT_ID must be set}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:?VAPID_PUBLIC_KEY must be set}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:?VAPID_PRIVATE_KEY must be set}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:?VAPID_SUBJECT must be set}
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - tunnel
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/v1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
 networks:
   tunnel:
@@ -167,6 +171,6 @@ volumes:
   # container lifecycle — docker compose down does NOT remove this volume.
   pgdata:
     driver: local
-  # Phase 0 stub — uncomment together with the api service above.
-  # apidata:
-  #   driver: local
+  # SQLite database + snapshots for the Go API backend.
+  apidata:
+    driver: local
