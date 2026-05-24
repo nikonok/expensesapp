@@ -11,6 +11,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
 	"github.com/nikonok/expensesapp/backend/internal/account"
+	"github.com/nikonok/expensesapp/backend/internal/admin"
 	authpkg "github.com/nikonok/expensesapp/backend/internal/auth"
 	"github.com/nikonok/expensesapp/backend/internal/family"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
@@ -31,7 +32,7 @@ type HealthConfig struct {
 // NewRouter wires the chi router used by both production and tests.
 // Keep this in sync with the route table in architecture.md §6.2.
 // If logger is nil, slog.Default() is used.
-func NewRouter(db *sql.DB, authH *authpkg.Handler, reauthH *authpkg.ReauthHandler, accountH *account.Handler, familyH *family.Handler, syncH *syncp.Handler, liveH *live.Handler, snapshotH *snapshot.Handler, pushH *push.Handler, cfg HealthConfig, logger *slog.Logger) http.Handler {
+func NewRouter(db *sql.DB, authH *authpkg.Handler, reauthH *authpkg.ReauthHandler, accountH *account.Handler, familyH *family.Handler, syncH *syncp.Handler, liveH *live.Handler, snapshotH *snapshot.Handler, pushH *push.Handler, adminH *admin.Handler, cfg HealthConfig, logger *slog.Logger) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -100,6 +101,21 @@ func NewRouter(db *sql.DB, authH *authpkg.Handler, reauthH *authpkg.ReauthHandle
 		r.Get("/v1/notifications/settings", pushH.GetNotificationSettings)
 		r.Patch("/v1/notifications/settings", pushH.PatchNotificationSettings)
 		r.Post("/v1/notifications/dismiss", pushH.PostDismiss)
+
+		// Admin endpoints (Phase 10+) — require admin or root role.
+		r.Group(func(r chi.Router) {
+			r.Use(authpkg.RequireAdmin(db))
+			r.Get("/v1/admin/users", adminH.GetUsers)
+			r.Post("/v1/admin/users/{id}/suspend", adminH.PostSuspendUser)
+			r.Post("/v1/admin/users/{id}/unsuspend", adminH.PostUnsuspendUser)
+			r.Get("/v1/admin/allowlist", adminH.GetAllowlist)
+			r.Post("/v1/admin/allowlist", adminH.PostAllowlist)
+			r.Delete("/v1/admin/allowlist/{email}", adminH.DeleteAllowlist)
+			r.Post("/v1/admin/admins/{id}/promote", adminH.PostPromoteAdmin)
+			r.Post("/v1/admin/admins/{id}/demote", adminH.PostDemoteAdmin)
+			r.Get("/v1/admin/audit", adminH.GetAuditLog)
+			r.Post("/v1/admin/devices/{id}/revoke", adminH.PostRevokeDevice)
+		})
 	})
 
 	return r
