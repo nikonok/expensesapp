@@ -152,17 +152,6 @@ func (h *Handler) PostPush(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// -------------------------------------------------------------------------
-	// Load family to obtain current usage (used for quota check inside tx).
-	// -------------------------------------------------------------------------
-	q := gen.New(h.db)
-	family, err := q.GetFamilyByID(ctx, familyID)
-	if err != nil {
-		slog.WarnContext(ctx, "sync.push: get family error", "err", err)
-		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
-		return
-	}
-
-	// -------------------------------------------------------------------------
 	// Apply all records in a single transaction.
 	// -------------------------------------------------------------------------
 	accepted := make([]pushResponseAccepted, 0, len(validated))
@@ -175,6 +164,13 @@ func (h *Handler) PostPush(w http.ResponseWriter, r *http.Request) {
 	var acceptedTypes []string
 
 	txErr := h.svc.WithTx(ctx, func(qt *gen.Queries) error {
+		// Load family inside the transaction so usage_bytes, quota check, and
+		// increment all occur under the same DB write lock (fixes stale-read race).
+		family, err := qt.GetFamilyByID(ctx, familyID)
+		if err != nil {
+			return err
+		}
+
 		for _, v := range validated {
 			result, conflict, err := h.svc.Upsert(ctx, qt, records.UpsertParams{
 				RecordID:           v.raw.RecordID,

@@ -13,6 +13,7 @@ import (
 	internaldb "github.com/nikonok/expensesapp/backend/internal/db"
 	"github.com/nikonok/expensesapp/backend/internal/db/gen"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
+	"github.com/nikonok/expensesapp/backend/internal/records"
 )
 
 // suiteVersion is the envelope-suite version byte written to device_envelopes
@@ -413,6 +414,9 @@ func (s *Service) MigrateSolo(ctx context.Context, p MigrateSoloParams) (Migrate
 		// Idempotency: if migration already committed, return cached result.
 		existing, err := qt.GetMigrationRecord(ctx, p.MigrationID)
 		if err == nil {
+			if existing.UserID != p.CallerUserID {
+				return ErrNotInTargetFamily
+			}
 			result = MigrateSoloResult{
 				CommittedAt: existing.CommittedAt,
 				RecordCount: int(existing.RecordCount),
@@ -465,7 +469,7 @@ func (s *Service) MigrateSolo(ctx context.Context, p MigrateSoloParams) (Migrate
 			}
 
 			// Try insert; if record already exists in target, update it.
-			_, metaErr := qt.GetRecordMeta(ctx, rec.RecordID)
+			existingMeta, metaErr := qt.GetRecordMeta(ctx, rec.RecordID)
 			if errors.Is(metaErr, sql.ErrNoRows) {
 				if err := qt.InsertRecordMeta(ctx, gen.InsertRecordMetaParams{
 					RecordID:       rec.RecordID,
@@ -488,7 +492,7 @@ func (s *Service) MigrateSolo(ctx context.Context, p MigrateSoloParams) (Migrate
 			} else {
 				if err := qt.UpdateRecordMeta(ctx, gen.UpdateRecordMetaParams{
 					BlobID:         blobID.String(),
-					Version:        1,
+					Version:        existingMeta.Version + 1,
 					EditedByUser:   rec.EditedByUser,
 					UpdatedAtMap:   rec.UpdatedAtMap,
 					DeletedAt:      rec.DeletedAt,
@@ -501,6 +505,17 @@ func (s *Service) MigrateSolo(ctx context.Context, p MigrateSoloParams) (Migrate
 			}
 
 			totalBytes += byteCount
+		}
+
+		// Quota check: read current usage inside the transaction to avoid stale reads.
+		if totalBytes > 0 {
+			targetFamily, err := qt.GetFamilyByID(ctx, p.TargetFamilyID)
+			if err != nil {
+				return fmt.Errorf("get target family for quota: %w", err)
+			}
+			if err := records.CheckQuota(targetFamily.UsageBytes, totalBytes); err != nil {
+				return err
+			}
 		}
 
 		// Update target family usage.
