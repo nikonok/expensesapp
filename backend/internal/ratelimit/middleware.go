@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -14,10 +15,23 @@ import (
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
 )
 
-// Bypass disables all rate limiting when set to true. Set via the
-// RATE_LIMIT_BYPASS=1 environment variable. Intended for the integration-test
-// harness so tests are not subject to per-IP/per-user limits.
-var Bypass = os.Getenv("RATE_LIMIT_BYPASS") == "1"
+// bypass holds whether rate limiting is globally disabled.
+// Initialised from RATE_LIMIT_BYPASS env at init; overridable via SetBypass.
+var bypass atomic.Bool
+
+func init() {
+	bypass.Store(os.Getenv("RATE_LIMIT_BYPASS") == "1")
+}
+
+// SetBypass enables or disables rate limiting at runtime. Intended for the
+// integration-test harness so tests are not subject to per-IP/per-user limits.
+func SetBypass(b bool) {
+	bypass.Store(b)
+}
+
+// Bypass is a package-level bool kept for the unit tests that set it directly.
+// The middleware checks both this var and the atomic bypass flag.
+var Bypass bool
 
 const (
 	// cleanupInterval is how often the background goroutine purges stale limiters.
@@ -27,25 +41,38 @@ const (
 )
 
 // limiterEntry bundles a rate.Limiter with its last-seen timestamp.
+// mu guards lastSeen to prevent the data race between allow() and cleanup().
 type limiterEntry struct {
 	limiter  *rate.Limiter
+	mu       sync.Mutex
 	lastSeen time.Time
+}
+
+// touch sets lastSeen to now under the entry's lock.
+func (e *limiterEntry) touch(now time.Time) {
+	e.mu.Lock()
+	e.lastSeen = now
+	e.mu.Unlock()
+}
+
+// seenBefore reports whether lastSeen is before cutoff, under the entry's lock.
+func (e *limiterEntry) seenBefore(cutoff time.Time) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.lastSeen.Before(cutoff)
 }
 
 // store is an in-memory map from string key → limiterEntry backed by sync.Map.
 // A single background goroutine evicts stale entries.
 type store struct {
-	m    sync.Map
-	r    rate.Limit
-	b    int
-	once sync.Once
+	m sync.Map
+	r rate.Limit
+	b int
 }
 
 func newStore(r rate.Limit, burst int) *store {
 	s := &store{r: r, b: burst}
-	s.once.Do(func() {
-		go s.cleanup()
-	})
+	go s.cleanup()
 	return s
 }
 
@@ -58,7 +85,7 @@ func (s *store) allow(key string) bool {
 	}
 	v, _ := s.m.LoadOrStore(key, entry)
 	e := v.(*limiterEntry)
-	e.lastSeen = now
+	e.touch(now)
 	return e.limiter.Allow()
 }
 
@@ -68,12 +95,17 @@ func (s *store) cleanup() {
 	for range t.C {
 		cutoff := time.Now().Add(-staleDuration)
 		s.m.Range(func(k, v any) bool {
-			if v.(*limiterEntry).lastSeen.Before(cutoff) {
+			if v.(*limiterEntry).seenBefore(cutoff) {
 				s.m.Delete(k)
 			}
 			return true
 		})
 	}
+}
+
+// isActive returns true if rate limiting should be enforced.
+func isActive() bool {
+	return !bypass.Load() && !Bypass
 }
 
 // PerIP returns a middleware that limits requests per remote IP to rps
@@ -86,7 +118,7 @@ func PerIP(rps int, burst int) func(http.Handler) http.Handler {
 	s := newStore(rate.Limit(rps), burst)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if Bypass {
+			if !isActive() {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -113,7 +145,7 @@ func PerUser(rpm int, burst int) func(http.Handler) http.Handler {
 	s := newStore(rate.Every(time.Minute/time.Duration(rpm)), burst)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if Bypass {
+			if !isActive() {
 				next.ServeHTTP(w, r)
 				return
 			}

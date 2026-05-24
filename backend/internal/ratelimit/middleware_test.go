@@ -3,6 +3,7 @@ package ratelimit_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -18,7 +19,11 @@ func disableBypass(t *testing.T) {
 	t.Helper()
 	orig := ratelimit.Bypass
 	ratelimit.Bypass = false
-	t.Cleanup(func() { ratelimit.Bypass = orig })
+	ratelimit.SetBypass(false)
+	t.Cleanup(func() {
+		ratelimit.Bypass = orig
+		ratelimit.SetBypass(orig)
+	})
 }
 
 func okHandler() http.Handler {
@@ -108,7 +113,10 @@ func TestPerUser_NoUserID_Passthrough(t *testing.T) {
 func TestBypass(t *testing.T) {
 	orig := ratelimit.Bypass
 	ratelimit.Bypass = true
-	t.Cleanup(func() { ratelimit.Bypass = orig })
+	t.Cleanup(func() {
+		ratelimit.Bypass = orig
+		ratelimit.SetBypass(orig)
+	})
 
 	// burst=0 would reject everything if bypass weren't active.
 	mw := ratelimit.PerIP(1, 0)
@@ -119,4 +127,28 @@ func TestBypass(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code, "bypass should allow all requests")
+}
+
+// TestLastSeen_NoRace hammers the same key from N goroutines concurrently to
+// verify that lastSeen updates are race-free under the race detector.
+func TestLastSeen_NoRace(t *testing.T) {
+	disableBypass(t)
+	// High burst so goroutines are not all rejected — we want allow() to actually
+	// write lastSeen on many concurrent calls.
+	mw := ratelimit.PerIP(1000, 10000)
+	h := mw(okHandler())
+
+	const goroutines = 50
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func() {
+			defer wg.Done()
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req.RemoteAddr = "10.0.0.1:80" // same key → same limiterEntry
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, req)
+		}()
+	}
+	wg.Wait()
 }
