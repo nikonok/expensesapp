@@ -7,6 +7,7 @@ export interface AuthUser {
   email: string;
   displayName: string;
   isAdmin: boolean;
+  deleteAfter?: string | null;
 }
 
 export interface AuthDevice {

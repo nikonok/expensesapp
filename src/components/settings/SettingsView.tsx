@@ -17,6 +17,8 @@ import { ComingSoonStub } from "../shared/ComingSoonStub";
 import { InstallSetting } from "./InstallSetting";
 import { SecuritySettings } from "./SecuritySettings";
 import { FamilySettings } from "./FamilySettings";
+import { AccountDeletion } from "./AccountDeletion";
+import { SupportLogs } from "./SupportLogs";
 
 function SectionHeader({ label }: { label: string }) {
   return (
@@ -117,6 +119,11 @@ export function SettingsView() {
 
       {/* Scrollable content */}
       <div style={{ overflowY: "auto", flex: 1 }}>
+        {/* Account section */}
+        <SectionHeader label={t("settings.sections.account")} />
+        <SupportLogs />
+        <AccountDeletion />
+
         {/* Security section */}
         <SectionHeader label="Security" />
         <SecuritySettings />
