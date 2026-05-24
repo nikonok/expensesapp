@@ -69,6 +69,13 @@ func NewRouter(db *sql.DB, authH *authpkg.Handler, reauthH *authpkg.ReauthHandle
 		r.Post("/v1/account/recovery/reveal", accountH.PostRecoveryReveal)
 		r.Post("/v1/account/recovery/regenerate", accountH.PostRecoveryRegenerate)
 
+		// Account deletion endpoints (Phase 11+).
+		r.Post("/v1/account/request-deletion", accountH.PostRequestDeletion)
+		r.Post("/v1/account/cancel-deletion", accountH.PostCancelDeletion)
+
+		// Log upload endpoint (Phase 11+).
+		r.Post("/v1/logs/send", accountH.PostSendLogs)
+
 		// Family endpoints (Phase 3+).
 		r.Post("/v1/family/init", familyH.PostInit)
 		r.Post("/v1/family/invites", familyH.PostInvite)
@@ -115,6 +122,8 @@ func NewRouter(db *sql.DB, authH *authpkg.Handler, reauthH *authpkg.ReauthHandle
 			r.Post("/v1/admin/admins/{id}/demote", adminH.PostDemoteAdmin)
 			r.Get("/v1/admin/audit", adminH.GetAuditLog)
 			r.Post("/v1/admin/devices/{id}/revoke", adminH.PostRevokeDevice)
+			// Admin self-delete (Phase 11+) — admin testing button, self only.
+			r.Post("/v1/admin/account/delete-immediate", accountH.PostAdminDeleteImmediate)
 		})
 	})
 

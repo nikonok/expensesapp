@@ -452,3 +452,37 @@ SELECT user_id FROM family_members WHERE family_id = ? AND left_at IS NULL;
 -- Count records modified in the last 24h for digest purposes.
 SELECT COUNT(*) FROM record_meta
 WHERE family_id = ? AND last_modified_at >= ?;
+
+-- ----- account deletion -----
+
+-- name: SetUserDeleteAfter :one
+-- Set delete_after to 14 days from now. Returns the updated user row.
+UPDATE users SET delete_after = ? WHERE id = ? RETURNING *;
+
+-- name: SetUserDeleteAfterIfNull :one
+-- Conditional UPDATE: only sets delete_after when it is currently NULL.
+-- Returns the updated row; sql.ErrNoRows if already set (idempotent TOCTOU guard).
+UPDATE users SET delete_after = ?
+WHERE id = ? AND delete_after IS NULL
+RETURNING *;
+
+-- name: ClearUserDeleteAfter :exec
+UPDATE users SET delete_after = NULL WHERE id = ?;
+
+-- name: ListUsersPendingDeletion :many
+-- Returns users whose 14-day grace period has elapsed.
+SELECT * FROM users WHERE delete_after IS NOT NULL AND delete_after <= ?;
+
+-- name: HardDeleteUser :exec
+DELETE FROM users WHERE id = ?;
+
+-- ----- family member soft-leave for purge -----
+
+-- name: SoftLeaveAllFamilies :exec
+-- Soft-leave all active family memberships for a user before hard delete.
+UPDATE family_members SET left_at = ? WHERE user_id = ? AND left_at IS NULL;
+
+-- ----- support_logs -----
+
+-- name: InsertSupportLog :exec
+INSERT INTO support_logs (id, user_id, payload, created_at) VALUES (?, ?, ?, ?);

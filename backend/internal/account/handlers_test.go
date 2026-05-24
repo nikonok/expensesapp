@@ -98,12 +98,44 @@ func TestGetMe(t *testing.T) {
 	user, _ := resp["user"].(map[string]any)
 	assert.Equal(t, "me@example.com", user["email"])
 	assert.Equal(t, "Test User", user["displayName"])
+	assert.Nil(t, user["deleteAfter"], "deleteAfter must be absent when no deletion pending")
 
 	device, _ := resp["device"].(map[string]any)
 	assert.Equal(t, deviceID, device["id"])
 
 	assert.Nil(t, resp["family"])
 	assert.Nil(t, resp["notificationSettings"])
+}
+
+// --------------------------------------------------------------------------
+// TestGetMe_WithDeleteAfter
+// --------------------------------------------------------------------------
+
+func TestGetMe_WithDeleteAfter(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	userID, deviceID := seedUserDevice(t, ctx, db, "pending@example.com")
+
+	// Set a pending deletion directly in the DB.
+	q := gen.New(db)
+	_, err := q.SetUserDeleteAfter(ctx, gen.SetUserDeleteAfterParams{
+		DeleteAfter: "2099-01-01T00:00:00Z",
+		ID:          userID,
+	})
+	require.NoError(t, err)
+
+	h := NewHandler(db)
+	req := authedGet(t, "/v1/me", userID, deviceID)
+	rr := httptest.NewRecorder()
+	h.GetMe(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+
+	user, _ := resp["user"].(map[string]any)
+	assert.Equal(t, "2099-01-01T00:00:00Z", user["deleteAfter"], "deleteAfter must be returned when deletion pending")
 }
 
 // --------------------------------------------------------------------------

@@ -179,7 +179,8 @@
       "general": "General",
       "notifications": "Notifications",
       "data": "Data",
-      "dangerZone": "Danger Zone"
+      "dangerZone": "Danger Zone",
+      "account": "Account"
     },
     "language": {
       "label": "Language",
@@ -278,6 +279,22 @@
       "confirmTitle": "Reset App?",
       "confirmBody": "This permanently deletes all accounts, transactions, categories, budgets, settings, and backups. This cannot be undone.",
       "confirmAction": "Reset"
+    },
+    "accountDeletion": {
+      "label": "Delete account",
+      "confirmTitle": "Delete account?",
+      "confirmBody": "Your account and all data will be permanently deleted in 14 days. You can sign in at any time before then to cancel.",
+      "checkboxLabel": "I understand all my data will be deleted in 14 days unless I sign in to cancel",
+      "confirmAction": "Schedule deletion",
+      "countdown_one": "Account will be deleted in {{count}} day",
+      "countdown_other": "Account will be deleted in {{count}} days",
+      "cancelDeletion": "Cancel deletion"
+    },
+    "supportLogs": {
+      "label": "Send logs to support",
+      "sending": "Sending…",
+      "consentText": "Diagnostic logs from this device will be sent to our support team. No financial data is included.",
+      "sent": "Thanks, our team has your logs"
     }
   },
   "onboarding": {

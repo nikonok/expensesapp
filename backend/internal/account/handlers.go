@@ -31,11 +31,12 @@ func NewHandler(db *sql.DB) *Handler {
 
 // meUserResponse is the user sub-object returned by GET /v1/me.
 type meUserResponse struct {
-	ID          string `json:"id"`
-	Email       string `json:"email"`
-	DisplayName string `json:"displayName"`
-	IsAdmin     bool   `json:"isAdmin"`
-	IsRoot      bool   `json:"isRoot"`
+	ID          string  `json:"id"`
+	Email       string  `json:"email"`
+	DisplayName string  `json:"displayName"`
+	IsAdmin     bool    `json:"isAdmin"`
+	IsRoot      bool    `json:"isRoot"`
+	DeleteAfter *string `json:"deleteAfter,omitempty"`
 }
 
 // meDeviceResponse is the device sub-object returned by GET /v1/me.
@@ -93,14 +94,20 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userResp := meUserResponse{
+		ID:          u.ID,
+		Email:       u.Email,
+		DisplayName: u.DisplayName,
+		IsAdmin:     u.IsAdmin != 0,
+		IsRoot:      u.IsRoot != 0,
+	}
+	if u.DeleteAfter.Valid {
+		s := u.DeleteAfter.String
+		userResp.DeleteAfter = &s
+	}
+
 	httpx.WriteJSON(w, http.StatusOK, meResponse{
-		User: meUserResponse{
-			ID:          u.ID,
-			Email:       u.Email,
-			DisplayName: u.DisplayName,
-			IsAdmin:     u.IsAdmin != 0,
-			IsRoot:      u.IsRoot != 0,
-		},
+		User: userResp,
 		Device: meDeviceResponse{
 			ID:    d.ID,
 			Label: d.Label,
@@ -198,6 +205,61 @@ func (h *Handler) RevokeMyDevice(w http.ResponseWriter, r *http.Request) {
 	_ = insertAudit(ctx, h.db, userID, "", "device.revoke.user", "device", targetID, nowStr)
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// requestDeletionResponse is returned by POST /v1/account/request-deletion.
+type requestDeletionResponse struct {
+	DeleteAfter string `json:"deleteAfter"`
+}
+
+// PostRequestDeletion handles POST /v1/account/request-deletion.
+// Idempotent: if already pending, returns the existing deleteAfter.
+func (h *Handler) PostRequestDeletion(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := httpx.UserID(ctx)
+
+	deleteAfter, err := RequestDeletion(ctx, h.db, userID)
+	if err != nil {
+		slog.WarnContext(ctx, "request-deletion error", "err", err)
+		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, requestDeletionResponse{DeleteAfter: deleteAfter})
+}
+
+// PostCancelDeletion handles POST /v1/account/cancel-deletion.
+// Returns 400 if no deletion is pending.
+func (h *Handler) PostCancelDeletion(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := httpx.UserID(ctx)
+
+	if err := CancelDeletion(ctx, h.db, userID); err != nil {
+		if errors.Is(err, ErrDeletionNotPending) {
+			httpx.WriteError(w, r, http.StatusBadRequest, "not-pending", "no pending deletion to cancel")
+			return
+		}
+		slog.WarnContext(ctx, "cancel-deletion error", "err", err)
+		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// PostAdminDeleteImmediate handles POST /v1/admin/account/delete-immediate.
+// Admin self-only: immediately purges the authenticated admin's own account.
+func (h *Handler) PostAdminDeleteImmediate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := httpx.UserID(ctx)
+
+	if err := PurgeOne(ctx, h.db, userID); err != nil {
+		slog.WarnContext(ctx, "admin delete-immediate error", "err", err)
+		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 // insertAudit writes a single audit_log row. Errors are non-fatal.
