@@ -171,7 +171,7 @@ func TestCancelDeletion_Happy(t *testing.T) {
 	// Cancel deletion — should succeed.
 	resp2 := postDeletion(t, env.Client, env.Server.URL+"/v1/account/cancel-deletion", nil)
 	body2 := readDeletionBody(t, resp2)
-	require.Equal(t, http.StatusOK, resp2.StatusCode, "cancel: %s", body2)
+	require.Equal(t, http.StatusNoContent, resp2.StatusCode, "cancel: %s", body2)
 
 	// Verify DB: delete_after should be NULL.
 	q := gen.New(env.DB)

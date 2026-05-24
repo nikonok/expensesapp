@@ -244,7 +244,7 @@ func (h *Handler) PostCancelDeletion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // PostAdminDeleteImmediate handles POST /v1/admin/account/delete-immediate.
