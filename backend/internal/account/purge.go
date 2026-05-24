@@ -44,7 +44,7 @@ func PurgePendingDeletions(ctx context.Context, db *sql.DB, now time.Time) int {
 			slog.InfoContext(ctx, "purge: context cancelled, stopping early")
 			break
 		}
-		if err := purgeUser(ctx, db, u.ID, u.Email, nowStr); err != nil {
+		if err := purgeUser(ctx, db, u.ID, nowStr); err != nil {
 			slog.WarnContext(ctx, "purge: failed to purge user",
 				"user_id", u.ID, "err", err)
 			continue
@@ -57,7 +57,7 @@ func PurgePendingDeletions(ctx context.Context, db *sql.DB, now time.Time) int {
 }
 
 // purgeUser transactionally soft-leaves families, hard-deletes the user, and audits.
-func purgeUser(ctx context.Context, db *sql.DB, userID, userEmail, nowStr string) error {
+func purgeUser(ctx context.Context, db *sql.DB, userID, nowStr string) error {
 	return internaldb.WithTx(ctx, db, func(tx *sql.Tx) error {
 		qt := gen.New(tx)
 
@@ -96,7 +96,7 @@ func purgeUser(ctx context.Context, db *sql.DB, userID, userEmail, nowStr string
 func PurgeOne(ctx context.Context, db *sql.DB, userID string) error {
 	now := time.Now().UTC()
 	nowStr := httpx.FormatTime(now)
-	return purgeUser(ctx, db, userID, "", nowStr)
+	return purgeUser(ctx, db, userID, nowStr)
 }
 
 // newPurgePendingJob returns a job function for the daily purge runner.
