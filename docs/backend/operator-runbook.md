@@ -64,13 +64,12 @@ To transfer root ownership to a new email:
 
 Daily snapshots are created at 02:00 UTC by the `snapshot_daily` job via `VACUUM INTO /var/lib/expensesapp/snapshots/YYYY-MM-DD.db`. The job retains the **30 most recent** snapshot files and deletes older ones automatically.
 
-To trigger a snapshot manually:
+To trigger a snapshot manually, exec into the container and run:
 
 ```bash
-docker exec expensesapp-api /api snapshot
+docker exec expensesapp-api sqlite3 /var/lib/expensesapp/data.db \
+  "VACUUM INTO '/var/lib/expensesapp/snapshots/$(date +%Y-%m-%d)-manual.db'"
 ```
-
-(The binary supports a `snapshot` subcommand for ad-hoc use; if not exposed, exec into the container and run `sqlite3 /var/lib/expensesapp/data.db "VACUUM INTO '/var/lib/expensesapp/snapshots/$(date +%Y-%m-%d)-manual.db'"`)
 
 To inspect snapshot files:
 
