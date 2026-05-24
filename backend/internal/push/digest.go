@@ -90,6 +90,27 @@ func (d *DigestService) SendDigestForUser(ctx context.Context, userID string) {
 	d.deliverer.Deliver(ctx, userID, payload, false)
 }
 
+// dailyReminderPayload is the JSON structure sent for a simple daily reminder.
+type dailyReminderPayload struct {
+	Type string `json:"type"`
+}
+
+// SendDailyReminderForUser sends a simple "don't forget to log today" push to
+// all active subscriptions for userID. It is called by the digest_push job when
+// daily_reminder=1 and family_digest=0.
+func (d *DigestService) SendDailyReminderForUser(ctx context.Context, userID string) {
+	payload, err := json.Marshal(dailyReminderPayload{Type: "daily.reminder"})
+	if err != nil {
+		slog.WarnContext(ctx, "push.Digest: marshal daily reminder payload failed", "err", err)
+		return
+	}
+
+	slog.InfoContext(ctx, "push.Digest: sending daily reminder", "user_id", userID)
+
+	// Reminder is optional — pass mandatory=false so it is dropped during quiet hours.
+	d.deliverer.Deliver(ctx, userID, payload, false)
+}
+
 // RecordChangedPayload is the JSON body sent to other family members when a
 // record is changed (the "family activity" push on record.changed SSE).
 type RecordChangedPayload struct {
