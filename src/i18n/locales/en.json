@@ -208,7 +208,21 @@
       "time": "Reminder time",
       "enabled": "Enabled",
       "disabled": "Disabled",
-      "caveat": "Timing is approximate when the app is closed — the system decides when to deliver background reminders."
+      "caveat": "Timing is approximate when the app is closed — the system decides when to deliver background reminders.",
+      "push": {
+        "label": "Push notifications",
+        "enableToggle": "Enable push notifications",
+        "dailyReminder": "Daily reminder",
+        "missedDay": "Missed day alert",
+        "familyDigest": "Family digest",
+        "quietHours": "Quiet hours",
+        "quietStart": "Start",
+        "quietEnd": "End",
+        "permissionDenied": "Notification permission denied. Please enable it in browser settings.",
+        "subscribeError": "Failed to enable push notifications.",
+        "saveError": "Failed to save notification settings.",
+        "noQuietHours": "Off"
+      }
     },
     "mainCurrency": {
       "label": "Main currency",
