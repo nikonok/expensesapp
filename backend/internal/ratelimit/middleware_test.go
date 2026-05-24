@@ -17,12 +17,9 @@ import (
 // RATE_LIMIT_BYPASS env var that the integration-test harness may have set.
 func disableBypass(t *testing.T) {
 	t.Helper()
-	orig := ratelimit.Bypass
-	ratelimit.Bypass = false
 	ratelimit.SetBypass(false)
 	t.Cleanup(func() {
-		ratelimit.Bypass = orig
-		ratelimit.SetBypass(orig)
+		ratelimit.SetBypass(false)
 	})
 }
 
@@ -111,11 +108,9 @@ func TestPerUser_NoUserID_Passthrough(t *testing.T) {
 }
 
 func TestBypass(t *testing.T) {
-	orig := ratelimit.Bypass
-	ratelimit.Bypass = true
+	ratelimit.SetBypass(true)
 	t.Cleanup(func() {
-		ratelimit.Bypass = orig
-		ratelimit.SetBypass(orig)
+		ratelimit.SetBypass(false)
 	})
 
 	// burst=0 would reject everything if bypass weren't active.

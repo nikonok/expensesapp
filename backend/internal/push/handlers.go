@@ -53,6 +53,7 @@ func (h *Handler) PostSubscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 8*1024)
 	var req subscribeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httpx.WriteError(w, r, http.StatusBadRequest, "bad-request", "invalid JSON body")
@@ -219,6 +220,7 @@ func (h *Handler) PatchNotificationSettings(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 	userID := httpx.UserID(ctx)
 
+	r.Body = http.MaxBytesReader(w, r.Body, 8*1024)
 	var req patchNotificationSettingsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httpx.WriteError(w, r, http.StatusBadRequest, "bad-request", "invalid JSON body")
@@ -348,6 +350,7 @@ func (h *Handler) PostDismiss(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := httpx.UserID(ctx)
 
+	r.Body = http.MaxBytesReader(w, r.Body, 8*1024)
 	var req dismissRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httpx.WriteError(w, r, http.StatusBadRequest, "bad-request", "invalid JSON body")

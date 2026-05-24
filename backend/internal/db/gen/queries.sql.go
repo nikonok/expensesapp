@@ -1334,7 +1334,7 @@ func (q *Queries) CountActiveFamilyMembers(ctx context.Context, familyID string)
 }
 
 const getFamilyMemberByUserID = `-- name: GetFamilyMemberByUserID :one
-SELECT family_id, user_id, joined_at, left_at, last_removed_at FROM family_members WHERE family_id = ? AND user_id = ? LIMIT 1
+SELECT family_id, user_id, joined_at, left_at, last_removed_at FROM family_members WHERE family_id = ? AND user_id = ? AND left_at IS NULL LIMIT 1
 `
 
 // Returns any family_members row (including left) for given family + user.

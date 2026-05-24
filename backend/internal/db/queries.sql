@@ -299,8 +299,8 @@ UPDATE family_invites SET status = ?, decided_at = ? WHERE id = ?;
 SELECT COUNT(*) FROM family_members WHERE family_id = ? AND left_at IS NULL;
 
 -- name: GetFamilyMemberByUserID :one
--- Returns any family_members row (including left) for given family + user.
-SELECT * FROM family_members WHERE family_id = ? AND user_id = ? LIMIT 1;
+-- Returns an active (left_at IS NULL) family_members row for given family + user.
+SELECT * FROM family_members WHERE family_id = ? AND user_id = ? AND left_at IS NULL LIMIT 1;
 
 -- name: JoinFamily :exec
 -- Insert a new active family_members row. Used in invite-accept path.
@@ -388,7 +388,7 @@ SELECT ps.id, ps.device_id, ps.endpoint, ps.p256dh, ps.auth,
 FROM push_subscriptions ps
 JOIN devices d ON d.id = ps.device_id
 WHERE d.user_id = ?
-  AND ps.last_failure_at IS NULL OR ps.last_success_at > ps.last_failure_at;
+  AND (ps.last_failure_at IS NULL OR ps.last_success_at > ps.last_failure_at);
 
 -- name: DeletePushSubscription :exec
 DELETE FROM push_subscriptions WHERE id = ?;

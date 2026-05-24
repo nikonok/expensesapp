@@ -125,6 +125,10 @@ func Validate(ctx context.Context, db *sql.DB, cookieValue string, now time.Time
 		return nil, ErrInvalidSession
 	}
 
+	if row.DeviceStatus == "revoked" {
+		return nil, ErrInvalidSession
+	}
+
 	info := &SessionInfo{
 		SessionID:   row.SessionID,
 		UserID:      row.UserID,
@@ -260,7 +264,7 @@ func ClearCookie(w http.ResponseWriter) {
 		Name:     cookieName,
 		Value:    "",
 		Path:     "/",
-		MaxAge:   0,
+		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   true,
 		SameSite: http.SameSiteLaxMode,

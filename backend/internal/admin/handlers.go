@@ -21,11 +21,9 @@ import (
 	"github.com/nikonok/expensesapp/backend/internal/db/gen"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
 	"github.com/nikonok/expensesapp/backend/internal/live"
+	"github.com/nikonok/expensesapp/backend/internal/records"
 )
 
-// storageQuotaBytes is the per-family storage quota used to derive storageUsagePct.
-// 100 MB per §3.3 (matches records.quota).
-const storageQuotaBytes = 100 * 1024 * 1024
 
 // defaultPageSize is the default number of items per page for list endpoints.
 const defaultPageSize = 50
@@ -159,8 +157,8 @@ func (h *Handler) GetUsers(w http.ResponseWriter, r *http.Request) {
 	items := make([]adminUserResponse, 0, len(rows))
 	for _, row := range rows {
 		pct := 0.0
-		if storageQuotaBytes > 0 {
-			pct = float64(row.UsageBytes) / float64(storageQuotaBytes) * 100
+		if records.QuotaMaxBytes > 0 {
+			pct = float64(row.UsageBytes) / float64(records.QuotaMaxBytes) * 100
 		}
 		item := adminUserResponse{
 			ID:                row.ID,

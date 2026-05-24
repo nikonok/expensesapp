@@ -29,9 +29,6 @@ func SetBypass(b bool) {
 	bypass.Store(b)
 }
 
-// Bypass is a package-level bool kept for the unit tests that set it directly.
-// The middleware checks both this var and the atomic bypass flag.
-var Bypass bool
 
 const (
 	// cleanupInterval is how often the background goroutine purges stale limiters.
@@ -106,7 +103,7 @@ func (s *store) cleanup() {
 
 // isActive returns true if rate limiting should be enforced.
 func isActive() bool {
-	return !bypass.Load() && !Bypass
+	return !bypass.Load()
 }
 
 // PerIP returns a middleware that limits requests per remote IP to rps

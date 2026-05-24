@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
@@ -97,7 +98,9 @@ func writeEvent(w http.ResponseWriter, flusher http.Flusher, ev Event) {
 	if ev.IsKeepalive() {
 		fmt.Fprintf(w, ": keepalive\n\n")
 	} else if ev.Type != "" {
-		fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.Type, ev.Data)
+		safeType := strings.ReplaceAll(ev.Type, "\n", "")
+		safeType = strings.ReplaceAll(safeType, "\r", "")
+		fmt.Fprintf(w, "event: %s\ndata: %s\n\n", safeType, ev.Data)
 	} else {
 		fmt.Fprintf(w, "data: %s\n\n", ev.Data)
 	}
