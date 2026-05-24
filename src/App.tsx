@@ -23,7 +23,18 @@ const BudgetPage = lazy(() => import("./pages/BudgetPage"));
 const OverviewPage = lazy(() => import("./pages/OverviewPage"));
 const TransactionInput = lazy(() => import("./components/transactions/TransactionInput"));
 const DeviceJoinWaiting = lazy(() => import("./pages/DeviceJoinWaiting"));
+const AdminPage = lazy(() => import("./pages/AdminPage"));
 const CryptoDemoPage = import.meta.env.DEV ? lazy(() => import("./pages/CryptoDemoPage")) : null;
+
+function AdminRoute() {
+  const isAdmin = useAuthStore((s) => s.user?.isAdmin ?? false);
+  if (!isAdmin) return <Navigate to="/accounts" replace />;
+  return (
+    <Suspense fallback={null}>
+      <AdminPage />
+    </Suspense>
+  );
+}
 
 function AppRoutes() {
   const navigate = useNavigate();
@@ -221,6 +232,7 @@ function AppRoutes() {
         <Route path="transactions/new" element={<TransactionInput />} />
         <Route path="transactions/:id/edit" element={<TransactionInput />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="admin" element={<AdminRoute />} />
         <Route path="onboarding" element={<OnboardingPage />} />
         <Route path="devices/waiting" element={<DeviceJoinWaiting />} />
         {import.meta.env.DEV && CryptoDemoPage && (

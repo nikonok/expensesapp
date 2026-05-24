@@ -74,8 +74,9 @@ func main() {
 	syncH.SetEventBus(eb)
 	liveH := live.NewHandler(hub)
 	snapshotH := snapshot.NewHandler(database, hub)
+	adminH := admin.NewHandler(database, hub)
 
-	r := server.NewRouter(database, authH, reauthH, accountH, familyH, syncH, liveH, snapshotH, pushH, server.HealthConfig{Version: version.String()}, slog.Default())
+	r := server.NewRouter(database, authH, reauthH, accountH, familyH, syncH, liveH, snapshotH, pushH, adminH, server.HealthConfig{Version: version.String()}, slog.Default())
 
 	srv := &http.Server{
 		Addr:    cfg.BindAddr,

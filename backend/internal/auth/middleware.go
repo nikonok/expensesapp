@@ -78,12 +78,43 @@ func CSRFHeaderGate(next http.Handler) http.Handler {
 	})
 }
 
-// RequireAdmin is a placeholder for Phase 10. Until then, it panics.
-// Wired into routes so future expansion is mechanical, not architectural.
-func RequireAdmin(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		panic("auth.RequireAdmin not implemented (Phase 10)")
-	})
+// RequireAdmin checks that the session user is an active admin or root.
+// "Active" means is_admin=1 OR is_root=1, AND suspended_at IS NULL.
+// On success it passes through; on failure it writes 403 admin-required.
+//
+// Requires SessionMiddleware to have run first (userID must be in context).
+func RequireAdmin(db *sql.DB) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+			userID := httpx.UserID(ctx)
+
+			q := gen.New(db)
+			u, err := q.GetUserByID(ctx, userID)
+			if errors.Is(err, sql.ErrNoRows) {
+				httpx.WriteError(w, r, http.StatusForbidden, "admin-required", "")
+				return
+			}
+			if err != nil {
+				slog.WarnContext(ctx, "RequireAdmin: get user error", "err", err)
+				httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
+				return
+			}
+
+			// Suspended admins are not admins.
+			if u.SuspendedAt.Valid {
+				httpx.WriteError(w, r, http.StatusForbidden, "admin-required", "account suspended")
+				return
+			}
+
+			if u.IsAdmin == 0 && u.IsRoot == 0 {
+				httpx.WriteError(w, r, http.StatusForbidden, "admin-required", "")
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // RequireFamilyMembership loads the user's active family_members row and injects

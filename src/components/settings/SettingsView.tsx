@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Shield } from "lucide-react";
+import { useAuthStore } from "../../services/auth/session";
 import { useSettingsStore } from "../../stores/settings-store";
 import { LanguageSetting } from "./LanguageSetting";
 import { ThemeSetting } from "./ThemeSetting";
@@ -44,6 +45,7 @@ export function SettingsView() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const startupScreen = useSettingsStore((s) => s.startupScreen);
+  const isAdmin = useAuthStore((s) => s.user?.isAdmin ?? false);
 
   return (
     <div
@@ -167,6 +169,51 @@ export function SettingsView() {
         <BackupSettings />
         <ExportSettings />
         <LogSettings />
+
+        {/* Admin section — only rendered for admin users */}
+        {isAdmin && (
+          <>
+            <SectionHeader label="Admin" />
+            <button
+              onClick={() => navigate("/admin")}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                minHeight: "52px",
+                width: "100%",
+                padding: "0 var(--space-4)",
+                background: "none",
+                border: "none",
+                borderBottom: "1px solid var(--color-border)",
+                cursor: "pointer",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+                <Shield size={16} strokeWidth={1.5} color="var(--color-primary)" />
+                <span
+                  style={{
+                    fontFamily: '"DM Sans", sans-serif',
+                    fontWeight: 500,
+                    fontSize: "var(--text-body)",
+                    color: "var(--color-text)",
+                  }}
+                >
+                  Admin panel
+                </span>
+              </div>
+              <span
+                style={{
+                  fontFamily: '"DM Sans", sans-serif',
+                  fontSize: "var(--text-caption)",
+                  color: "var(--color-primary)",
+                }}
+              >
+                Open
+              </span>
+            </button>
+          </>
+        )}
 
         {/* Danger Zone section */}
         <div

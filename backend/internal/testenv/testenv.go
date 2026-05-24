@@ -125,9 +125,10 @@ func New(t *testing.T, opts ...Option) *Env {
 	liveH := live.NewHandler(hub)
 	snapshotH := snapshot.NewHandler(database, hub)
 	pushH := push.NewHandler(database, hub)
+	adminH := admin.NewHandler(database, hub)
 
 	// 4. Build router using the shared server.NewRouter (same as production).
-	r := server.NewRouter(database, authH, reauthH, accountH, familyH, syncH, liveH, snapshotH, pushH, server.HealthConfig{}, nil)
+	r := server.NewRouter(database, authH, reauthH, accountH, familyH, syncH, liveH, snapshotH, pushH, adminH, server.HealthConfig{}, nil)
 
 	// 5. Start httptest.Server with TLS so that Secure cookies are honoured by the jar.
 	srv := httptest.NewTLSServer(r)
