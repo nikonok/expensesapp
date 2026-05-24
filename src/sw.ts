@@ -207,8 +207,35 @@ interface PeriodicSyncEvent extends ExtendableEvent {
   tag: string;
 }
 
+// BroadcastChannel used to signal open clients to run a catch-up pull.
+// The SW cannot decrypt records (no familyKey in SW scope), so it delegates
+// the actual pull to whatever client tab is alive.
+const CATCH_UP_CHANNEL = "catch-up-sync";
+
 self.addEventListener("periodicsync", (event: Event) => {
   const syncEvent = event as PeriodicSyncEvent;
+
+  // ── catch-up-sync: notify the main thread to run a pull ──────────────────
+  if (syncEvent.tag === "catch-up-sync") {
+    syncEvent.waitUntil(
+      (async () => {
+        // Only notify if at least one client window is open and visible.
+        // If no clients are alive the next foreground open will catch up via
+        // the visibilitychange handler, so doing nothing here is correct.
+        const clients = await self.clients.matchAll({
+          type: "window",
+          includeUncontrolled: false,
+        });
+        if (clients.length === 0) return;
+
+        const ch = new BroadcastChannel(CATCH_UP_CHANNEL);
+        ch.postMessage({ type: "sync-tick" });
+        ch.close();
+      })(),
+    );
+    return;
+  }
+
   if (syncEvent.tag !== "daily-reminder") return;
 
   syncEvent.waitUntil(

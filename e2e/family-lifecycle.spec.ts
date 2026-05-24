@@ -217,7 +217,7 @@ test("family invite → accept → remove lifecycle", async ({ browser }) => {
 
   // Fill and submit.
   await inviteInput.fill(USER_B_EMAIL);
-  await pageA.getByRole("button", { name: "Send" }).click();
+  await pageA.getByRole("button", { name: "Send", exact: true }).click();
 
   // Toast confirmation.
   await expect(pageA.getByText("Invite sent")).toBeVisible({ timeout: 5000 });

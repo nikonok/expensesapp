@@ -3,6 +3,12 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-route
 import { useSettingsStore } from "./stores/settings-store";
 import { scheduleDailyReminder, cancelDailyReminder } from "./services/notification.service";
 import { registerPeriodicSync, unregisterPeriodicSync } from "./sw-register";
+import {
+  registerCatchUpPeriodicSync,
+  setupForegroundCatchUp,
+  setupBroadcastChannelListener,
+  teardownBackgroundSync,
+} from "./services/sync/background-sync";
 import { ToastProvider, useToast } from "./components/shared/Toast";
 import { checkDatabaseIntegrity } from "./services/integrity.service";
 import { checkAndRunAutoBackup, setAutoBackupSchedule } from "./services/backup.service";
@@ -132,6 +138,24 @@ function AppRoutes() {
       unregisterPeriodicSync();
     }
   }, [isLoaded, notificationEnabled, notificationTime]);
+
+  // ── Background catch-up sync (Phase 12) ──────────────────────────────────
+  // Set up foreground visibilitychange catch-up and BroadcastChannel listener
+  // whenever the user is signed in. The PBS registration is also attempted here.
+  // On sign-out everything is torn down.
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (!isSignedIn) {
+      teardownBackgroundSync();
+      return;
+    }
+    setupForegroundCatchUp();
+    setupBroadcastChannelListener();
+    registerCatchUpPeriodicSync().catch(() => {});
+    return () => {
+      teardownBackgroundSync();
+    };
+  }, [isLoaded, isSignedIn]);
 
   useEffect(() => {
     if (!isLoaded) return;
