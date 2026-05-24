@@ -294,7 +294,7 @@ describe("exportService.exportTransactions", () => {
   });
 
   describe("regular transfer handling", () => {
-    it("emits 1 Expenses row and 1 Incomes row for a regular transfer pair", async () => {
+    it("emits 1 Expenses row and 0 Incomes rows for a regular transfer pair", async () => {
       const groupId = "regular-transfer-uuid";
       mockTxQuery.sortBy.mockResolvedValue([
         makeTx({
@@ -323,11 +323,13 @@ describe("exportService.exportTransactions", () => {
 
       const expenseRows = (await getExpensesSheetData()).slice(1);
       const incomeRows = (await getIncomesSheetData()).slice(1);
+      // The IN leg is intentionally skipped: internal transfers are not income.
+      // Including it would double-count when summing the income column.
       expect(expenseRows).toHaveLength(1);
-      expect(incomeRows).toHaveLength(1);
+      expect(incomeRows).toHaveLength(0);
     });
 
-    it('uses "Transfer" as category for regular transfer rows', async () => {
+    it('uses "Transfer" as category for the regular transfer OUT row', async () => {
       const groupId = "regular-transfer-uuid-2";
       mockTxQuery.sortBy.mockResolvedValue([
         makeTx({
@@ -356,8 +358,9 @@ describe("exportService.exportTransactions", () => {
 
       const expenseRows = (await getExpensesSheetData()).slice(1);
       const incomeRows = (await getIncomesSheetData()).slice(1);
+      // Only the OUT leg appears; IN leg is not emitted (not income)
       expect(expenseRows[0][3]).toBe("Transfer");
-      expect(incomeRows[0][3]).toBe("Transfer");
+      expect(incomeRows).toHaveLength(0);
     });
   });
 
@@ -438,7 +441,7 @@ describe("exportService.exportTransactions", () => {
   });
 
   describe("transfer deduplication", () => {
-    it("emits exactly one row per sheet for a regular transfer pair (not two each)", async () => {
+    it("emits exactly one Expenses row and zero Incomes rows for a regular transfer pair", async () => {
       const groupId = "dedup-group-uuid";
       mockTxQuery.sortBy.mockResolvedValue([
         makeTx({
@@ -465,8 +468,9 @@ describe("exportService.exportTransactions", () => {
 
       const expenseRows = (await getExpensesSheetData()).slice(1);
       const incomeRows = (await getIncomesSheetData()).slice(1);
+      // IN leg is intentionally skipped; only OUT leg appears as an outflow
       expect(expenseRows).toHaveLength(1);
-      expect(incomeRows).toHaveLength(1);
+      expect(incomeRows).toHaveLength(0);
     });
   });
 

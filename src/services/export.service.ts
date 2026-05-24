@@ -55,19 +55,14 @@ async function exportTransactions(
             sanitizeCell(debtAccount?.name ?? ""),
           ] as (string | number)[]);
         } else {
+          // Emit only the OUT leg as an outflow; the IN leg is skipped because
+          // internal transfers are not income — including it would double-count
+          // the amount when summing the income column.
           if (outTx && outTx.transferDirection === "OUT") {
             expenseRows.push([
               sanitizeCell(formatDate(outTx.date)),
               outTx.amountMainCurrency / 100,
               sanitizeCell(outTx.note ?? ""),
-              "Transfer",
-            ] as (string | number)[]);
-          }
-          if (inTx && inTx.transferDirection === "IN") {
-            incomeRows.push([
-              sanitizeCell(formatDate(inTx.date)),
-              inTx.amountMainCurrency / 100,
-              sanitizeCell(inTx.note ?? ""),
               "Transfer",
             ] as (string | number)[]);
           }

@@ -14,6 +14,7 @@ import {
   applyTransfer,
   replaceTransaction,
   replaceTransfer,
+  revertTransfer,
 } from "@/services/balance.service";
 import { exchangeRateService } from "@/services/exchange-rate.service";
 import { evaluateExpression } from "@/services/math-parser";
@@ -1883,11 +1884,8 @@ export default function TransactionInput() {
   const lastNote =
     useLiveQuery(async () => {
       if (!category?.id) return "";
-      const txs = await db.transactions
-        .where("categoryId")
-        .equals(category.id)
-        .reverse()
-        .sortBy("timestamp");
+      const txs = await db.transactions.where("categoryId").equals(category.id).toArray();
+      txs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
       for (const tx of txs) {
         if (tx.note && tx.note.trim()) return tx.note;
       }
@@ -2564,7 +2562,13 @@ export default function TransactionInput() {
           };
 
           if (isEdit && existingTx) {
-            await replaceTransaction(existingTx, tx);
+            if (existingTx.type === "TRANSFER" && existingTx.transferGroupId) {
+              // Downgrade from transfer to single-leg: revert both legs, then apply new tx
+              await revertTransfer(existingTx.transferGroupId);
+              await applyTransaction(tx);
+            } else {
+              await replaceTransaction(existingTx, tx);
+            }
           } else {
             await applyTransaction(tx);
           }

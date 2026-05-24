@@ -70,7 +70,8 @@ function evaluateRaw(expr: string): number | null {
       } else {
         result = left.value / right.value;
       }
-      afterMulDiv.push({ type: "num", value: result });
+      // Clamp to 2 decimal places after each step to prevent float accumulation
+      afterMulDiv.push({ type: "num", value: Math.round(result * 100) / 100 });
       i += 2;
     } else {
       afterMulDiv.push(token);
@@ -87,9 +88,9 @@ function evaluateRaw(expr: string): number | null {
     const right = afterMulDiv[j + 1];
     if (!op || op.type !== "op" || !right || right.type !== "num") return null;
     if (op.value === "+") {
-      result += right.value;
+      result = Math.round((result + right.value) * 100) / 100;
     } else if (op.value === "-") {
-      result -= right.value;
+      result = Math.round((result - right.value) * 100) / 100;
     } else {
       return null;
     }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_AMOUNT } from "@/services/math-parser";
 
 export const accountSchema = z.object({
   name: z.string().min(1, "Name is required").max(64),
@@ -36,7 +37,7 @@ export const transactionSchema = z.object({
   accountId: z.number().int().positive(),
   categoryId: z.number().int().positive().nullable(),
   currency: z.string().length(3),
-  amount: z.number().int().positive().finite(),
+  amount: z.number().int().positive().finite().max(MAX_AMOUNT),
   amountMainCurrency: z.number().int().positive().finite(),
   exchangeRate: z.number().positive().finite(),
   note: z.string().max(255).default(""),
