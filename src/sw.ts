@@ -228,16 +228,9 @@ self.addEventListener("periodicsync", (event: Event) => {
         });
         if (clients.length === 0) return;
 
-        if (typeof BroadcastChannel !== "undefined") {
-          const ch = new BroadcastChannel(CATCH_UP_CHANNEL);
-          ch.postMessage({ type: "sync-tick" });
-          ch.close();
-        } else {
-          // Fallback: post directly to each client.
-          for (const client of clients) {
-            client.postMessage({ type: "sync-tick" });
-          }
-        }
+        const ch = new BroadcastChannel(CATCH_UP_CHANNEL);
+        ch.postMessage({ type: "sync-tick" });
+        ch.close();
       })(),
     );
     return;
