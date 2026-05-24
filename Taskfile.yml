@@ -1,6 +1,6 @@
 version: "3"
 
-dotenv: ['.env']
+dotenv: [".env"]
 
 tasks:
   setup:
@@ -97,6 +97,7 @@ tasks:
     env:
       BOOTSTRAP_ADMIN_EMAIL: '{{.BOOTSTRAP_ADMIN_EMAIL | default "root@example.com"}}'
       GOOGLE_OAUTH_CLIENT_ID: '{{.GOOGLE_OAUTH_CLIENT_ID | default "dev-placeholder"}}'
+      RATE_LIMIT_BYPASS: "1"
     cmd: gotestsum --format pkgname -- -tags=integration -count=1 ./...
 
   backend:sqlc:

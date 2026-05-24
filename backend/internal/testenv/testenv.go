@@ -21,6 +21,7 @@ import (
 	"github.com/nikonok/expensesapp/backend/internal/admin"
 	authpkg "github.com/nikonok/expensesapp/backend/internal/auth"
 	dbpkg "github.com/nikonok/expensesapp/backend/internal/db"
+	"github.com/nikonok/expensesapp/backend/internal/ratelimit"
 	"github.com/nikonok/expensesapp/backend/internal/db/gen"
 	"github.com/nikonok/expensesapp/backend/internal/family"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
@@ -101,6 +102,11 @@ func New(t *testing.T, opts ...Option) *Env {
 	for _, o := range opts {
 		o(cfg)
 	}
+
+	// Disable rate limiting for the duration of the test so integration tests
+	// are not subject to per-IP/per-user limits.
+	ratelimit.SetBypass(true)
+	t.Cleanup(func() { ratelimit.SetBypass(false) })
 
 	ctx := context.Background()
 
