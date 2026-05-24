@@ -25,6 +25,7 @@ import (
 	"github.com/nikonok/expensesapp/backend/internal/family"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
 	"github.com/nikonok/expensesapp/backend/internal/live"
+	"github.com/nikonok/expensesapp/backend/internal/push"
 	"github.com/nikonok/expensesapp/backend/internal/server"
 	"github.com/nikonok/expensesapp/backend/internal/snapshot"
 	syncp "github.com/nikonok/expensesapp/backend/internal/sync"
@@ -123,9 +124,10 @@ func New(t *testing.T, opts ...Option) *Env {
 	syncH.SetEventBus(syncp.NewEventBus(hub))
 	liveH := live.NewHandler(hub)
 	snapshotH := snapshot.NewHandler(database, hub)
+	pushH := push.NewHandler(database, hub)
 
 	// 4. Build router using the shared server.NewRouter (same as production).
-	r := server.NewRouter(database, authH, reauthH, accountH, familyH, syncH, liveH, snapshotH, server.HealthConfig{}, nil)
+	r := server.NewRouter(database, authH, reauthH, accountH, familyH, syncH, liveH, snapshotH, pushH, server.HealthConfig{}, nil)
 
 	// 5. Start httptest.Server with TLS so that Secure cookies are honoured by the jar.
 	srv := httptest.NewTLSServer(r)

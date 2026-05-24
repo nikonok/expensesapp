@@ -14,6 +14,12 @@ type Config struct {
 	DBPath              string `env:"DB_PATH"                envDefault:"./data.db"`
 	BootstrapAdminEmail string `env:"BOOTSTRAP_ADMIN_EMAIL"  envDefault:""`
 	GoogleOAuthClientID string `env:"GOOGLE_OAUTH_CLIENT_ID" envDefault:""`
+
+	// VAPID keys for Web Push. When any of these is empty push delivery is
+	// disabled, but the push subscription endpoints still work.
+	VAPIDPublicKey  string `env:"VAPID_PUBLIC_KEY"  envDefault:""`
+	VAPIDPrivateKey string `env:"VAPID_PRIVATE_KEY" envDefault:""`
+	VAPIDSubject    string `env:"VAPID_SUBJECT"     envDefault:""`
 }
 
 // Load parses Config from environment variables, returning an error if any

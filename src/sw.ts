@@ -238,16 +238,55 @@ self.addEventListener("periodicsync", (event: Event) => {
   );
 });
 
+// ── Push event: display notification from server payload ─────────────────────
+
+self.addEventListener("push", (event) => {
+  let title = "Expenses";
+  let body = "";
+  let tag: string | undefined;
+  let url: string | undefined;
+
+  if (event.data) {
+    try {
+      const payload = event.data.json() as {
+        title?: string;
+        body?: string;
+        tag?: string;
+        url?: string;
+      };
+      if (payload.title) title = payload.title;
+      if (payload.body) body = payload.body;
+      if (payload.tag) tag = payload.tag;
+      if (payload.url) url = payload.url;
+    } catch {
+      body = event.data.text();
+    }
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag,
+      data: { url },
+    }),
+  );
+});
+
 // ── Notification click: focus app or open it ──────────────────────────────────
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  const targetUrl: string = (event.notification.data as { url?: string })?.url ?? "/";
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
-        if ("focus" in client) return (client as WindowClient).focus();
+        if (client.url === targetUrl && "focus" in client) {
+          return (client as WindowClient).focus();
+        }
       }
-      return self.clients.openWindow("/");
+      return self.clients.openWindow(targetUrl);
     }),
   );
 });

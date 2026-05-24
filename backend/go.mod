@@ -5,8 +5,10 @@ go 1.26
 toolchain go1.26.0
 
 require (
+	github.com/SherClockHolmes/webpush-go v1.4.1-0.20260422052225-76cc00f5ac2d
 	github.com/caarlos0/env/v11 v11.4.1
 	github.com/go-chi/chi/v5 v5.2.5
+	github.com/google/uuid v1.6.0
 	github.com/pressly/goose/v3 v3.27.1
 	github.com/stretchr/testify v1.11.1
 	google.golang.org/api v0.279.0
@@ -23,8 +25,8 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.15 // indirect
 	github.com/googleapis/gax-go/v2 v2.22.0 // indirect
 	github.com/mattn/go-isatty v0.0.21 // indirect

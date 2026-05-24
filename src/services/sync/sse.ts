@@ -21,7 +21,8 @@ export type SSEEventType =
   | "device.activated"
   | "device.revoked"
   | "you.removed"
-  | "sync.barrier";
+  | "sync.barrier"
+  | "notification.dismiss";
 
 export interface SSERecordChangedPayload {
   seq: number;
@@ -56,6 +57,10 @@ export interface SSESyncBarrierPayload {
   cursor: string;
 }
 
+export interface SSENotificationDismissPayload {
+  notificationId: string;
+}
+
 export type SSEPayloadMap = {
   "record.changed": SSERecordChangedPayload;
   "device.joined": SSEDeviceJoinedPayload;
@@ -63,6 +68,7 @@ export type SSEPayloadMap = {
   "device.revoked": SSEDeviceRevokedPayload;
   "you.removed": SSEYouRemovedPayload;
   "sync.barrier": SSESyncBarrierPayload;
+  "notification.dismiss": SSENotificationDismissPayload;
 };
 
 export interface SSEConnectionHandle {
@@ -117,6 +123,7 @@ export function connectSSE(opts: ConnectSSEOptions): SSEConnectionHandle {
       "device.revoked",
       "you.removed",
       "sync.barrier",
+      "notification.dismiss",
     ];
 
     for (const eventType of TYPES) {
