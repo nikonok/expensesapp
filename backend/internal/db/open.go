@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+	"io/fs"
 
 	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite"
@@ -38,12 +39,20 @@ func Open(ctx context.Context, path string) (*sql.DB, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("ping: %w", err)
 	}
-	goose.SetBaseFS(migrationsFS)
-	if err := goose.SetDialect("sqlite3"); err != nil {
+
+	// Use sub-FS so provider receives "*.sql" at the root rather than "migrations/*.sql".
+	migFS, err := fs.Sub(migrationsFS, "migrations")
+	if err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("goose dialect: %w", err)
+		return nil, fmt.Errorf("migrations sub-fs: %w", err)
 	}
-	if err := goose.UpContext(ctx, db, "migrations"); err != nil {
+
+	provider, err := goose.NewProvider(goose.DialectSQLite3, db, migFS)
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("goose.NewProvider: %w", err)
+	}
+	if _, err := provider.Up(ctx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("goose up: %w", err)
 	}

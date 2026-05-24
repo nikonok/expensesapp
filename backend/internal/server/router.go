@@ -17,6 +17,7 @@ import (
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
 	"github.com/nikonok/expensesapp/backend/internal/live"
 	"github.com/nikonok/expensesapp/backend/internal/push"
+	"github.com/nikonok/expensesapp/backend/internal/ratelimit"
 	"github.com/nikonok/expensesapp/backend/internal/snapshot"
 	syncp "github.com/nikonok/expensesapp/backend/internal/sync"
 	"github.com/nikonok/expensesapp/backend/internal/version"
@@ -45,7 +46,7 @@ func NewRouter(db *sql.DB, authH *authpkg.Handler, reauthH *authpkg.ReauthHandle
 	// Public write endpoint — CSRF-gated but no session required.
 	r.Group(func(r chi.Router) {
 		r.Use(authpkg.CSRFHeaderGate)
-		r.Post("/v1/auth/google", authH.PostGoogle)
+		r.With(ratelimit.PerIP(5, 10)).Post("/v1/auth/google", authH.PostGoogle)
 	})
 
 	// Always-public health endpoint — no auth, no CSRF gate.
@@ -55,75 +56,82 @@ func NewRouter(db *sql.DB, authH *authpkg.Handler, reauthH *authpkg.ReauthHandle
 	r.Group(func(r chi.Router) {
 		r.Use(authpkg.CSRFHeaderGate)
 		r.Use(authpkg.SessionMiddleware(db))
-		r.Post("/v1/auth/signout", authH.PostSignout)
-		r.Post("/v1/auth/signout-all", authH.PostSignoutAll)
+
+		// Read-only endpoints (no rate limit beyond session auth).
 		r.Get("/v1/me", accountH.GetMe)
 		r.Get("/v1/me/devices", accountH.GetMyDevices)
-		r.Post("/v1/me/devices/{id}/revoke", accountH.RevokeMyDevice)
-
-		// Reauth endpoints (Phase 6+).
-		r.Post("/v1/reauth/challenge", reauthH.PostChallenge)
-		r.Post("/v1/reauth/verify", reauthH.PostVerify)
-
-		// Recovery endpoints (Phase 6+).
-		r.Post("/v1/account/recovery/reveal", accountH.PostRecoveryReveal)
-		r.Post("/v1/account/recovery/regenerate", accountH.PostRecoveryRegenerate)
-
-		// Account deletion endpoints (Phase 11+).
-		r.Post("/v1/account/request-deletion", accountH.PostRequestDeletion)
-		r.Post("/v1/account/cancel-deletion", accountH.PostCancelDeletion)
-
-		// Log upload endpoint (Phase 11+).
-		r.Post("/v1/logs/send", accountH.PostSendLogs)
-
-		// Family endpoints (Phase 3+).
-		r.Post("/v1/family/init", familyH.PostInit)
-		r.Post("/v1/family/invites", familyH.PostInvite)
 		r.Get("/v1/family/invites/incoming", familyH.GetIncomingInvites)
-		r.Post("/v1/family/invites/{id}/accept", familyH.PostAcceptInvite)
-		r.Post("/v1/family/invites/{id}/decline", familyH.PostDeclineInvite)
-		r.Post("/v1/family/migrate-solo", familyH.PostMigrateSolo)
-		r.Post("/v1/family/leave", familyH.PostLeave)
-		r.Post("/v1/family/members/{userId}/remove", familyH.PostRemoveMember)
-		r.Post("/v1/family/devices/{id}/envelope", familyH.PostDeviceEnvelope)
-
-		// Sync + live + family-envelope endpoints (Phase 4+) — require active family membership.
-		r.Group(func(r chi.Router) {
-			r.Use(authpkg.RequireFamilyMembership(db))
-			r.Post("/v1/sync/push", syncH.PostPush)
-			r.Get("/v1/sync/pull", syncH.GetPull)
-			r.Get("/v1/sync/live", liveH.GetLive)
-			r.Get("/v1/family/recovery-envelope", familyH.GetRecoveryEnvelope)
-
-			// Snapshot endpoints (Phase 8+).
-			r.Get("/v1/snapshots", snapshotH.GetSnapshots)
-			r.Post("/v1/snapshots/{date}/restore", snapshotH.PostRestore)
-		})
-
-		// Push subscription endpoints (Phase 9+).
-		r.Post("/v1/push/subscribe", pushH.PostSubscribe)
-		r.Delete("/v1/push/subscribe/{id}", pushH.DeleteSubscribe)
-
-		// Notification settings + dismiss endpoints (Phase 9+).
 		r.Get("/v1/notifications/settings", pushH.GetNotificationSettings)
-		r.Patch("/v1/notifications/settings", pushH.PatchNotificationSettings)
-		r.Post("/v1/notifications/dismiss", pushH.PostDismiss)
 
-		// Admin endpoints (Phase 10+) — require admin or root role.
+		// Mutating endpoints — PerUser rate-limited.
 		r.Group(func(r chi.Router) {
-			r.Use(authpkg.RequireAdmin(db))
-			r.Get("/v1/admin/users", adminH.GetUsers)
-			r.Post("/v1/admin/users/{id}/suspend", adminH.PostSuspendUser)
-			r.Post("/v1/admin/users/{id}/unsuspend", adminH.PostUnsuspendUser)
-			r.Get("/v1/admin/allowlist", adminH.GetAllowlist)
-			r.Post("/v1/admin/allowlist", adminH.PostAllowlist)
-			r.Delete("/v1/admin/allowlist/{email}", adminH.DeleteAllowlist)
-			r.Post("/v1/admin/admins/{id}/promote", adminH.PostPromoteAdmin)
-			r.Post("/v1/admin/admins/{id}/demote", adminH.PostDemoteAdmin)
-			r.Get("/v1/admin/audit", adminH.GetAuditLog)
-			r.Post("/v1/admin/devices/{id}/revoke", adminH.PostRevokeDevice)
-			// Admin self-delete (Phase 11+) — admin testing button, self only.
-			r.Post("/v1/admin/account/delete-immediate", accountH.PostAdminDeleteImmediate)
+			r.Use(ratelimit.PerUser(30, 60))
+			r.Post("/v1/auth/signout", authH.PostSignout)
+			r.Post("/v1/auth/signout-all", authH.PostSignoutAll)
+			r.Post("/v1/me/devices/{id}/revoke", accountH.RevokeMyDevice)
+
+			// Reauth endpoints (Phase 6+) — also PerIP-limited.
+			r.With(ratelimit.PerIP(5, 10)).Post("/v1/reauth/challenge", reauthH.PostChallenge)
+			r.With(ratelimit.PerIP(5, 10)).Post("/v1/reauth/verify", reauthH.PostVerify)
+
+			// Recovery endpoints (Phase 6+).
+			r.Post("/v1/account/recovery/reveal", accountH.PostRecoveryReveal)
+			r.Post("/v1/account/recovery/regenerate", accountH.PostRecoveryRegenerate)
+
+			// Account deletion endpoints (Phase 11+).
+			r.Post("/v1/account/request-deletion", accountH.PostRequestDeletion)
+			r.Post("/v1/account/cancel-deletion", accountH.PostCancelDeletion)
+
+			// Log upload endpoint (Phase 11+).
+			r.Post("/v1/logs/send", accountH.PostSendLogs)
+
+			// Family endpoints (Phase 3+).
+			r.Post("/v1/family/init", familyH.PostInit)
+			r.Post("/v1/family/invites", familyH.PostInvite)
+			r.Post("/v1/family/invites/{id}/accept", familyH.PostAcceptInvite)
+			r.Post("/v1/family/invites/{id}/decline", familyH.PostDeclineInvite)
+			r.Post("/v1/family/migrate-solo", familyH.PostMigrateSolo)
+			r.Post("/v1/family/leave", familyH.PostLeave)
+			r.Post("/v1/family/members/{userId}/remove", familyH.PostRemoveMember)
+			r.Post("/v1/family/devices/{id}/envelope", familyH.PostDeviceEnvelope)
+
+			// Sync + live + family-envelope endpoints (Phase 4+) — require active family membership.
+			r.Group(func(r chi.Router) {
+				r.Use(authpkg.RequireFamilyMembership(db))
+				r.Post("/v1/sync/push", syncH.PostPush)
+				r.Get("/v1/sync/pull", syncH.GetPull)
+				r.Get("/v1/sync/live", liveH.GetLive)
+				r.Get("/v1/family/recovery-envelope", familyH.GetRecoveryEnvelope)
+
+				// Snapshot endpoints (Phase 8+).
+				r.Get("/v1/snapshots", snapshotH.GetSnapshots)
+				r.Post("/v1/snapshots/{date}/restore", snapshotH.PostRestore)
+			})
+
+			// Push subscription endpoints (Phase 9+).
+			r.Post("/v1/push/subscribe", pushH.PostSubscribe)
+			r.Delete("/v1/push/subscribe/{id}", pushH.DeleteSubscribe)
+
+			// Notification settings + dismiss endpoints (Phase 9+).
+			r.Patch("/v1/notifications/settings", pushH.PatchNotificationSettings)
+			r.Post("/v1/notifications/dismiss", pushH.PostDismiss)
+
+			// Admin endpoints (Phase 10+) — require admin or root role.
+			r.Group(func(r chi.Router) {
+				r.Use(authpkg.RequireAdmin(db))
+				r.Get("/v1/admin/users", adminH.GetUsers)
+				r.Post("/v1/admin/users/{id}/suspend", adminH.PostSuspendUser)
+				r.Post("/v1/admin/users/{id}/unsuspend", adminH.PostUnsuspendUser)
+				r.Get("/v1/admin/allowlist", adminH.GetAllowlist)
+				r.Post("/v1/admin/allowlist", adminH.PostAllowlist)
+				r.Delete("/v1/admin/allowlist/{email}", adminH.DeleteAllowlist)
+				r.Post("/v1/admin/admins/{id}/promote", adminH.PostPromoteAdmin)
+				r.Post("/v1/admin/admins/{id}/demote", adminH.PostDemoteAdmin)
+				r.Get("/v1/admin/audit", adminH.GetAuditLog)
+				r.Post("/v1/admin/devices/{id}/revoke", adminH.PostRevokeDevice)
+				// Admin self-delete (Phase 11+) — admin testing button, self only.
+				r.Post("/v1/admin/account/delete-immediate", accountH.PostAdminDeleteImmediate)
+			})
 		})
 	})
 
