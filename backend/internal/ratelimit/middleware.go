@@ -70,6 +70,7 @@ type store struct {
 	b int
 }
 
+// newStore allocates a store and starts the background cleanup goroutine.
 func newStore(r rate.Limit, burst int) *store {
 	s := &store{r: r, b: burst}
 	go s.cleanup()
