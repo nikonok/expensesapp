@@ -15,15 +15,12 @@ export function AccountDeletion() {
   const { show } = useToast();
 
   const user = useAuthStore((s) => s.user);
-  const setUser = useAuthStore((s) => s.user);
 
   // Seed from /me response if the user already has a pending deletion
   const [deleteAfter, setDeleteAfter] = useState<string | null>(() => user?.deleteAfter ?? null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [checkboxChecked, setCheckboxChecked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-
-  void setUser; // silence unused var — we only read user for initial state
 
   async function handleConfirmDelete() {
     setConfirmOpen(false);
