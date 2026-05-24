@@ -19,6 +19,7 @@ import (
 	"github.com/nikonok/expensesapp/backend/internal/jobs"
 	"github.com/nikonok/expensesapp/backend/internal/live"
 	internallog "github.com/nikonok/expensesapp/backend/internal/log"
+	"github.com/nikonok/expensesapp/backend/internal/push"
 	"github.com/nikonok/expensesapp/backend/internal/server"
 	"github.com/nikonok/expensesapp/backend/internal/snapshot"
 	syncp "github.com/nikonok/expensesapp/backend/internal/sync"
@@ -57,12 +58,24 @@ func main() {
 	accountH := account.NewHandler(database)
 	familyH := family.NewHandler(database)
 	familyH.SetHub(hub)
+	vapid := push.VAPIDConfig{
+		PublicKey:  cfg.VAPIDPublicKey,
+		PrivateKey: cfg.VAPIDPrivateKey,
+		Subject:    cfg.VAPIDSubject,
+	}
+	qhSvc := push.NewQuietHoursService(database)
+	deliverer := push.NewDeliverer(database, vapid, qhSvc)
+	digestSvc := push.NewDigestService(database, deliverer)
+	pushH := push.NewHandler(database, hub)
+
 	syncH := syncp.NewHandler(database)
-	syncH.SetEventBus(syncp.NewEventBus(hub))
+	eb := syncp.NewEventBus(hub)
+	eb.SetPushDeliverer(digestSvc)
+	syncH.SetEventBus(eb)
 	liveH := live.NewHandler(hub)
 	snapshotH := snapshot.NewHandler(database, hub)
 
-	r := server.NewRouter(database, authH, reauthH, accountH, familyH, syncH, liveH, snapshotH, server.HealthConfig{Version: version.String()}, slog.Default())
+	r := server.NewRouter(database, authH, reauthH, accountH, familyH, syncH, liveH, snapshotH, pushH, server.HealthConfig{Version: version.String()}, slog.Default())
 
 	srv := &http.Server{
 		Addr:    cfg.BindAddr,
@@ -70,7 +83,11 @@ func main() {
 	}
 
 	// Start background job runner (non-blocking).
-	runner := jobs.NewJobRunner(jobs.NewDailySnapshotJob(database))
+	runner := jobs.NewJobRunner(
+		jobs.NewDailySnapshotJob(database),
+		jobs.NewDigestPushJob(database, digestSvc, qhSvc),
+		jobs.NewHeldDrainerJob(database, deliverer),
+	)
 	runner.Start(context.Background())
 
 	// Graceful shutdown: listen for SIGTERM/SIGINT in background.

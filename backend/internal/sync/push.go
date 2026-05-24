@@ -246,9 +246,10 @@ func (h *Handler) PostPush(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Publish SSE events for each accepted record (best-effort, after tx commits).
+	// Publish SSE events (and fire Web Push) for each accepted record
+	// (best-effort, after tx commits).
 	if h.eventBus != nil && len(acceptedResults) > 0 {
-		h.eventBus.PublishRecordChanged(familyID, acceptedResults, acceptedTypes)
+		h.eventBus.PublishRecordChanged(familyID, userID, acceptedResults, acceptedTypes)
 	}
 
 	httpx.WriteJSON(w, http.StatusOK, pushResponse{
