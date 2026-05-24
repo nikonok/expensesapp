@@ -12,10 +12,12 @@ export interface PushSubscriptionKeys {
   endpoint: string;
   p256dh: string;
   auth: string;
+  /** Backend-assigned subscription id returned by POST /v1/push/subscribe. */
+  id: string;
 }
 
 export interface CreateSubscriptionResponse {
-  subscriptionId: string;
+  id: string;
 }
 
 // ── VAPID key ─────────────────────────────────────────────────────────────────
@@ -31,6 +33,14 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
     outputArray[i] = rawData.charCodeAt(i);
   }
   return outputArray;
+}
+
+/** Encodes an ArrayBuffer to a URL-safe base64 string (no padding). */
+function toBase64Url(bytes: ArrayBuffer): string {
+  return btoa(String.fromCharCode(...new Uint8Array(bytes)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=/g, "");
 }
 
 // ── ensurePushSubscription ────────────────────────────────────────────────────
@@ -78,24 +88,28 @@ export async function ensurePushSubscription(): Promise<PushSubscriptionKeys | n
     return null;
   }
 
-  const p256dh = btoa(String.fromCharCode(...new Uint8Array(rawKey)));
-  const auth = btoa(String.fromCharCode(...new Uint8Array(rawAuth)));
-  const keys: PushSubscriptionKeys = {
-    endpoint: subscription.endpoint,
-    p256dh,
-    auth,
-  };
+  const p256dh = toBase64Url(rawKey);
+  const auth = toBase64Url(rawAuth);
 
+  let backendId = "";
   // POST to backend — fire and forget errors are swallowed after logging.
   try {
-    await apiFetch<CreateSubscriptionResponse>("/api/v1/push/subscribe", {
+    const resp = await apiFetch<CreateSubscriptionResponse>("/api/v1/push/subscribe", {
       method: "POST",
-      body: JSON.stringify(keys),
+      body: JSON.stringify({ endpoint: subscription.endpoint, p256dh, auth }),
     });
+    backendId = resp.id;
   } catch (err) {
     console.error("ensurePushSubscription: failed to register with backend", err);
     // Don't return null — the browser-side subscription succeeded.
   }
+
+  const keys: PushSubscriptionKeys = {
+    endpoint: subscription.endpoint,
+    p256dh,
+    auth,
+    id: backendId,
+  };
 
   return keys;
 }

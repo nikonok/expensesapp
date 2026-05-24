@@ -154,6 +154,7 @@ export function NotificationSetting() {
 
   // Push / server-side notification settings.
   const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushSubscriptionId, setPushSubscriptionId] = useState<string>("");
   const [remoteSettings, setRemoteSettings] = useState<NotificationSettings>(DEFAULT_SETTINGS);
   const [loadedRemote, setLoadedRemote] = useState(false);
   const [quietEnabled, setQuietEnabled] = useState(false);
@@ -226,6 +227,7 @@ export function NotificationSetting() {
         show(t("settings.notification.push.permissionDenied"), "error");
         return;
       }
+      setPushSubscriptionId(keys.id);
       setPushEnabled(true);
     } catch {
       show(t("settings.notification.push.subscribeError"), "error");
