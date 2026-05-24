@@ -16,9 +16,11 @@ import (
 	"github.com/nikonok/expensesapp/backend/internal/config"
 	"github.com/nikonok/expensesapp/backend/internal/db"
 	"github.com/nikonok/expensesapp/backend/internal/family"
+	"github.com/nikonok/expensesapp/backend/internal/jobs"
 	"github.com/nikonok/expensesapp/backend/internal/live"
 	internallog "github.com/nikonok/expensesapp/backend/internal/log"
 	"github.com/nikonok/expensesapp/backend/internal/server"
+	"github.com/nikonok/expensesapp/backend/internal/snapshot"
 	syncp "github.com/nikonok/expensesapp/backend/internal/sync"
 	"github.com/nikonok/expensesapp/backend/internal/version"
 )
@@ -58,13 +60,18 @@ func main() {
 	syncH := syncp.NewHandler(database)
 	syncH.SetEventBus(syncp.NewEventBus(hub))
 	liveH := live.NewHandler(hub)
+	snapshotH := snapshot.NewHandler(database, hub)
 
-	r := server.NewRouter(database, authH, reauthH, accountH, familyH, syncH, liveH, server.HealthConfig{Version: version.String()}, slog.Default())
+	r := server.NewRouter(database, authH, reauthH, accountH, familyH, syncH, liveH, snapshotH, server.HealthConfig{Version: version.String()}, slog.Default())
 
 	srv := &http.Server{
 		Addr:    cfg.BindAddr,
 		Handler: r,
 	}
+
+	// Start background job runner (non-blocking).
+	runner := jobs.NewJobRunner(jobs.NewDailySnapshotJob(database))
+	runner.Start(context.Background())
 
 	// Graceful shutdown: listen for SIGTERM/SIGINT in background.
 	quit := make(chan os.Signal, 1)
@@ -83,6 +90,10 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
+
+	// Stop jobs before HTTP server so no new snapshots start during drain.
+	runner.Stop()
+
 	if err := srv.Shutdown(ctx); err != nil {
 		slog.Error("shutdown error", "error", err)
 		os.Exit(1)

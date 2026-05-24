@@ -13,6 +13,7 @@ import {
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 import BottomSheet from "../layout/BottomSheet";
 import { useToast } from "../shared/Toast";
+import { SnapshotRestore } from "./SnapshotRestore";
 
 const INTERVAL_OPTIONS: { value: number | null; label: string }[] = [
   { value: null, label: "Off" },
@@ -275,6 +276,9 @@ export function BackupSettings() {
         </span>
         <ChevronRight size={16} strokeWidth={2} style={{ color: "var(--color-text-secondary)" }} />
       </button>
+
+      {/* Restore from snapshot */}
+      <SnapshotRestore />
 
       {/* Interval picker sheet */}
       <BottomSheet

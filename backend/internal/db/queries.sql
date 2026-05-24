@@ -323,3 +323,54 @@ VALUES (?, ?, ?, ?, ?, ?);
 
 -- name: GetMigrationRecord :one
 SELECT * FROM migrations WHERE id = ? LIMIT 1;
+
+-- ----- snapshots -----
+
+-- name: InsertSnapshot :exec
+INSERT INTO snapshots (id, family_id, snapshot_date, created_at, expires_at)
+VALUES (?, ?, ?, ?, ?);
+
+-- name: InsertSnapshotEntry :exec
+INSERT INTO snapshot_entries (snapshot_id, record_id, blob_id, record_type, version, updated_at_map)
+VALUES (?, ?, ?, ?, ?, ?);
+
+-- name: ListSnapshotsForFamily :many
+-- Returns up to 30 most recent snapshots for the family, ordered by snapshot_date DESC.
+SELECT id, family_id, snapshot_date, created_at, expires_at FROM snapshots
+WHERE family_id = ?
+ORDER BY snapshot_date DESC
+LIMIT 30;
+
+-- name: GetSnapshotByDate :one
+SELECT id, family_id, snapshot_date, created_at, expires_at FROM snapshots
+WHERE family_id = ? AND snapshot_date = ?
+LIMIT 1;
+
+-- name: ListSnapshotEntries :many
+SELECT snapshot_id, record_id, blob_id, record_type, version, updated_at_map
+FROM snapshot_entries WHERE snapshot_id = ?;
+
+-- name: DeleteExpiredSnapshots :exec
+-- Cascading FK on snapshot_entries handles entry cleanup.
+DELETE FROM snapshots WHERE expires_at < ?;
+
+-- name: DeleteOrphanBlobs :exec
+-- Delete blobs not referenced by record_meta OR snapshot_entries.
+DELETE FROM blobs
+WHERE id NOT IN (SELECT blob_id FROM record_meta)
+  AND id NOT IN (SELECT blob_id FROM snapshot_entries);
+
+-- name: ListFamilies :many
+-- Returns all family IDs (for the daily snapshot job).
+SELECT id FROM families ORDER BY id;
+
+-- name: ListNonDeletedRecordMetaForFamily :many
+SELECT record_id, blob_id, record_type, version, updated_at_map
+FROM record_meta
+WHERE family_id = ? AND deleted_at IS NULL;
+
+-- name: ListAllRecordMetaForFamily :many
+SELECT record_id, blob_id, record_type, version, updated_at_map,
+       deleted_at, added_by_user, edited_by_user, family_seq, created_at, last_modified_at
+FROM record_meta
+WHERE family_id = ?;

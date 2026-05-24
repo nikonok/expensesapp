@@ -1451,3 +1451,281 @@ func (q *Queries) GetMigrationRecord(ctx context.Context, id string) (Migration,
 	)
 	return i, err
 }
+
+// ----- snapshots -----
+
+const insertSnapshot = `-- name: InsertSnapshot :exec
+INSERT INTO snapshots (id, family_id, snapshot_date, created_at, expires_at)
+VALUES (?, ?, ?, ?, ?)
+`
+
+type InsertSnapshotParams struct {
+	ID           string
+	FamilyID     string
+	SnapshotDate string
+	CreatedAt    string
+	ExpiresAt    string
+}
+
+func (q *Queries) InsertSnapshot(ctx context.Context, arg InsertSnapshotParams) error {
+	_, err := q.db.ExecContext(ctx, insertSnapshot,
+		arg.ID,
+		arg.FamilyID,
+		arg.SnapshotDate,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const insertSnapshotEntry = `-- name: InsertSnapshotEntry :exec
+INSERT INTO snapshot_entries (snapshot_id, record_id, blob_id, record_type, version, updated_at_map)
+VALUES (?, ?, ?, ?, ?, ?)
+`
+
+type InsertSnapshotEntryParams struct {
+	SnapshotID   string
+	RecordID     string
+	BlobID       string
+	RecordType   string
+	Version      int64
+	UpdatedAtMap string
+}
+
+func (q *Queries) InsertSnapshotEntry(ctx context.Context, arg InsertSnapshotEntryParams) error {
+	_, err := q.db.ExecContext(ctx, insertSnapshotEntry,
+		arg.SnapshotID,
+		arg.RecordID,
+		arg.BlobID,
+		arg.RecordType,
+		arg.Version,
+		arg.UpdatedAtMap,
+	)
+	return err
+}
+
+const listSnapshotsForFamily = `-- name: ListSnapshotsForFamily :many
+SELECT id, family_id, snapshot_date, created_at, expires_at FROM snapshots
+WHERE family_id = ?
+ORDER BY snapshot_date DESC
+LIMIT 30
+`
+
+// Returns up to 30 most recent snapshots for the family, ordered by snapshot_date DESC.
+func (q *Queries) ListSnapshotsForFamily(ctx context.Context, familyID string) ([]Snapshot, error) {
+	rows, err := q.db.QueryContext(ctx, listSnapshotsForFamily, familyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Snapshot{}
+	for rows.Next() {
+		var i Snapshot
+		if err := rows.Scan(
+			&i.ID,
+			&i.FamilyID,
+			&i.SnapshotDate,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getSnapshotByDate = `-- name: GetSnapshotByDate :one
+SELECT id, family_id, snapshot_date, created_at, expires_at FROM snapshots
+WHERE family_id = ? AND snapshot_date = ?
+LIMIT 1
+`
+
+func (q *Queries) GetSnapshotByDate(ctx context.Context, familyID string, snapshotDate string) (Snapshot, error) {
+	row := q.db.QueryRowContext(ctx, getSnapshotByDate, familyID, snapshotDate)
+	var i Snapshot
+	err := row.Scan(
+		&i.ID,
+		&i.FamilyID,
+		&i.SnapshotDate,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const listSnapshotEntries = `-- name: ListSnapshotEntries :many
+SELECT snapshot_id, record_id, blob_id, record_type, version, updated_at_map
+FROM snapshot_entries WHERE snapshot_id = ?
+`
+
+func (q *Queries) ListSnapshotEntries(ctx context.Context, snapshotID string) ([]SnapshotEntry, error) {
+	rows, err := q.db.QueryContext(ctx, listSnapshotEntries, snapshotID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SnapshotEntry{}
+	for rows.Next() {
+		var i SnapshotEntry
+		if err := rows.Scan(
+			&i.SnapshotID,
+			&i.RecordID,
+			&i.BlobID,
+			&i.RecordType,
+			&i.Version,
+			&i.UpdatedAtMap,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const deleteExpiredSnapshots = `-- name: DeleteExpiredSnapshots :exec
+DELETE FROM snapshots WHERE expires_at < ?
+`
+
+// Cascading FK on snapshot_entries handles entry cleanup.
+func (q *Queries) DeleteExpiredSnapshots(ctx context.Context, expiresAt string) error {
+	_, err := q.db.ExecContext(ctx, deleteExpiredSnapshots, expiresAt)
+	return err
+}
+
+const deleteOrphanBlobs = `-- name: DeleteOrphanBlobs :exec
+DELETE FROM blobs
+WHERE id NOT IN (SELECT blob_id FROM record_meta)
+  AND id NOT IN (SELECT blob_id FROM snapshot_entries)
+`
+
+// Delete blobs not referenced by record_meta OR snapshot_entries.
+func (q *Queries) DeleteOrphanBlobs(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteOrphanBlobs)
+	return err
+}
+
+const listFamilies = `-- name: ListFamilies :many
+SELECT id FROM families ORDER BY id
+`
+
+// Returns all family IDs (for the daily snapshot job).
+func (q *Queries) ListFamilies(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listFamilies)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNonDeletedRecordMetaForFamily = `-- name: ListNonDeletedRecordMetaForFamily :many
+SELECT record_id, blob_id, record_type, version, updated_at_map
+FROM record_meta
+WHERE family_id = ? AND deleted_at IS NULL
+`
+
+type ListNonDeletedRecordMetaForFamilyRow struct {
+	RecordID     string
+	BlobID       string
+	RecordType   string
+	Version      int64
+	UpdatedAtMap string
+}
+
+func (q *Queries) ListNonDeletedRecordMetaForFamily(ctx context.Context, familyID string) ([]ListNonDeletedRecordMetaForFamilyRow, error) {
+	rows, err := q.db.QueryContext(ctx, listNonDeletedRecordMetaForFamily, familyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListNonDeletedRecordMetaForFamilyRow{}
+	for rows.Next() {
+		var i ListNonDeletedRecordMetaForFamilyRow
+		if err := rows.Scan(
+			&i.RecordID,
+			&i.BlobID,
+			&i.RecordType,
+			&i.Version,
+			&i.UpdatedAtMap,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAllRecordMetaForFamily = `-- name: ListAllRecordMetaForFamily :many
+SELECT record_id, blob_id, record_type, version, updated_at_map, deleted_at,
+       added_by_user, edited_by_user, family_seq, created_at, last_modified_at
+FROM record_meta
+WHERE family_id = ?
+`
+
+func (q *Queries) ListAllRecordMetaForFamily(ctx context.Context, familyID string) ([]RecordMetum, error) {
+	rows, err := q.db.QueryContext(ctx, listAllRecordMetaForFamily, familyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RecordMetum{}
+	for rows.Next() {
+		var i RecordMetum
+		if err := rows.Scan(
+			&i.RecordID,
+			&i.BlobID,
+			&i.RecordType,
+			&i.Version,
+			&i.UpdatedAtMap,
+			&i.DeletedAt,
+			&i.AddedByUser,
+			&i.EditedByUser,
+			&i.FamilySeq,
+			&i.CreatedAt,
+			&i.LastModifiedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

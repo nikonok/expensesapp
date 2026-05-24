@@ -229,7 +229,13 @@
       "restored": "Data restored.",
       "noBackup": "No backup found.",
       "exported": "Backup exported.",
-      "restoreFileConfirm": "This will replace all data with the imported file. This cannot be undone."
+      "restoreFileConfirm": "This will replace all data with the imported file. This cannot be undone.",
+      "snapshotRestore": "Restore from snapshot",
+      "snapshotRestoreExpand": "Show snapshots",
+      "snapshotRestoreCollapse": "Hide snapshots",
+      "snapshotNoSnapshots": "No snapshots available.",
+      "snapshotRestoreConfirm": "This will replace your current data with the state from {{date}}. Continue?",
+      "snapshotRestored": "Restored."
     },
     "export": {
       "label": "Export data",
