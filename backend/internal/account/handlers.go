@@ -31,11 +31,12 @@ func NewHandler(db *sql.DB) *Handler {
 
 // meUserResponse is the user sub-object returned by GET /v1/me.
 type meUserResponse struct {
-	ID          string `json:"id"`
-	Email       string `json:"email"`
-	DisplayName string `json:"displayName"`
-	IsAdmin     bool   `json:"isAdmin"`
-	IsRoot      bool   `json:"isRoot"`
+	ID          string  `json:"id"`
+	Email       string  `json:"email"`
+	DisplayName string  `json:"displayName"`
+	IsAdmin     bool    `json:"isAdmin"`
+	IsRoot      bool    `json:"isRoot"`
+	DeleteAfter *string `json:"deleteAfter,omitempty"`
 }
 
 // meDeviceResponse is the device sub-object returned by GET /v1/me.
@@ -93,14 +94,20 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userResp := meUserResponse{
+		ID:          u.ID,
+		Email:       u.Email,
+		DisplayName: u.DisplayName,
+		IsAdmin:     u.IsAdmin != 0,
+		IsRoot:      u.IsRoot != 0,
+	}
+	if u.DeleteAfter.Valid {
+		s := u.DeleteAfter.String
+		userResp.DeleteAfter = &s
+	}
+
 	httpx.WriteJSON(w, http.StatusOK, meResponse{
-		User: meUserResponse{
-			ID:          u.ID,
-			Email:       u.Email,
-			DisplayName: u.DisplayName,
-			IsAdmin:     u.IsAdmin != 0,
-			IsRoot:      u.IsRoot != 0,
-		},
+		User: userResp,
 		Device: meDeviceResponse{
 			ID:    d.ID,
 			Label: d.Label,
