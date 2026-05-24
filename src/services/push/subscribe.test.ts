@@ -22,6 +22,7 @@ vi.mock("./subscribe", async (importOriginal) => {
     endpoint: string;
     p256dh: string;
     auth: string;
+    id: string;
   } | null> {
     if (typeof Notification === "undefined" || !("serviceWorker" in navigator)) {
       return null;
@@ -65,9 +66,14 @@ vi.mock("./subscribe", async (importOriginal) => {
     const rawAuth = subscription.getKey("auth");
     if (!rawKey || !rawAuth) return null;
 
-    const p256dh = btoa(String.fromCharCode(...new Uint8Array(rawKey)));
-    const auth = btoa(String.fromCharCode(...new Uint8Array(rawAuth)));
-    const keys = { endpoint: subscription.endpoint, p256dh, auth };
+    const toBase64Url = (bytes: ArrayBuffer) =>
+      btoa(String.fromCharCode(...new Uint8Array(bytes)))
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=/g, "");
+    const p256dh = toBase64Url(rawKey);
+    const auth = toBase64Url(rawAuth);
+    const keys = { endpoint: subscription.endpoint, p256dh, auth, id: "" };
 
     try {
       const headers = new Headers();
@@ -175,7 +181,7 @@ describe("ensurePushSubscription", () => {
       serviceWorker: { ready: Promise.resolve(registration) },
     });
 
-    mockFetch.mockResolvedValueOnce(okResponse({ subscriptionId: "sub-42" }));
+    mockFetch.mockResolvedValueOnce(okResponse({ id: "sub-42" }));
 
     const { ensurePushSubscription } = await import("./subscribe");
     const result = await ensurePushSubscription();
@@ -184,6 +190,9 @@ describe("ensurePushSubscription", () => {
     expect(result!.endpoint).toBe("https://push.example.com/sub-42");
     expect(typeof result!.p256dh).toBe("string");
     expect(typeof result!.auth).toBe("string");
+    // Keys must be URL-safe base64 (no +, /, or = characters).
+    expect(result!.p256dh).not.toMatch(/[+/=]/);
+    expect(result!.auth).not.toMatch(/[+/=]/);
 
     // Verify backend POST.
     expect(mockFetch).toHaveBeenCalledOnce();
