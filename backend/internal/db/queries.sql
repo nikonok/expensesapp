@@ -374,3 +374,81 @@ SELECT record_id, blob_id, record_type, version, updated_at_map,
        deleted_at, added_by_user, edited_by_user, family_seq, created_at, last_modified_at
 FROM record_meta
 WHERE family_id = ?;
+
+-- ----- push_subscriptions -----
+
+-- name: InsertPushSubscription :exec
+INSERT INTO push_subscriptions (id, device_id, endpoint, p256dh, auth, created_at)
+VALUES (?, ?, ?, ?, ?, ?);
+
+-- name: ListPushSubscriptionsForUser :many
+-- Returns active (non-deleted) push subscriptions for all devices owned by the user.
+SELECT ps.id, ps.device_id, ps.endpoint, ps.p256dh, ps.auth,
+       ps.created_at, ps.last_success_at, ps.last_failure_at
+FROM push_subscriptions ps
+JOIN devices d ON d.id = ps.device_id
+WHERE d.user_id = ?
+  AND ps.last_failure_at IS NULL OR ps.last_success_at > ps.last_failure_at;
+
+-- name: DeletePushSubscription :exec
+DELETE FROM push_subscriptions WHERE id = ?;
+
+-- name: MarkPushSubscriptionSuccess :exec
+UPDATE push_subscriptions SET last_success_at = ? WHERE id = ?;
+
+-- name: MarkPushSubscriptionFailure :exec
+UPDATE push_subscriptions SET last_failure_at = ? WHERE id = ?;
+
+-- name: ListPushSubscriptionsForDevice :many
+SELECT id, device_id, endpoint, p256dh, auth, created_at, last_success_at, last_failure_at
+FROM push_subscriptions
+WHERE device_id = ?;
+
+-- ----- notification_settings -----
+
+-- name: GetNotificationSettings :one
+SELECT user_id, tz, reminder_time, quiet_start, quiet_end,
+       daily_reminder, missed_day, family_digest, updated_at
+FROM notification_settings
+WHERE user_id = ?;
+
+-- name: UpsertNotificationSettings :exec
+INSERT INTO notification_settings
+    (user_id, tz, reminder_time, quiet_start, quiet_end,
+     daily_reminder, missed_day, family_digest, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(user_id) DO UPDATE SET
+    tz             = excluded.tz,
+    reminder_time  = excluded.reminder_time,
+    quiet_start    = excluded.quiet_start,
+    quiet_end      = excluded.quiet_end,
+    daily_reminder = excluded.daily_reminder,
+    missed_day     = excluded.missed_day,
+    family_digest  = excluded.family_digest,
+    updated_at     = excluded.updated_at;
+
+-- ----- held_notifications -----
+
+-- name: InsertHeldNotification :exec
+INSERT INTO held_notifications (id, user_id, payload, deliver_after, created_at)
+VALUES (?, ?, ?, ?, ?);
+
+-- name: ListDueHeldNotifications :many
+SELECT id, user_id, payload, deliver_after, created_at
+FROM held_notifications
+WHERE deliver_after <= ?
+ORDER BY deliver_after ASC;
+
+-- name: DeleteHeldNotification :exec
+DELETE FROM held_notifications WHERE id = ?;
+
+-- ----- family push helpers -----
+
+-- name: ListActiveUserIDsForFamily :many
+-- Returns user IDs of all active family members (left_at IS NULL).
+SELECT user_id FROM family_members WHERE family_id = ? AND left_at IS NULL;
+
+-- name: CountRecentChangesForFamily :one
+-- Count records modified in the last 24h for digest purposes.
+SELECT COUNT(*) FROM record_meta
+WHERE family_id = ? AND last_modified_at >= ?;
