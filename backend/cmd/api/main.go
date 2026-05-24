@@ -49,6 +49,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Purge any overdue account deletions before starting the server.
+	account.EnsurePurgeOnStartup(context.Background(), database)
+
 	hub := live.NewHub()
 
 	verifier := authpkg.NewGoogleVerifier(cfg.GoogleOAuthClientID)
@@ -88,6 +91,7 @@ func main() {
 		jobs.NewDailySnapshotJob(database),
 		jobs.NewDigestPushJob(database, digestSvc, qhSvc),
 		jobs.NewHeldDrainerJob(database, deliverer),
+		jobs.NewDeletionPurgeJob(database),
 	)
 	runner.Start(context.Background())
 
