@@ -75,6 +75,7 @@ let broadcastCleanup: (() => void) | null = null;
 
 /** Resets module-level state. Exported for test isolation only. */
 export function _resetForTesting(): void {
+  if (!import.meta.env.TEST) return;
   lastCatchUpAt = 0;
   catchUpInProgress = false;
   visibilityCleanup = null;
