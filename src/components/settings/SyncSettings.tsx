@@ -39,7 +39,7 @@ export function SyncSettings() {
   }
 
   const pbsSupportLabel =
-    pbsSupported === null ? "Checking…" : pbsSupported ? "Supported" : "Not supported (iOS)";
+    pbsSupported === null ? "Checking…" : pbsSupported ? "Supported" : "Not available";
 
   const pbsRegisteredLabel =
     pbsSupported === false
