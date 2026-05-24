@@ -138,12 +138,13 @@ function TimeRow({
 // ── Main component ────────────────────────────────────────────────────────────
 
 const DEFAULT_SETTINGS: NotificationSettings = {
-  dailyReminderTime: "20:00",
-  dailyReminderEnabled: false,
-  missedDayEnabled: false,
-  familyDigestEnabled: false,
-  quietHoursStart: null,
-  quietHoursEnd: null,
+  tz: "UTC",
+  reminderTime: "20:00",
+  dailyReminder: false,
+  missedDay: false,
+  familyDigest: false,
+  quietStart: "22:00",
+  quietEnd: "08:00",
 };
 
 export function NotificationSetting() {
@@ -164,7 +165,7 @@ export function NotificationSetting() {
       .then((s) => {
         if (cancelled) return;
         setRemoteSettings(s);
-        setQuietEnabled(s.quietHoursStart !== null);
+        setQuietEnabled(s.quietStart !== "" && s.quietStart !== "00:00");
         setLoadedRemote(true);
       })
       .catch(() => {
@@ -243,46 +244,46 @@ export function NotificationSetting() {
   }
 
   async function handleDailyReminderToggle(val: boolean) {
-    setRemoteSettings((s) => ({ ...s, dailyReminderEnabled: val }));
-    await patchRemote({ dailyReminderEnabled: val });
+    setRemoteSettings((s) => ({ ...s, dailyReminder: val }));
+    await patchRemote({ dailyReminder: val });
   }
 
   async function handleMissedDayToggle(val: boolean) {
-    setRemoteSettings((s) => ({ ...s, missedDayEnabled: val }));
-    await patchRemote({ missedDayEnabled: val });
+    setRemoteSettings((s) => ({ ...s, missedDay: val }));
+    await patchRemote({ missedDay: val });
   }
 
   async function handleFamilyDigestToggle(val: boolean) {
-    setRemoteSettings((s) => ({ ...s, familyDigestEnabled: val }));
-    await patchRemote({ familyDigestEnabled: val });
+    setRemoteSettings((s) => ({ ...s, familyDigest: val }));
+    await patchRemote({ familyDigest: val });
   }
 
   async function handleReminderTimeChange(time: string) {
-    setRemoteSettings((s) => ({ ...s, dailyReminderTime: time }));
-    await patchRemote({ dailyReminderTime: time });
+    setRemoteSettings((s) => ({ ...s, reminderTime: time }));
+    await patchRemote({ reminderTime: time });
   }
 
   async function handleQuietToggle(val: boolean) {
     setQuietEnabled(val);
     if (!val) {
-      setRemoteSettings((s) => ({ ...s, quietHoursStart: null, quietHoursEnd: null }));
-      await patchRemote({ quietHoursStart: null, quietHoursEnd: null });
+      setRemoteSettings((s) => ({ ...s, quietStart: "", quietEnd: "" }));
+      await patchRemote({ quietStart: "", quietEnd: "" });
     } else {
       const start = "22:00";
       const end = "08:00";
-      setRemoteSettings((s) => ({ ...s, quietHoursStart: start, quietHoursEnd: end }));
-      await patchRemote({ quietHoursStart: start, quietHoursEnd: end });
+      setRemoteSettings((s) => ({ ...s, quietStart: start, quietEnd: end }));
+      await patchRemote({ quietStart: start, quietEnd: end });
     }
   }
 
   async function handleQuietStartChange(time: string) {
-    setRemoteSettings((s) => ({ ...s, quietHoursStart: time }));
-    await patchRemote({ quietHoursStart: time });
+    setRemoteSettings((s) => ({ ...s, quietStart: time }));
+    await patchRemote({ quietStart: time });
   }
 
   async function handleQuietEndChange(time: string) {
-    setRemoteSettings((s) => ({ ...s, quietHoursEnd: time }));
-    await patchRemote({ quietHoursEnd: time });
+    setRemoteSettings((s) => ({ ...s, quietEnd: time }));
+    await patchRemote({ quietEnd: time });
   }
 
   return (
@@ -335,27 +336,27 @@ export function NotificationSetting() {
             <>
               <ToggleRow
                 label={t("settings.notification.push.dailyReminder")}
-                checked={remoteSettings.dailyReminderEnabled}
+                checked={remoteSettings.dailyReminder}
                 onChange={handleDailyReminderToggle}
               />
 
-              {remoteSettings.dailyReminderEnabled && (
+              {remoteSettings.dailyReminder && (
                 <TimeRow
                   label={t("settings.notification.time")}
-                  value={remoteSettings.dailyReminderTime}
+                  value={remoteSettings.reminderTime}
                   onChange={handleReminderTimeChange}
                 />
               )}
 
               <ToggleRow
                 label={t("settings.notification.push.missedDay")}
-                checked={remoteSettings.missedDayEnabled}
+                checked={remoteSettings.missedDay}
                 onChange={handleMissedDayToggle}
               />
 
               <ToggleRow
                 label={t("settings.notification.push.familyDigest")}
-                checked={remoteSettings.familyDigestEnabled}
+                checked={remoteSettings.familyDigest}
                 onChange={handleFamilyDigestToggle}
               />
 
@@ -370,12 +371,12 @@ export function NotificationSetting() {
                 <>
                   <TimeRow
                     label={t("settings.notification.push.quietStart")}
-                    value={remoteSettings.quietHoursStart ?? "22:00"}
+                    value={remoteSettings.quietStart || "22:00"}
                     onChange={handleQuietStartChange}
                   />
                   <TimeRow
                     label={t("settings.notification.push.quietEnd")}
-                    value={remoteSettings.quietHoursEnd ?? "08:00"}
+                    value={remoteSettings.quietEnd || "08:00"}
                     onChange={handleQuietEndChange}
                   />
                 </>

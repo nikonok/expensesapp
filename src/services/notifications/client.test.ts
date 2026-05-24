@@ -22,12 +22,13 @@ beforeEach(() => {
 // ── Fixtures ───────────────────────────────────────────────────────────────────
 
 const SETTINGS_FIXTURE = {
-  dailyReminderTime: "20:00",
-  dailyReminderEnabled: true,
-  missedDayEnabled: false,
-  familyDigestEnabled: false,
-  quietHoursStart: null,
-  quietHoursEnd: null,
+  tz: "UTC",
+  reminderTime: "20:00",
+  dailyReminder: true,
+  missedDay: false,
+  familyDigest: false,
+  quietStart: "",
+  quietEnd: "",
 };
 
 // ── getNotificationSettings ────────────────────────────────────────────────────
@@ -39,9 +40,9 @@ describe("getNotificationSettings", () => {
 
     const result = await getNotificationSettings();
 
-    expect(result.dailyReminderTime).toBe("20:00");
-    expect(result.dailyReminderEnabled).toBe(true);
-    expect(result.quietHoursStart).toBeNull();
+    expect(result.reminderTime).toBe("20:00");
+    expect(result.dailyReminder).toBe(true);
+    expect(result.quietStart).toBe("");
 
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/v1/notifications/settings");
@@ -60,42 +61,42 @@ describe("getNotificationSettings", () => {
 
 describe("patchNotificationSettings", () => {
   it("PATCHes the settings endpoint with the provided fields", async () => {
-    const updated = { ...SETTINGS_FIXTURE, dailyReminderEnabled: false };
+    const updated = { ...SETTINGS_FIXTURE, dailyReminder: false };
     mockFetch.mockResolvedValueOnce(okResponse(updated));
     const { patchNotificationSettings } = await import("./client");
 
-    const result = await patchNotificationSettings({ dailyReminderEnabled: false });
+    const result = await patchNotificationSettings({ dailyReminder: false });
 
-    expect(result.dailyReminderEnabled).toBe(false);
+    expect(result.dailyReminder).toBe(false);
 
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/v1/notifications/settings");
     expect((init as RequestInit).method).toBe("PATCH");
     const body = JSON.parse((init as RequestInit).body as string) as {
-      dailyReminderEnabled: boolean;
+      dailyReminder: boolean;
     };
-    expect(body.dailyReminderEnabled).toBe(false);
+    expect(body.dailyReminder).toBe(false);
   });
 
   it("can patch quiet hours", async () => {
-    const updated = { ...SETTINGS_FIXTURE, quietHoursStart: "22:00", quietHoursEnd: "08:00" };
+    const updated = { ...SETTINGS_FIXTURE, quietStart: "22:00", quietEnd: "08:00" };
     mockFetch.mockResolvedValueOnce(okResponse(updated));
     const { patchNotificationSettings } = await import("./client");
 
     const result = await patchNotificationSettings({
-      quietHoursStart: "22:00",
-      quietHoursEnd: "08:00",
+      quietStart: "22:00",
+      quietEnd: "08:00",
     });
 
-    expect(result.quietHoursStart).toBe("22:00");
-    expect(result.quietHoursEnd).toBe("08:00");
+    expect(result.quietStart).toBe("22:00");
+    expect(result.quietEnd).toBe("08:00");
   });
 
   it("throws on server error", async () => {
     mockFetch.mockResolvedValueOnce(errorResponse({ title: "Bad Request" }, 400));
     const { patchNotificationSettings } = await import("./client");
 
-    await expect(patchNotificationSettings({ dailyReminderEnabled: true })).rejects.toThrow();
+    await expect(patchNotificationSettings({ dailyReminder: true })).rejects.toThrow();
   });
 });
 

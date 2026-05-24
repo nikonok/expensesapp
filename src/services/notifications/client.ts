@@ -10,18 +10,20 @@ import { apiFetch } from "@/services/auth/client";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface NotificationSettings {
-  /** HH:MM — daily reminder time in the user's local timezone. */
-  dailyReminderTime: string;
+  /** IANA timezone string for the user, e.g. "America/New_York". */
+  tz: string;
+  /** HH:MM — daily reminder time in the user's local timezone, or "" if disabled. */
+  reminderTime: string;
   /** Whether to send a daily reminder push. */
-  dailyReminderEnabled: boolean;
+  dailyReminder: boolean;
   /** Whether to send a push when the user has not logged anything for a day. */
-  missedDayEnabled: boolean;
+  missedDay: boolean;
   /** Whether to send a family digest push. */
-  familyDigestEnabled: boolean;
-  /** Quiet hours start in HH:MM (null = no quiet hours). */
-  quietHoursStart: string | null;
+  familyDigest: boolean;
+  /** Quiet hours start in HH:MM. */
+  quietStart: string;
   /** Quiet hours end in HH:MM. */
-  quietHoursEnd: string | null;
+  quietEnd: string;
 }
 
 export type PatchNotificationSettingsBody = Partial<NotificationSettings>;
