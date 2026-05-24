@@ -26,30 +26,30 @@ beforeEach(() => {
 });
 
 describe("listUsers", () => {
-  it("GETs /api/v1/admin/users without cursor", async () => {
-    mockFetch.mockResolvedValueOnce(okResponse({ users: [], nextCursor: null }));
+  it("GETs /api/v1/admin/users without offset", async () => {
+    mockFetch.mockResolvedValueOnce(okResponse({ items: [], limit: 50, offset: 0 }));
     const { listUsers } = await import("./client");
 
     const result = await listUsers();
 
-    expect(result.users).toEqual([]);
-    expect(result.nextCursor).toBeNull();
+    expect(result.items).toEqual([]);
+    expect(result.limit).toBe(50);
     const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/v1/admin/users");
   });
 
-  it("GETs with cursor query param when provided", async () => {
-    mockFetch.mockResolvedValueOnce(okResponse({ users: [], nextCursor: null }));
+  it("GETs with offset query param when provided", async () => {
+    mockFetch.mockResolvedValueOnce(okResponse({ items: [], limit: 50, offset: 50 }));
     const { listUsers } = await import("./client");
 
-    await listUsers("abc123");
+    await listUsers(50);
 
     const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("/api/v1/admin/users?cursor=abc123");
+    expect(url).toBe("/api/v1/admin/users?offset=50");
   });
 
   it("returns user list from response", async () => {
-    const users = [
+    const items = [
       {
         id: "u1",
         email: "alice@example.com",
@@ -57,6 +57,7 @@ describe("listUsers", () => {
         lastSignInAt: "2025-01-01T00:00:00Z",
         suspendedAt: null,
         isAdmin: false,
+        isRoot: false,
         promoterId: null,
         storageUsagePct: 12,
         familyMemberCount: 1,
@@ -65,13 +66,13 @@ describe("listUsers", () => {
         deletePending: false,
       },
     ];
-    mockFetch.mockResolvedValueOnce(okResponse({ users, nextCursor: "tok1" }));
+    mockFetch.mockResolvedValueOnce(okResponse({ items, limit: 50, offset: 0 }));
     const { listUsers } = await import("./client");
 
     const result = await listUsers();
-    expect(result.users).toHaveLength(1);
-    expect(result.users[0].email).toBe("alice@example.com");
-    expect(result.nextCursor).toBe("tok1");
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].email).toBe("alice@example.com");
+    expect(result.limit).toBe(50);
   });
 });
 
@@ -108,9 +109,9 @@ describe("unsuspendUser", () => {
 });
 
 describe("listAllowlist", () => {
-  it("returns entries from { entries: [...] } response shape", async () => {
-    const entries = [{ email: "bob@example.com", note: "tester", addedAt: "2025-01-01T00:00:00Z" }];
-    mockFetch.mockResolvedValueOnce(okResponse({ entries }));
+  it("returns entries from { items: [...] } response shape", async () => {
+    const items = [{ email: "bob@example.com", note: "tester", addedAt: "2025-01-01T00:00:00Z" }];
+    mockFetch.mockResolvedValueOnce(okResponse({ items }));
     const { listAllowlist } = await import("./client");
 
     const result = await listAllowlist();
@@ -177,7 +178,7 @@ describe("promoteAdmin", () => {
     await promoteAdmin("user-2");
 
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("/api/v1/admin/users/user-2/promote");
+    expect(url).toBe("/api/v1/admin/admins/user-2/promote");
     expect(init.method).toBe("POST");
   });
 });
@@ -190,25 +191,25 @@ describe("demoteAdmin", () => {
     await demoteAdmin("user-2");
 
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("/api/v1/admin/users/user-2/demote");
+    expect(url).toBe("/api/v1/admin/admins/user-2/demote");
     expect(init.method).toBe("POST");
   });
 });
 
 describe("listAuditLog", () => {
   it("GETs /api/v1/admin/audit without cursor", async () => {
-    mockFetch.mockResolvedValueOnce(okResponse({ entries: [], nextCursor: null }));
+    mockFetch.mockResolvedValueOnce(okResponse({ items: [], nextCursor: null }));
     const { listAuditLog } = await import("./client");
 
     const result = await listAuditLog();
 
-    expect(result.entries).toEqual([]);
+    expect(result.items).toEqual([]);
     const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/v1/admin/audit");
   });
 
   it("GETs with cursor query param when provided", async () => {
-    mockFetch.mockResolvedValueOnce(okResponse({ entries: [], nextCursor: null }));
+    mockFetch.mockResolvedValueOnce(okResponse({ items: [], nextCursor: null }));
     const { listAuditLog } = await import("./client");
 
     await listAuditLog("page2tok");
@@ -218,35 +219,35 @@ describe("listAuditLog", () => {
   });
 
   it("returns audit entries", async () => {
-    const entries = [
+    const items = [
       {
         id: "e1",
-        actorId: "u1",
+        actorUserId: "u1",
         actorEmail: "admin@example.com",
-        action: "suspend_user",
+        action: "user.suspend",
+        targetKind: "user",
         targetId: "u2",
-        targetEmail: "victim@example.com",
         createdAt: "2025-01-01T12:00:00Z",
       },
     ];
-    mockFetch.mockResolvedValueOnce(okResponse({ entries, nextCursor: null }));
+    mockFetch.mockResolvedValueOnce(okResponse({ items, nextCursor: null }));
     const { listAuditLog } = await import("./client");
 
     const result = await listAuditLog();
-    expect(result.entries).toHaveLength(1);
-    expect(result.entries[0].action).toBe("suspend_user");
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].action).toBe("user.suspend");
   });
 });
 
 describe("revokeDevice", () => {
-  it("DELETEs the device", async () => {
+  it("POSTs to device revoke endpoint", async () => {
     mockFetch.mockResolvedValueOnce(noContentResponse());
     const { revokeDevice } = await import("./client");
 
     await revokeDevice("dev-abc");
 
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("/api/v1/admin/devices/dev-abc");
-    expect(init.method).toBe("DELETE");
+    expect(url).toBe("/api/v1/admin/devices/dev-abc/revoke");
+    expect(init.method).toBe("POST");
   });
 });

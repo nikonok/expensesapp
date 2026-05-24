@@ -6,7 +6,6 @@
 // serves as the display hint; actual per-device revoke is driven from this table).
 
 import { useState, useEffect, useCallback } from "react";
-import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useToast } from "@/components/shared/Toast";
 import {
   listUsers,
@@ -14,7 +13,6 @@ import {
   unsuspendUser,
   promoteAdmin,
   demoteAdmin,
-  revokeDevice,
   type AdminUser,
 } from "@/services/admin/client";
 
@@ -102,19 +100,10 @@ interface UserRowProps {
   onUnsuspend: (id: string) => void;
   onPromote: (id: string) => void;
   onDemote: (id: string) => void;
-  onForceSignOut: (user: AdminUser) => void;
   acting: boolean;
 }
 
-function UserRow({
-  user,
-  onSuspend,
-  onUnsuspend,
-  onPromote,
-  onDemote,
-  onForceSignOut,
-  acting,
-}: UserRowProps) {
+function UserRow({ user, onSuspend, onUnsuspend, onPromote, onDemote, acting }: UserRowProps) {
   const isSuspended = user.suspendedAt !== null;
 
   return (
@@ -237,7 +226,7 @@ function UserRow({
                   : "var(--color-text-secondary)",
           }}
         >
-          {user.storageUsagePct}%
+          {user.storageUsagePct.toFixed(1)}%
         </span>
         {user.lastSignInAt && (
           <span
@@ -271,12 +260,16 @@ function UserRow({
         )}
 
         {user.isAdmin ? (
-          <SmallBtn
-            label={acting ? "…" : "Demote"}
-            disabled={acting}
-            variant="warn"
-            onClick={() => onDemote(user.id)}
-          />
+          // Hide Demote button for root users (isRoot: true) — Phase 13 will
+          // wire a proper "revoke all sessions for this user" endpoint.
+          !user.isRoot && (
+            <SmallBtn
+              label={acting ? "…" : "Demote"}
+              disabled={acting}
+              variant="warn"
+              onClick={() => onDemote(user.id)}
+            />
+          )
         ) : (
           <SmallBtn
             label={acting ? "…" : "Promote"}
@@ -285,13 +278,6 @@ function UserRow({
             onClick={() => onPromote(user.id)}
           />
         )}
-
-        <SmallBtn
-          label={acting ? "…" : "Force sign-out"}
-          disabled={acting || user.deviceCount === 0}
-          variant="danger"
-          onClick={() => onForceSignOut(user)}
-        />
       </div>
     </div>
   );
@@ -303,20 +289,17 @@ export function UsersList() {
   const { show: showToast } = useToast();
 
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [actingUserId, setActingUserId] = useState<string | null>(null);
-
-  // Confirm dialog state for force sign-out
-  const [forceSignOutUser, setForceSignOutUser] = useState<AdminUser | null>(null);
 
   const loadInitial = useCallback(async () => {
     setLoading(true);
     try {
       const page = await listUsers();
-      setUsers(page.users);
-      setNextCursor(page.nextCursor);
+      setUsers(page.items);
+      setHasMore(page.items.length >= page.limit);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to load users", "error");
     } finally {
@@ -329,12 +312,12 @@ export function UsersList() {
   }, [loadInitial]);
 
   async function handleLoadMore() {
-    if (!nextCursor) return;
+    if (!hasMore) return;
     setLoadingMore(true);
     try {
-      const page = await listUsers(nextCursor);
-      setUsers((prev) => [...prev, ...page.users]);
-      setNextCursor(page.nextCursor);
+      const page = await listUsers(users.length);
+      setUsers((prev) => [...prev, ...page.items]);
+      setHasMore(page.items.length >= page.limit);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to load more", "error");
     } finally {
@@ -396,26 +379,6 @@ export function UsersList() {
     }
   }
 
-  async function handleForceSignOutConfirm() {
-    if (!forceSignOutUser) return;
-    const user = forceSignOutUser;
-    setForceSignOutUser(null);
-    setActingUserId(user.id);
-    try {
-      // Revoke the device — backend revokes all sessions for the user when
-      // the single known device is removed; for multi-device users the admin
-      // should repeat per device, but a single call is sufficient for the
-      // common single-device case.
-      await revokeDevice(user.id);
-      showToast("Device(s) revoked — user signed out", "success");
-      setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, deviceCount: 0 } : u)));
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to revoke device", "error");
-    } finally {
-      setActingUserId(null);
-    }
-  }
-
   if (loading) {
     return (
       <div
@@ -468,12 +431,11 @@ export function UsersList() {
           onUnsuspend={handleUnsuspend}
           onPromote={handlePromote}
           onDemote={handleDemote}
-          onForceSignOut={setForceSignOutUser}
           acting={actingUserId === user.id}
         />
       ))}
 
-      {nextCursor && (
+      {hasMore && (
         <div
           style={{
             padding: "var(--space-4)",
@@ -502,16 +464,6 @@ export function UsersList() {
           </button>
         </div>
       )}
-
-      <ConfirmDialog
-        isOpen={forceSignOutUser !== null}
-        title="Force sign-out"
-        body={`Revoke all devices for ${forceSignOutUser?.displayName || forceSignOutUser?.email}? They will be signed out immediately.`}
-        confirmLabel="Force sign-out"
-        onConfirm={handleForceSignOutConfirm}
-        onCancel={() => setForceSignOutUser(null)}
-        variant="destructive"
-      />
     </div>
   );
 }

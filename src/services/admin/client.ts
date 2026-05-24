@@ -14,6 +14,7 @@ export interface AdminUser {
   lastSignInAt: string | null;
   suspendedAt: string | null;
   isAdmin: boolean;
+  isRoot: boolean;
   promoterId: string | null;
   storageUsagePct: number;
   familyMemberCount: number;
@@ -23,8 +24,9 @@ export interface AdminUser {
 }
 
 export interface AdminUsersPage {
-  users: AdminUser[];
-  nextCursor: string | null;
+  items: AdminUser[];
+  limit: number;
+  offset: number;
 }
 
 export interface AllowlistEntry {
@@ -35,26 +37,28 @@ export interface AllowlistEntry {
 
 export interface AuditLogEntry {
   id: string;
-  actorId: string;
-  actorEmail: string;
+  actorUserId: string | null;
+  actorEmail: string | null;
   action: string;
+  targetKind: string | null;
   targetId: string | null;
-  targetEmail: string | null;
   createdAt: string;
 }
 
 export interface AuditLogPage {
-  entries: AuditLogEntry[];
+  items: AuditLogEntry[];
   nextCursor: string | null;
 }
 
 // ── Users ──────────────────────────────────────────────────────────────────────
 
-/** GET /api/v1/admin/users?cursor=… — paginated user list. */
-export async function listUsers(cursor?: string): Promise<AdminUsersPage> {
-  const url = cursor
-    ? `/api/v1/admin/users?cursor=${encodeURIComponent(cursor)}`
-    : "/api/v1/admin/users";
+/** GET /api/v1/admin/users?offset=…&limit=… — paginated user list. */
+export async function listUsers(offset?: number, limit?: number): Promise<AdminUsersPage> {
+  const params = new URLSearchParams();
+  if (offset !== undefined && offset > 0) params.set("offset", String(offset));
+  if (limit !== undefined) params.set("limit", String(limit));
+  const qs = params.toString();
+  const url = qs ? `/api/v1/admin/users?${qs}` : "/api/v1/admin/users";
   return apiFetch<AdminUsersPage>(url);
 }
 
@@ -72,11 +76,11 @@ export async function unsuspendUser(id: string): Promise<void> {
 
 /** GET /api/v1/admin/allowlist — list allowlist entries. */
 export async function listAllowlist(): Promise<AllowlistEntry[]> {
-  const data = await apiFetch<{ entries: AllowlistEntry[] } | AllowlistEntry[]>(
+  const data = await apiFetch<{ items: AllowlistEntry[] } | AllowlistEntry[]>(
     "/api/v1/admin/allowlist",
   );
   if (Array.isArray(data)) return data;
-  return (data as { entries: AllowlistEntry[] }).entries ?? [];
+  return (data as { items: AllowlistEntry[] }).items ?? [];
 }
 
 /** POST /api/v1/admin/allowlist — add an email to the allowlist. */
@@ -96,14 +100,14 @@ export async function removeAllowlist(email: string): Promise<void> {
 
 // ── Admin role management ──────────────────────────────────────────────────────
 
-/** POST /api/v1/admin/users/:id/promote — grant admin role. */
+/** POST /api/v1/admin/admins/:id/promote — grant admin role. */
 export async function promoteAdmin(userId: string): Promise<void> {
-  await apiFetch<void>(`/api/v1/admin/users/${userId}/promote`, { method: "POST" });
+  await apiFetch<void>(`/api/v1/admin/admins/${userId}/promote`, { method: "POST" });
 }
 
-/** POST /api/v1/admin/users/:id/demote — revoke admin role. */
+/** POST /api/v1/admin/admins/:id/demote — revoke admin role. */
 export async function demoteAdmin(userId: string): Promise<void> {
-  await apiFetch<void>(`/api/v1/admin/users/${userId}/demote`, { method: "POST" });
+  await apiFetch<void>(`/api/v1/admin/admins/${userId}/demote`, { method: "POST" });
 }
 
 // ── Audit log ──────────────────────────────────────────────────────────────────
@@ -113,12 +117,13 @@ export async function listAuditLog(cursor?: string): Promise<AuditLogPage> {
   const url = cursor
     ? `/api/v1/admin/audit?cursor=${encodeURIComponent(cursor)}`
     : "/api/v1/admin/audit";
-  return apiFetch<AuditLogPage>(url);
+  const raw = await apiFetch<{ items: AuditLogEntry[]; nextCursor: string | null }>(url);
+  return { items: raw.items, nextCursor: raw.nextCursor };
 }
 
 // ── Devices ────────────────────────────────────────────────────────────────────
 
-/** DELETE /api/v1/admin/devices/:deviceId — force-revoke a device. */
+/** POST /api/v1/admin/devices/:deviceId/revoke — force-revoke a device. */
 export async function revokeDevice(deviceId: string): Promise<void> {
-  await apiFetch<void>(`/api/v1/admin/devices/${deviceId}`, { method: "DELETE" });
+  await apiFetch<void>(`/api/v1/admin/devices/${deviceId}/revoke`, { method: "POST" });
 }

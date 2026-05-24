@@ -101,8 +101,7 @@ test("admin panel: users table renders; suspend fires POST", async ({ page }) =>
     await route.fulfill({ status: 200, contentType: "text/event-stream", body: "" });
   });
 
-  // Mock users list endpoint.
-  // The AdminUsersPage TS interface uses { users, nextCursor } — match that shape.
+  // Mock users list endpoint — backend returns { items, limit, offset }.
   await page.route("**/api/v1/admin/users**", async (route) => {
     if (route.request().method() !== "GET") {
       await route.continue();
@@ -112,8 +111,9 @@ test("admin panel: users table renders; suspend fires POST", async ({ page }) =>
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        users: [USER_A, USER_B],
-        nextCursor: null,
+        items: [USER_A, USER_B],
+        limit: 50,
+        offset: 0,
       }),
     });
   });
@@ -167,7 +167,7 @@ test("admin panel: allowlist nav shows entries; add email fires POST", async ({ 
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ users: [USER_A], nextCursor: null }),
+      body: JSON.stringify({ items: [USER_A], limit: 50, offset: 0 }),
     });
   });
 

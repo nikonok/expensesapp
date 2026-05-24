@@ -209,6 +209,11 @@ func (h *Handler) PostSuspendUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if targetID == actor.id {
+		httpx.WriteError(w, r, http.StatusBadRequest, "cannot-suspend-self", "")
+		return
+	}
+
 	now := httpx.FormatTime(time.Now())
 	nowSQL := sql.NullString{String: now, Valid: true}
 
@@ -742,6 +747,7 @@ func (h *Handler) PostRevokeDevice(w http.ResponseWriter, r *http.Request) {
 
 var errNotFound = errors.New("not found")
 var errForbidden = errors.New("forbidden")
+var errCannotSuspendSelf = errors.New("cannot suspend self")
 
 // --------------------------------------------------------------------------
 // Helpers

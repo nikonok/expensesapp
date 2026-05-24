@@ -550,3 +550,37 @@ func TestAdmin_AuditList(t *testing.T) {
 		assert.True(t, exists, "audit entry must have %q field", field)
 	}
 }
+
+// --------------------------------------------------------------------------
+// TestAdmin_CannotSuspendSelf
+// --------------------------------------------------------------------------
+
+// TestAdmin_CannotSuspendSelf verifies that an admin cannot suspend themselves.
+func TestAdmin_CannotSuspendSelf(t *testing.T) {
+	authpkg.ClearSessionCache()
+	env := testenv.New(t, testenv.WithBootstrapEmail("root@example.com"))
+	defer env.Close()
+
+	// Sign in as root.
+	env.Verifier.Claims = &authpkg.Claims{
+		Email: "root@example.com", EmailVerified: true, Sub: "sub-root",
+	}
+	signInAdmin(t, env, "root@example.com")
+	authpkg.ClearSessionCache()
+
+	// Get root user ID.
+	ctx := context.Background()
+	q := gen.New(env.DB)
+	rootUser, err := q.GetUserByEmail(ctx, "root@example.com")
+	require.NoError(t, err)
+
+	// Root tries to suspend themselves — must return 400 cannot-suspend-self.
+	resp := postJSON(t, env.Client, env.Server.URL+"/v1/admin/users/"+rootUser.ID+"/suspend", nil)
+	body := readBody(t, resp)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode,
+		"admin must not suspend self; body: %s", body)
+
+	var errResp map[string]any
+	require.NoError(t, json.Unmarshal(body, &errResp))
+	assert.Equal(t, "cannot-suspend-self", errResp["title"], "error title must be cannot-suspend-self")
+}

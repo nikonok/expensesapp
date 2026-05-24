@@ -10,14 +10,14 @@ import { listAuditLog, type AuditLogEntry } from "@/services/admin/client";
 // ── Action formatting ──────────────────────────────────────────────────────────
 
 const ACTION_LABELS: Record<string, string> = {
-  suspend_user: "Suspended user",
-  unsuspend_user: "Unsuspended user",
-  promote_admin: "Promoted to admin",
-  demote_admin: "Demoted from admin",
-  add_allowlist: "Added to allowlist",
-  remove_allowlist: "Removed from allowlist",
-  revoke_device: "Revoked device",
-  delete_user: "Deleted user",
+  "user.suspend": "Suspended user",
+  "user.unsuspend": "Unsuspended user",
+  "admin.promote": "Promoted to admin",
+  "admin.demote": "Demoted from admin",
+  "allowlist.add": "Added to allowlist",
+  "allowlist.remove": "Removed from allowlist",
+  "device.revoke.admin": "Revoked device",
+  "user.delete": "Deleted user",
 };
 
 function formatAction(action: string): string {
@@ -26,14 +26,15 @@ function formatAction(action: string): string {
 
 function actionColor(action: string): string {
   if (
-    action.includes("suspend") ||
-    action.includes("delete") ||
-    action.includes("demote") ||
-    action.includes("remove")
+    action === "user.suspend" ||
+    action === "user.delete" ||
+    action === "admin.demote" ||
+    action === "allowlist.remove" ||
+    action === "device.revoke.admin"
   ) {
     return "var(--color-expense)";
   }
-  if (action.includes("promote") || action.includes("add") || action.includes("unsuspend")) {
+  if (action === "admin.promote" || action === "allowlist.add" || action === "user.unsuspend") {
     return "var(--color-income)";
   }
   return "var(--color-text-secondary)";
@@ -71,18 +72,7 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
         </span>
 
         {/* Actor */}
-        <span
-          style={{
-            fontFamily: '"DM Sans", sans-serif',
-            fontSize: "var(--text-caption)",
-            color: "var(--color-text-secondary)",
-          }}
-        >
-          by {entry.actorEmail}
-        </span>
-
-        {/* Target */}
-        {entry.targetEmail && (
+        {entry.actorEmail && (
           <span
             style={{
               fontFamily: '"DM Sans", sans-serif',
@@ -90,7 +80,20 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
               color: "var(--color-text-secondary)",
             }}
           >
-            target: {entry.targetEmail}
+            by {entry.actorEmail}
+          </span>
+        )}
+
+        {/* Target */}
+        {entry.targetKind && entry.targetId && (
+          <span
+            style={{
+              fontFamily: '"DM Sans", sans-serif',
+              fontSize: "var(--text-caption)",
+              color: "var(--color-text-secondary)",
+            }}
+          >
+            {entry.targetKind}: {entry.targetId}
           </span>
         )}
       </div>
@@ -142,7 +145,7 @@ export function AuditViewer() {
     setLoading(true);
     try {
       const page = await listAuditLog();
-      setEntries(page.entries);
+      setEntries(page.items);
       setNextCursor(page.nextCursor);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to load audit log", "error");
@@ -160,7 +163,7 @@ export function AuditViewer() {
     setLoadingMore(true);
     try {
       const page = await listAuditLog(nextCursor);
-      setEntries((prev) => [...prev, ...page.entries]);
+      setEntries((prev) => [...prev, ...page.items]);
       setNextCursor(page.nextCursor);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to load more", "error");
