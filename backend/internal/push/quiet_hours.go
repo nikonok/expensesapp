@@ -73,7 +73,7 @@ func (s *QuietHoursService) QuietEndTime(ctx context.Context, userID string, now
 
 	candidate := time.Date(local.Year(), local.Month(), local.Day(), endH, endM, 0, 0, loc)
 	if !candidate.After(local) {
-		candidate = candidate.Add(24 * time.Hour)
+		candidate = candidate.AddDate(0, 0, 1)
 	}
 	return candidate.UTC()
 }
