@@ -108,20 +108,63 @@ export async function listFamilyMembers(): Promise<FamilyMember[]> {
 
 // ── Migration ────────────────────────────────────────────────────────────────
 
+/**
+ * A single record in a migrate-solo upload.
+ *
+ * Wire-format notes:
+ * - `recordId` is a UUID string (UUIDv4 via `crypto.randomUUID()` is acceptable;
+ *   the backend does not enforce v7). Must be stable across retries.
+ * - `blob` is base64url-encoded ciphertext.
+ * - `updatedAtMap` is a JSON-encoded **string** on the wire (see `migrateSolo`).
+ *   This shape carries the LWW per-field timestamp map; the value type is kept
+ *   as `Record<string, string>` here for ergonomics — `migrateSolo` stringifies
+ *   it before transmitting.
+ * - `addedByUser` and `editedByUser` are the current user's id (UUID string).
+ *   Required by the backend handler.
+ */
 export interface SoloRecord {
   recordType: string;
   recordId: string;
   blob: string;
   updatedAtMap: Record<string, string>;
+  addedByUser: string;
+  editedByUser: string;
   deletedAt?: string;
   plaintextByteCount: number;
 }
 
-/** POST /api/v1/family/migrate-solo — push re-encrypted solo records. */
-export async function migrateSolo(targetFamilyId: string, records: SoloRecord[]): Promise<void> {
+/**
+ * POST /api/v1/family/migrate-solo — push re-encrypted solo records.
+ *
+ * The `migrationId` is the server-side idempotency key. The same id MUST be
+ * reused on retry so the server can return the cached result rather than
+ * double-committing. Callers should persist the id (see `migrate.ts`).
+ *
+ * Per the backend contract, `updatedAtMap` is wire-encoded as a JSON string.
+ */
+export async function migrateSolo(
+  migrationId: string,
+  targetFamilyId: string,
+  records: SoloRecord[],
+): Promise<void> {
+  const wireRecords = records.map((r) => ({
+    recordId: r.recordId,
+    recordType: r.recordType,
+    blob: r.blob,
+    updatedAtMap: JSON.stringify(r.updatedAtMap),
+    addedByUser: r.addedByUser,
+    editedByUser: r.editedByUser,
+    deletedAt: r.deletedAt ?? "",
+    plaintextByteCount: r.plaintextByteCount,
+  }));
+
   await apiFetch<void>("/api/v1/family/migrate-solo", {
     method: "POST",
-    body: JSON.stringify({ targetFamilyId, records }),
+    body: JSON.stringify({
+      migrationId,
+      targetFamilyId,
+      records: wireRecords,
+    }),
   });
 }
 
