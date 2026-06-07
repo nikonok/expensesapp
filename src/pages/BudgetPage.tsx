@@ -9,6 +9,7 @@ import { useBudgets } from "../hooks/use-budgets";
 import PeriodFilter from "../components/shared/PeriodFilter";
 import { BudgetSection } from "../components/budget/BudgetSection";
 import { EmptyState } from "../components/shared/EmptyState";
+import { isExpenseForReporting } from "../utils/transaction-utils";
 import type { BudgetCardData } from "../components/budget/BudgetCard";
 import type { PeriodFilter as PeriodFilterType } from "../types";
 
@@ -41,12 +42,14 @@ export default function BudgetPage() {
   const savingsAccounts = allAccounts.filter((a) => a.type === "SAVINGS");
   const debtAccounts = allAccounts.filter((a) => a.type === "DEBT");
 
-  // Sum transactions by categoryId for this month (EXPENSE type)
+  // Sum transactions by categoryId for this month — uses isExpenseForReporting so
+  // that the Budget tab agrees with the Overview tab (debt payments without a
+  // category drop out naturally because their categoryId is null).
   const categorySpend = useLiveQuery(async () => {
     const txs = await db.transactions
       .where("date")
       .between(monthStart, monthEnd, true, true)
-      .filter((tx) => tx.type === "EXPENSE" && tx.categoryId != null)
+      .filter((tx) => isExpenseForReporting(tx) && tx.categoryId != null)
       .toArray();
 
     const map: Record<number, number> = {};

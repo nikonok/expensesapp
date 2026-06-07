@@ -141,9 +141,10 @@ export function Numpad({
       onSave(0);
       return;
     }
-    const result = evaluateExpression(value);
+    const dp = currencyCode ? getCurrencyDecimalPlaces(currencyCode) : 2;
+    const result = evaluateExpression(value, dp);
     if (result === null || isNaN(result)) {
-      if (isAmountOverLimit(value)) {
+      if (isAmountOverLimit(value, dp)) {
         show(t("errors.amountTooLarge"), "error");
       }
       return;

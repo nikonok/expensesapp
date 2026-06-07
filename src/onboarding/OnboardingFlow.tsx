@@ -11,6 +11,7 @@ import { db } from "../db/database";
 import { DEFAULT_CATEGORY_PRESETS } from "../db/seed";
 import type { CategoryPreset } from "../db/seed";
 import { evaluateExpression } from "../services/math-parser";
+import { getCurrencyDecimalPlaces } from "../utils/currency-utils";
 import { getCanInstall } from "../sw-register";
 import { useUIStore } from "../stores/ui-store";
 import { SignInStep } from "./SignInStep";
@@ -20,6 +21,20 @@ import { initFamilyAndShowPhrase } from "../services/family/init";
 
 // Step order: 0=Sign-in, 1=RecoveryCode(conditional), 2=Welcome, 3=Currency, 4=First-account, 5=Categories
 const TOTAL_STEPS = 6;
+
+/** Named entry points for OnboardingFlow. Maps to a step index. */
+export type OnboardingInitialStep = "sign-in" | "welcome";
+
+function initialStepIndex(initial?: OnboardingInitialStep): number {
+  switch (initial) {
+    case "sign-in":
+      return 0;
+    case "welcome":
+      return 2;
+    default:
+      return 0;
+  }
+}
 
 function detectLocaleCurrency(): string {
   try {
@@ -616,12 +631,16 @@ function SlideContainer({
 
 // ── Main flow ──────────────────────────────────────────────────────────────────
 
-export default function OnboardingFlow() {
+export default function OnboardingFlow({
+  initialStep,
+}: {
+  initialStep?: OnboardingInitialStep;
+} = {}) {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const settingsStore = useSettingsStore();
 
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(() => initialStepIndex(initialStep));
   const [direction, setDirection] = useState<"forward" | "back">("forward");
   const [currency, setCurrency] = useState<string>(() => detectLocaleCurrency());
   const [accountName, setAccountName] = useState("Cash");
@@ -634,8 +653,9 @@ export default function OnboardingFlow() {
   const [error, setError] = useState<string | null>(null);
 
   const handleNumpadSave = (result: number) => {
+    const scale = Math.pow(10, getCurrencyDecimalPlaces(currency));
     setStartingBalance(result);
-    setNumpadValue(String(result / 100));
+    setNumpadValue(String(result / scale));
     goToStep(5);
   };
 
@@ -720,9 +740,16 @@ export default function OnboardingFlow() {
     }
   };
 
-  // After sign-in completes (step 0), determine next step based on needsFamilyInit
+  // After sign-in completes (step 0), determine next step based on needsFamilyInit.
+  // When the user is re-authenticating via `/signin` (initialStep === "sign-in")
+  // and they have already completed onboarding, return them to the startup screen
+  // rather than re-running them through welcome/currency/categories.
   const handleSignInNext = () => {
     const { isSignedIn, needsFamilyInit } = useAuthStore.getState();
+    if (initialStep === "sign-in" && settingsStore.hasCompletedOnboarding) {
+      navigate(`/${settingsStore.startupScreen}`, { replace: true });
+      return;
+    }
     if (isSignedIn && needsFamilyInit) {
       goToStep(1); // Recovery code step
     } else {
@@ -788,10 +815,12 @@ export default function OnboardingFlow() {
                 onNumpadSave={handleNumpadSave}
                 currencyCode={currency}
                 onNext={() => {
-                  const result = evaluateExpression(numpadValue);
+                  const dp = getCurrencyDecimalPlaces(currency);
+                  const scale = Math.pow(10, dp);
+                  const result = evaluateExpression(numpadValue, dp);
                   if (result !== null) {
                     setStartingBalance(result);
-                    setNumpadValue(String(result / 100));
+                    setNumpadValue(String(result / scale));
                   } else {
                     setStartingBalance(0);
                     setNumpadValue("");

@@ -17,8 +17,11 @@ export function calculatePaymentSplit(
   paymentAmount: number,
 ): PaymentSplit {
   const rawInterest = Math.abs(currentBalance) * monthlyRate;
+  // Round interest first, then derive principal from the rounded interest.
+  // Rounding both legs independently can cause `interest + principal !== paymentAmount`
+  // by one minor unit (the two halves of a rounding boundary disagree).
   const interestAmount = Math.round(Math.min(rawInterest, paymentAmount));
-  const principalAmount = Math.round(Math.max(0, paymentAmount - interestAmount));
+  const principalAmount = Math.max(0, paymentAmount - interestAmount);
   return { interestAmount, principalAmount };
 }
 
@@ -43,10 +46,16 @@ export function calculateTermSaved(
   if (currentBalance <= 0 || overpayment <= 0 || monthlyRate <= 0 || monthlyPayment <= 0) {
     return null;
   }
-  if (overpayment >= currentBalance) return null;
   const x = 1 - (currentBalance * monthlyRate) / monthlyPayment;
   if (x <= 0) return null;
   const currentN = -Math.log(x) / Math.log(1 + monthlyRate);
+  // Full-payoff (or overpayment >= remaining balance) clears the entire
+  // remaining term — return the rounded current term rather than null, so the
+  // UI can show "you saved N months" on the final lump-sum payment.
+  if (overpayment >= currentBalance) {
+    const saved = Math.round(currentN);
+    return saved > 0 ? saved : null;
+  }
   const newBalance = currentBalance - overpayment;
   // newBalance < currentBalance and x > 0, so newX > x > 0 — the guard is provably unreachable.
   const newX = 1 - (newBalance * monthlyRate) / monthlyPayment;

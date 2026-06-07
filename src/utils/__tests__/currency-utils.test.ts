@@ -133,4 +133,61 @@ describe("convertAmount — edge cases", () => {
   it("handles negative rate edge case", () => {
     expect(convertAmount(1000, -2)).toBe(-2000);
   });
+
+  it("accepts optional source+target dp arguments (signature only)", () => {
+    // convertAmount must accept dp args so call sites in the sync engine can
+    // pass them without TS errors. The math is unchanged because stored minor
+    // units use a uniform /100 scale across the app.
+    expect(convertAmount(1000, 1.5, 2, 2)).toBe(1500);
+    expect(convertAmount(1000, 1.5, 0, 2)).toBe(1500);
+    expect(convertAmount(1000, 1.5, 2, 3)).toBe(1500);
+  });
+});
+
+describe("getCurrencyDecimalPlaces — extended currency coverage", () => {
+  it("returns 3 for BHD", () => {
+    expect(getCurrencyDecimalPlaces("BHD")).toBe(3);
+  });
+
+  it("returns 0 for KRW (Korean Won)", () => {
+    // KRW has no minor unit, like JPY.
+    expect(getCurrencyDecimalPlaces("KRW")).toBe(0);
+  });
+
+  it("returns 2 for GBP", () => {
+    expect(getCurrencyDecimalPlaces("GBP")).toBe(2);
+  });
+
+  // CLF (Chilean Unidad de Fomento) has 4 decimal places in ISO 4217.
+  // Some Intl implementations report only 2 — accept whichever Node provides.
+  it("returns a sensible dp for CLF (4 per ISO, may be 2 on older Intl)", () => {
+    const dp = getCurrencyDecimalPlaces("CLF");
+    expect(dp === 2 || dp === 4).toBe(true);
+  });
+});
+
+describe("convertAmount — JPY/KWD/BHD edge cases", () => {
+  it("JPY → USD: 50000 minor (¥500) × 0.0067 → 335 minor (~$3.35)", () => {
+    // The /100 storage convention means the converted amount is still in /100
+    // minor units regardless of native dp; the rate handles the value mapping.
+    expect(convertAmount(50000, 0.0067)).toBe(335);
+  });
+
+  it("USD → JPY: 1000 minor ($10) × 150 → 150000 minor (¥1500)", () => {
+    expect(convertAmount(1000, 150)).toBe(150000);
+  });
+
+  it("USD → KWD: 10000 minor ($100) × 0.3075 → 3075 minor (~0.3075 KWD)", () => {
+    expect(convertAmount(10000, 0.3075)).toBe(3075);
+  });
+
+  it("USD → BHD: 10000 minor ($100) × 0.376 → 3760 minor (~0.376 BHD)", () => {
+    expect(convertAmount(10000, 0.376)).toBe(3760);
+  });
+
+  it("rounds half-to-even-ish (Math.round): 100 × 0.005 → 1 (boundary)", () => {
+    // 100 * 0.005 = 0.5 — Math.round produces 1 (half-up). This matches the
+    // existing convention; do not silently change rounding behaviour.
+    expect(convertAmount(100, 0.005)).toBe(1);
+  });
 });

@@ -4,13 +4,22 @@
  * Trailing operator is silently stripped before evaluation.
  * Division by zero returns null (Infinity is treated as invalid input).
  * Returns null for empty or invalid input.
- * Result is an integer in minor currency units (cents). e.g. "10.50" → 1050.
+ * Result is an integer in minor currency units.
+ *   - For 2-decimal currencies (USD/EUR/etc.) "10.50" → 1050.
+ *   - For 0-decimal currencies (JPY) "500" → 500.
+ *   - For 3-decimal currencies (KWD/BHD) "10.500" → 10500.
+ *
+ * `decimalPlaces` defaults to 2 to preserve existing behaviour when a caller
+ * does not yet know the source currency.
  */
 
 export const MAX_AMOUNT = 99_999_999_999;
 
-function evaluateRaw(expr: string): number | null {
+function evaluateRaw(expr: string, decimalPlaces: number): number | null {
   if (!expr || expr.trim() === "") return null;
+
+  const dp = Number.isFinite(decimalPlaces) && decimalPlaces >= 0 ? Math.floor(decimalPlaces) : 2;
+  const scale = Math.pow(10, dp);
 
   // Normalize unicode operators to ASCII
   let normalized = expr.replace(/×/g, "*").replace(/÷/g, "/");
@@ -70,8 +79,8 @@ function evaluateRaw(expr: string): number | null {
       } else {
         result = left.value / right.value;
       }
-      // Clamp to 2 decimal places after each step to prevent float accumulation
-      afterMulDiv.push({ type: "num", value: Math.round(result * 100) / 100 });
+      // Clamp to the currency's decimal places after each step to prevent float accumulation
+      afterMulDiv.push({ type: "num", value: Math.round(result * scale) / scale });
       i += 2;
     } else {
       afterMulDiv.push(token);
@@ -88,26 +97,26 @@ function evaluateRaw(expr: string): number | null {
     const right = afterMulDiv[j + 1];
     if (!op || op.type !== "op" || !right || right.type !== "num") return null;
     if (op.value === "+") {
-      result = Math.round((result + right.value) * 100) / 100;
+      result = Math.round((result + right.value) * scale) / scale;
     } else if (op.value === "-") {
-      result = Math.round((result - right.value) * 100) / 100;
+      result = Math.round((result - right.value) * scale) / scale;
     } else {
       return null;
     }
   }
 
-  const rounded = Math.round(result * 100);
+  const rounded = Math.round(result * scale);
   if (!isFinite(rounded)) return null;
   return rounded;
 }
 
-export function evaluateExpression(expr: string): number | null {
-  const raw = evaluateRaw(expr);
+export function evaluateExpression(expr: string, decimalPlaces: number = 2): number | null {
+  const raw = evaluateRaw(expr, decimalPlaces);
   if (raw === null || raw < 0 || raw > MAX_AMOUNT) return null;
   return raw;
 }
 
-export function isAmountOverLimit(expr: string): boolean {
-  const raw = evaluateRaw(expr);
+export function isAmountOverLimit(expr: string, decimalPlaces: number = 2): boolean {
+  const raw = evaluateRaw(expr, decimalPlaces);
   return raw !== null && raw > MAX_AMOUNT;
 }

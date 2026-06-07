@@ -65,8 +65,12 @@ export function useTotalBalance(): {
             }
             return;
           }
-          totalAssets += g.assets * r;
-          totalDebts += g.debts * r;
+          // Round each converted leg to integer minor units before summing.
+          // Summing raw floats produces sub-cent drift across many accounts
+          // (the displayed total can otherwise disagree with the per-account
+          // sum by a few minor units after enough currencies are involved).
+          totalAssets += Math.round(g.assets * r);
+          totalDebts += Math.round(g.debts * r);
         }
       }
       if (!cancelled) setNetWorth(totalAssets - totalDebts);

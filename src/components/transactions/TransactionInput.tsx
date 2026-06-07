@@ -2366,6 +2366,9 @@ export default function TransactionInput() {
             parsedSecondaryDebt > 0
           ) {
             outAmountMain = Math.round(parsedSecondaryDebt * 100);
+          } else if (account.currency === mainCurrency) {
+            // OUT leg is already in main currency — no rounding needed.
+            outAmountMain = amount;
           } else {
             outAmountMain = Math.round(amount * outRate);
           }
@@ -2424,6 +2427,20 @@ export default function TransactionInput() {
             updatedAt: now,
           };
 
+          // When one leg's currency is the main currency we MUST NOT round both
+          // legs' amountMainCurrency independently — that introduces sub-cent
+          // drift between OUT and IN (e.g. 100.00 → 100.01) and breaks the
+          // invariant that both legs of a transfer represent the same value in
+          // main currency. Derive the partner from the already-rounded leg.
+          let inAmountMain: number;
+          if (toAccount!.currency === mainCurrency) {
+            inAmountMain = inAmount;
+          } else if (account.currency === mainCurrency) {
+            inAmountMain = outAmountMain;
+          } else {
+            inAmountMain = Math.round(inAmount * inRate);
+          }
+
           const inTx: Transaction = {
             type: "TRANSFER",
             date,
@@ -2433,7 +2450,7 @@ export default function TransactionInput() {
             categoryId: null,
             currency: toAccount!.currency,
             amount: inAmount,
-            amountMainCurrency: Math.round(inAmount * inRate),
+            amountMainCurrency: inAmountMain,
             exchangeRate: inRate,
             note: note.trim(),
             transferGroupId: groupId,
@@ -2454,7 +2471,11 @@ export default function TransactionInput() {
             .then((r) => r ?? 1)
             .catch(() => 1);
 
-          const outAmountMain = Math.round(amount * outRate);
+          // Skip the multiply-and-round when the OUT leg already is in the main
+          // currency — multiplying by a stored 1.0 rate can introduce 1-cent
+          // drift from accumulated float error in the rate cache.
+          const outAmountMain =
+            account.currency === mainCurrency ? amount : Math.round(amount * outRate);
 
           let inAmount = amount;
           let inRate = outRate;
@@ -2500,6 +2521,18 @@ export default function TransactionInput() {
             updatedAt: now,
           };
 
+          // Derive the partner's amountMainCurrency from the already-rounded
+          // leg when one side is the main currency — rounding both legs
+          // independently produces sub-cent drift between OUT and IN.
+          let inAmountMain: number;
+          if (toAccount!.currency === mainCurrency) {
+            inAmountMain = inAmount;
+          } else if (account.currency === mainCurrency) {
+            inAmountMain = outAmountMain;
+          } else {
+            inAmountMain = Math.round(inAmount * inRate);
+          }
+
           const inTx: Transaction = {
             type: "TRANSFER",
             date,
@@ -2509,7 +2542,7 @@ export default function TransactionInput() {
             categoryId: null,
             currency: toAccount!.currency,
             amount: inAmount,
-            amountMainCurrency: Math.round(inAmount * inRate),
+            amountMainCurrency: inAmountMain,
             exchangeRate: inRate,
             note: note.trim(),
             transferGroupId: groupId,

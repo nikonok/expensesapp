@@ -37,8 +37,11 @@ export const transactionSchema = z.object({
   accountId: z.number().int().positive(),
   categoryId: z.number().int().positive().nullable(),
   currency: z.string().length(3),
-  amount: z.number().int().positive().finite().max(MAX_AMOUNT),
-  amountMainCurrency: z.number().int().positive().finite(),
+  // Zero-amount transactions are allowed so the sync engine can pull
+  // settlement / debt-adjustment records produced by other devices (and so
+  // historical zero-amount records survive a round-trip through validation).
+  amount: z.number().int().nonnegative().finite().max(MAX_AMOUNT),
+  amountMainCurrency: z.number().int().nonnegative().finite(),
   exchangeRate: z.number().positive().finite(),
   note: z.string().max(255).default(""),
   transferGroupId: z.string().uuid().nullable().optional(),

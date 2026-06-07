@@ -182,7 +182,6 @@ describe("calculatePaymentSplit — production minor-unit convention", () => {
   });
 });
 
-
 describe("calculateTermSaved", () => {
   it("returns null when currentBalance is zero", () => {
     expect(calculateTermSaved(0, 1000, 0.005, 1200)).toBeNull();
@@ -208,12 +207,18 @@ describe("calculateTermSaved", () => {
     expect(calculateTermSaved(100000, 1000, 0.005, 0)).toBeNull();
   });
 
-  it("returns null when overpayment equals currentBalance (full payoff edge)", () => {
-    expect(calculateTermSaved(100000, 100000, 0.005, 1200)).toBeNull();
+  it("returns the full remaining term when overpayment equals currentBalance (full payoff)", () => {
+    // Previously returned null, which hid the term saved on the final
+    // lump-sum payment. Now returns the rounded remaining term.
+    const saved = calculateTermSaved(100000, 100000, 0.005, 1200);
+    expect(saved).not.toBeNull();
+    expect(saved).toBeGreaterThan(0);
   });
 
-  it("returns null when overpayment exceeds currentBalance", () => {
-    expect(calculateTermSaved(100000, 100001, 0.005, 1200)).toBeNull();
+  it("returns the full remaining term when overpayment exceeds currentBalance", () => {
+    const saved = calculateTermSaved(100000, 100001, 0.005, 1200);
+    expect(saved).not.toBeNull();
+    expect(saved).toBeGreaterThan(0);
   });
 
   it("returns null when x <= 0 (payment too small to cover interest)", () => {

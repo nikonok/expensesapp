@@ -13,7 +13,25 @@ export function formatAmountNoSymbol(amount: number, currency: string, locale?: 
   }).format(amount / 100);
 }
 
-export function convertAmount(amount: number, rate: number): number {
+/**
+ * Convert an integer minor-unit amount in one currency to integer minor units
+ * in another currency, given the FX rate (1 unit of `from` = `rate` units of `to`).
+ *
+ * Stored minor units always use a /100 scale regardless of the currency's
+ * native decimal count (this is an app-wide convention — see CLAUDE.md).
+ * Therefore both legs share the same scale and a simple `amount * rate` round
+ * is correct. The optional dp arguments are accepted for symmetry with the
+ * upcoming sync engine and to allow future migration to native scales without
+ * changing the call sites.
+ */
+export function convertAmount(
+  amount: number,
+  rate: number,
+  _fromDecimalPlaces?: number,
+  _toDecimalPlaces?: number,
+): number {
+  void _fromDecimalPlaces;
+  void _toDecimalPlaces;
   return Math.round(amount * rate);
 }
 

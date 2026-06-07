@@ -269,12 +269,16 @@ describe("transactionSchema — valid", () => {
 });
 
 describe("transactionSchema — invalid", () => {
-  it("fails when amount is zero (not positive)", () => {
+  it("accepts a zero-amount transaction (sync-engine pull may emit settlement records)", () => {
+    // Previously the schema rejected amount=0, which discarded legitimate
+    // zero-amount settlement / debt-adjustment records pulled from other
+    // devices. Zero is now treated as a valid integer minor-unit amount.
     const result = transactionSchema.safeParse({
       ...baseExpense,
       amount: 0,
+      amountMainCurrency: 0,
     });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
   it("fails when amount is negative", () => {

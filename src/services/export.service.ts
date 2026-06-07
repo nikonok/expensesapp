@@ -1,4 +1,5 @@
 import { db } from "../db/database";
+import { getCurrencyDecimalPlaces } from "../utils/currency-utils";
 import { formatDate } from "../utils/date-utils";
 import { isDebtPayment } from "../utils/transaction-utils";
 import { logger } from "./log.service";
@@ -30,6 +31,13 @@ async function exportTransactions(
     const expenseRows: (string | number)[][] = [];
     const incomeRows: (string | number)[][] = [];
 
+    // amountMainCurrency is stored as integer minor units of the main currency.
+    // To export a human-readable major-unit number, divide by 10^dp where dp
+    // is the main currency's native decimal-place count (e.g. JPY → 0 places,
+    // USD → 2, KWD → 3). Hard-coding /100 produced wrong values for users
+    // whose main currency was not a 2-decimal currency.
+    const mainCurrencyScale = Math.pow(10, getCurrencyDecimalPlaces(mainCurrency));
+
     const emittedTransferGroups = new Set<string>();
 
     for (const tx of transactions) {
@@ -50,7 +58,7 @@ async function exportTransactions(
           const debtAccount = accounts.find((a) => a.id === outTx.toAccountId);
           expenseRows.push([
             sanitizeCell(formatDate(outTx.date)),
-            outTx.amountMainCurrency / 100,
+            outTx.amountMainCurrency / mainCurrencyScale,
             sanitizeCell(outTx.note ?? ""),
             sanitizeCell(debtAccount?.name ?? ""),
           ] as (string | number)[]);
@@ -61,7 +69,7 @@ async function exportTransactions(
           if (outTx && outTx.transferDirection === "OUT") {
             expenseRows.push([
               sanitizeCell(formatDate(outTx.date)),
-              outTx.amountMainCurrency / 100,
+              outTx.amountMainCurrency / mainCurrencyScale,
               sanitizeCell(outTx.note ?? ""),
               "Transfer",
             ] as (string | number)[]);
@@ -73,14 +81,14 @@ async function exportTransactions(
         if (tx.type === "EXPENSE") {
           expenseRows.push([
             sanitizeCell(formatDate(tx.date)),
-            tx.amountMainCurrency / 100,
+            tx.amountMainCurrency / mainCurrencyScale,
             sanitizeCell(tx.note ?? ""),
             sanitizeCell(category?.name ?? ""),
           ] as (string | number)[]);
         } else if (tx.type === "INCOME") {
           incomeRows.push([
             sanitizeCell(formatDate(tx.date)),
-            tx.amountMainCurrency / 100,
+            tx.amountMainCurrency / mainCurrencyScale,
             sanitizeCell(tx.note ?? ""),
             sanitizeCell(category?.name ?? ""),
           ] as (string | number)[]);
