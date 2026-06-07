@@ -180,7 +180,15 @@
       "notifications": "Notifications",
       "data": "Data",
       "dangerZone": "Danger Zone",
-      "account": "Account"
+      "account": "Account",
+      "security": "Security",
+      "family": "Family",
+      "sync": "Sync",
+      "admin": "Admin"
+    },
+    "admin": {
+      "openLabel": "Admin panel",
+      "openAction": "Open"
     },
     "language": {
       "label": "Language",
@@ -340,7 +348,11 @@
       "title": "Save your recovery code",
       "subtitle": "These 24 words are the only way to recover your data if you lose access. Write them down and keep them safe.",
       "confirmLabel": "I've saved my recovery code in a safe place",
-      "generating": "Setting up encryption…"
+      "generating": "Setting up encryption…",
+      "copy": "Copy",
+      "copied": "Copied",
+      "download": "Download",
+      "saveWarning": "Saving this elsewhere is the only way to recover your data if you lose all devices. Re-viewing it later requires re-authentication."
     }
   },
   "errors": {

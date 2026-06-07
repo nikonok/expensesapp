@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router";
 import { useAuthStore } from "../services/auth/session";
 
 const primaryBtnStyle: React.CSSProperties = {
@@ -53,14 +54,21 @@ function Spinner() {
 
 export function SignInStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { isSigningIn, error, signIn } = useAuthStore();
 
   const handleSignIn = async () => {
     await signIn();
+    const state = useAuthStore.getState();
     // Advance only if sign-in succeeded (no error set means success).
-    if (!useAuthStore.getState().error) {
-      onNext();
+    if (state.error) return;
+    // If this device is awaiting an envelope from an existing device, jump
+    // directly to the waiting screen instead of running through onboarding.
+    if (state.awaitingEnvelope) {
+      navigate("/devices/waiting", { replace: true });
+      return;
     }
+    onNext();
   };
 
   return (

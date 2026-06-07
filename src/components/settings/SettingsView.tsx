@@ -126,11 +126,11 @@ export function SettingsView() {
         <AccountDeletion />
 
         {/* Security section */}
-        <SectionHeader label="Security" />
+        <SectionHeader label={t("settings.sections.security")} />
         <SecuritySettings />
 
         {/* Family section */}
-        <SectionHeader label="Family" />
+        <SectionHeader label={t("settings.sections.family")} />
         <FamilySettings />
 
         {/* General section */}
@@ -172,7 +172,7 @@ export function SettingsView() {
         <NotificationSetting />
 
         {/* Sync section */}
-        <SectionHeader label="Sync" />
+        <SectionHeader label={t("settings.sections.sync")} />
         <SyncSettings />
 
         {/* Data section */}
@@ -182,10 +182,10 @@ export function SettingsView() {
         <ExportSettings />
         <LogSettings />
 
-        {/* Admin section — only rendered for admin users */}
+        {/* Admin section — only rendered for admin users (root implies admin). */}
         {isAdmin && (
           <>
-            <SectionHeader label="Admin" />
+            <SectionHeader label={t("settings.sections.admin")} />
             <button
               onClick={() => navigate("/admin")}
               style={{
@@ -211,7 +211,7 @@ export function SettingsView() {
                     color: "var(--color-text)",
                   }}
                 >
-                  Admin panel
+                  {t("settings.admin.openLabel")}
                 </span>
               </div>
               <span
@@ -221,7 +221,7 @@ export function SettingsView() {
                   color: "var(--color-primary)",
                 }}
               >
-                Open
+                {t("settings.admin.openAction")}
               </span>
             </button>
           </>

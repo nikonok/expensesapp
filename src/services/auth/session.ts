@@ -7,6 +7,7 @@ export interface AuthUser {
   email: string;
   displayName: string;
   isAdmin: boolean;
+  isRoot: boolean;
   deleteAfter?: string | null;
 }
 
@@ -109,10 +110,19 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   refreshMe: async () => {
     try {
-      const me = await apiFetch<{ user: AuthUser; device: AuthDevice }>("/api/v1/me");
-      set({ user: me.user, device: me.device, isSignedIn: true });
+      const me = await apiFetch<{
+        user: AuthUser;
+        device: AuthDevice;
+        awaitingEnvelope?: boolean;
+      }>("/api/v1/me");
+      set({
+        user: me.user,
+        device: me.device,
+        isSignedIn: true,
+        awaitingEnvelope: me.awaitingEnvelope ?? false,
+      });
     } catch {
-      set({ user: null, device: null, isSignedIn: false });
+      set({ user: null, device: null, isSignedIn: false, awaitingEnvelope: false });
     }
   },
 

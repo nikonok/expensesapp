@@ -149,12 +149,21 @@ const DEFAULT_SETTINGS: NotificationSettings = {
 
 export function NotificationSetting() {
   const { t } = useTranslation();
-  const { notificationEnabled, notificationTime, update } = useSettingsStore();
+  const {
+    notificationEnabled,
+    notificationTime,
+    pushSubscriptionId: storedPushSubscriptionId,
+    update,
+  } = useSettingsStore();
   const { show } = useToast();
 
   // Push / server-side notification settings.
+  // Initial values are derived from PushManager on mount; we don't rely on
+  // component-local state alone so unsubscribe still works after reload.
   const [pushEnabled, setPushEnabled] = useState(false);
-  const [pushSubscriptionId, setPushSubscriptionId] = useState<string>("");
+  const [pushSubscriptionId, setPushSubscriptionId] = useState<string>(
+    storedPushSubscriptionId ?? "",
+  );
   const [remoteSettings, setRemoteSettings] = useState<NotificationSettings>(DEFAULT_SETTINGS);
   const [loadedRemote, setLoadedRemote] = useState(false);
   const [quietEnabled, setQuietEnabled] = useState(false);
@@ -177,6 +186,39 @@ export function NotificationSetting() {
       cancelled = true;
     };
   }, []);
+
+  // Determine whether the device already has an active push subscription so
+  // the toggle reflects reality after reload, install, or browser restart.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!("serviceWorker" in navigator)) return;
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        const existing = await registration.pushManager.getSubscription();
+        if (cancelled) return;
+        if (existing) {
+          setPushEnabled(true);
+          if (storedPushSubscriptionId) {
+            setPushSubscriptionId(storedPushSubscriptionId);
+          }
+        } else {
+          setPushEnabled(false);
+          if (storedPushSubscriptionId) {
+            // Stale id — subscription is gone from the browser. Clear so we
+            // don't try to call DELETE on it later.
+            void update("pushSubscriptionId", null);
+            setPushSubscriptionId("");
+          }
+        }
+      } catch {
+        // PushManager unavailable; leave toggle in its default state.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [storedPushSubscriptionId, update]);
 
   // ── Local daily-reminder toggle (existing behaviour) ────────────────────────
 
@@ -219,13 +261,19 @@ export function NotificationSetting() {
   async function handlePushToggle() {
     if (pushEnabled) {
       setPushEnabled(false);
-      if (pushSubscriptionId) {
+      const idToRevoke = pushSubscriptionId || storedPushSubscriptionId || "";
+      if (idToRevoke) {
         try {
-          await disablePush(pushSubscriptionId);
+          await disablePush(idToRevoke);
         } catch (err) {
           console.warn("handlePushToggle: disablePush failed", err);
         }
-        setPushSubscriptionId("");
+      }
+      setPushSubscriptionId("");
+      try {
+        await update("pushSubscriptionId", null);
+      } catch {
+        // Persistence failure is non-fatal — local state already reflects off.
       }
       return;
     }
@@ -237,6 +285,13 @@ export function NotificationSetting() {
       }
       setPushSubscriptionId(keys.id);
       setPushEnabled(true);
+      if (keys.id) {
+        try {
+          await update("pushSubscriptionId", keys.id);
+        } catch {
+          // Persistence failure is non-fatal — toggle is on; will retry on reload.
+        }
+      }
     } catch {
       show(t("settings.notification.push.subscribeError"), "error");
     }

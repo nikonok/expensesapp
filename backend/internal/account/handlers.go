@@ -47,10 +47,14 @@ type meDeviceResponse struct {
 
 // meResponse is the JSON body returned by GET /v1/me.
 type meResponse struct {
-	User                 meUserResponse    `json:"user"`
-	Device               meDeviceResponse  `json:"device"`
-	Family               interface{}       `json:"family"`               // null in Phase 1
-	NotificationSettings interface{}       `json:"notificationSettings"` // null in Phase 1
+	User                 meUserResponse   `json:"user"`
+	Device               meDeviceResponse `json:"device"`
+	Family               interface{}      `json:"family"`               // null in Phase 1
+	NotificationSettings interface{}      `json:"notificationSettings"` // null in Phase 1
+	// AwaitingEnvelope mirrors the sign-in flag — true when this device is in
+	// `pending` status, awaiting an existing device to POST a familyKey envelope.
+	// Surfaced on /v1/me so a page reload preserves the routing decision.
+	AwaitingEnvelope bool `json:"awaitingEnvelope"`
 }
 
 // deviceListItem is one element in the GET /v1/me/devices response.
@@ -114,6 +118,9 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 		},
 		Family:               nil,
 		NotificationSettings: nil,
+		// A device in 'pending' status is waiting for an existing active device
+		// to upload its wrapped family-key envelope — see auth.PostGoogle.
+		AwaitingEnvelope: d.Status == "pending",
 	})
 }
 

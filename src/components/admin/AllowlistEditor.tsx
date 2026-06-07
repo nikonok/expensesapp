@@ -60,12 +60,14 @@ export function AllowlistEditor() {
   async function handleRemoveConfirm() {
     if (!confirmRemove) return;
     const email = confirmRemove;
-    setConfirmRemove(null);
     setRemovingEmail(email);
     try {
       await removeAllowlist(email);
       showToast("Removed from allowlist", "success");
       setEntries((prev) => prev.filter((e) => e.email !== email));
+      // Close the dialog only on success so a cancel (or error) doesn't
+      // prematurely dismiss it while the network call is in flight.
+      setConfirmRemove(null);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to remove", "error");
     } finally {

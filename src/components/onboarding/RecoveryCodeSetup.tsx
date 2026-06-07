@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Copy, Download, Check } from "lucide-react";
 
 export interface RecoveryCodeSetupProps {
   phrase: string;
@@ -9,7 +10,49 @@ export interface RecoveryCodeSetupProps {
 export function RecoveryCodeSetup({ phrase, onContinue }: RecoveryCodeSetupProps) {
   const { t } = useTranslation();
   const [confirmed, setConfirmed] = useState(false);
+  const [copied, setCopied] = useState(false);
   const words = phrase.split(" ");
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(phrase);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard may be unavailable (insecure context / permission denied);
+      // user can still write the words down or use Download.
+    }
+  };
+
+  const handleDownload = () => {
+    const blob = new Blob([phrase + "\n"], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "recovery-phrase.txt";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const actionBtnStyle: React.CSSProperties = {
+    flex: 1,
+    minHeight: "44px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "var(--space-2)",
+    background: "var(--color-surface-raised)",
+    border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-btn)",
+    color: "var(--color-text)",
+    fontFamily: '"DM Sans", sans-serif',
+    fontWeight: 500,
+    fontSize: "var(--text-body)",
+    cursor: "pointer",
+    padding: "0 var(--space-3)",
+  };
 
   return (
     <div
@@ -96,6 +139,47 @@ export function RecoveryCodeSetup({ phrase, onContinue }: RecoveryCodeSetupProps
           </div>
         ))}
       </div>
+
+      {/* Copy / Download action buttons */}
+      <div
+        style={{
+          display: "flex",
+          gap: "var(--space-2)",
+          marginBottom: "var(--space-3)",
+        }}
+      >
+        <button
+          type="button"
+          aria-label={t("onboarding.recovery.copy")}
+          onClick={() => void handleCopy()}
+          style={actionBtnStyle}
+        >
+          {copied ? <Check size={16} strokeWidth={2} /> : <Copy size={16} strokeWidth={1.75} />}
+          <span>{copied ? t("onboarding.recovery.copied") : t("onboarding.recovery.copy")}</span>
+        </button>
+        <button
+          type="button"
+          aria-label={t("onboarding.recovery.download")}
+          onClick={handleDownload}
+          style={actionBtnStyle}
+        >
+          <Download size={16} strokeWidth={1.75} />
+          <span>{t("onboarding.recovery.download")}</span>
+        </button>
+      </div>
+
+      {/* Warning about retrieval */}
+      <p
+        style={{
+          fontFamily: '"DM Sans", sans-serif',
+          fontSize: "var(--text-caption)",
+          color: "var(--color-text-muted)",
+          margin: "0 0 var(--space-4)",
+          lineHeight: 1.4,
+        }}
+      >
+        {t("onboarding.recovery.saveWarning")}
+      </p>
 
       {/* Confirmation checkbox */}
       <label
