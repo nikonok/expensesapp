@@ -23,7 +23,8 @@ import {
   type Invite,
   type FamilyMember,
 } from "@/services/family/client";
-import { migrateSoloRecordsToFamily } from "@/services/family/migrate";
+// TODO(WORK_PLAN B5): re-enable with proper key wrap
+// import { migrateSoloRecordsToFamily } from "@/services/family/migrate";
 
 // ── Row atoms ─────────────────────────────────────────────────────────────────
 
@@ -111,40 +112,20 @@ function ActionButton({
 
 interface MigrationDialogProps {
   isOpen: boolean;
-  inviteId: string;
-  targetFamilyId: string;
+  // TODO(WORK_PLAN B5): re-enable with proper key wrap — these become
+  // load-bearing again when the migrate button is wired to the worker.
+  inviteId?: string;
+  targetFamilyId?: string;
   onClose: () => void;
-  onDone: () => void;
+  onDone?: () => void;
 }
 
-function MigrationDialog({
-  isOpen,
-  inviteId,
-  targetFamilyId,
-  onClose,
-  onDone,
-}: MigrationDialogProps) {
-  const { show: showToast } = useToast();
-  const [loading, setLoading] = useState(false);
-
-  async function handleMoveData() {
-    setLoading(true);
-    try {
-      // Phase 13: unwrap the target family key and pass it here.
-      // For now we create a stub 32-byte key so the migration compiles and
-      // the button is exercisable in tests.  The real unwrap will be wired
-      // when the backend exposes the wrapped key in the accept response.
-      const stubKey = new Uint8Array(32);
-      await migrateSoloRecordsToFamily(targetFamilyId, stubKey);
-      await acceptInvite(inviteId);
-      showToast("Data moved — welcome to the family!", "success");
-      onDone();
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Migration failed", "error");
-    } finally {
-      setLoading(false);
-    }
-  }
+function MigrationDialog({ isOpen, onClose }: MigrationDialogProps) {
+  // TODO(WORK_PLAN B5): re-enable with proper key wrap.
+  // The previous implementation encrypted migrated records under an
+  // all-zero family key, which would silently corrupt them. The "Move my
+  // data" button is wrapped in <ComingSoonStub> until B5 plumbs the real
+  // wrapped key through the worker.
 
   if (!isOpen) return null;
 
@@ -212,10 +193,10 @@ function MigrationDialog({
         </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+          {/* TODO(WORK_PLAN B5): re-enable with proper key wrap. */}
           <ComingSoonStub>
             <button
-              onClick={handleMoveData}
-              disabled={loading}
+              type="button"
               style={{
                 minHeight: "44px",
                 width: "100%",
@@ -226,17 +207,15 @@ function MigrationDialog({
                 fontFamily: '"DM Sans", sans-serif',
                 fontWeight: 500,
                 fontSize: "var(--text-body)",
-                cursor: loading ? "not-allowed" : "pointer",
-                opacity: loading ? 0.6 : 1,
+                cursor: "pointer",
               }}
             >
-              {loading ? "Moving…" : "Move my data"}
+              Move my data
             </button>
           </ComingSoonStub>
 
           <button
             onClick={onClose}
-            disabled={loading}
             style={{
               minHeight: "44px",
               background: "none",
@@ -246,7 +225,7 @@ function MigrationDialog({
               fontFamily: '"DM Sans", sans-serif',
               fontWeight: 400,
               fontSize: "var(--text-caption)",
-              cursor: loading ? "not-allowed" : "pointer",
+              cursor: "pointer",
             }}
           >
             Cancel
