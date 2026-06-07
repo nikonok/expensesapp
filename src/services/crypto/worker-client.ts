@@ -192,4 +192,45 @@ export const cryptoWorker = {
       familyId,
       createdAt,
     }),
+
+  /**
+   * Clears all key material in the worker-owned IndexedDB (`expenses-app-keys`).
+   * Used by the `you.removed` SSE branch and the in-app reset flow — neither
+   * of which should touch the main-thread Dexie key store directly (B5d).
+   */
+  clearAllStoredKeys: () => call<void>({ type: "clearAllStoredKeys" }),
+
+  /**
+   * Returns a short, human-verifiable fingerprint (13 base32 chars) of a
+   * device public key. Computed via libsodium `crypto_generichash(8, pubKey)`.
+   * Shown next to Approve / Reject in the DeviceJoinedBanner.
+   */
+  fingerprintPublicKey: (pubKeyB64u: string) =>
+    call<string>({ type: "fingerprintPublicKey", pubKeyB64u }),
+
+  /**
+   * Re-encrypts solo records under the target family key without exposing the
+   * raw key to the main thread. Pass the sealed envelope obtained during
+   * acceptInvite + a batch of records (plaintext bytes + meta). The worker
+   * unwraps the envelope using its cached device keypair, encrypts each
+   * record, optionally persists the new key, and returns the encrypted batch.
+   */
+  migrateSoloRecords: (
+    targetEnvelope: Uint8Array,
+    persistAfter: boolean,
+    records: Array<{
+      recordType: string;
+      recordId: string;
+      plaintext: Uint8Array;
+      meta: RecordMeta;
+    }>,
+  ) =>
+    call<
+      Array<{
+        recordType: string;
+        recordId: string;
+        blob: Uint8Array;
+        plaintextByteCount: number;
+      }>
+    >({ type: "migrateSoloRecords", targetEnvelope, persistAfter, records }),
 };

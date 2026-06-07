@@ -12,12 +12,24 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
 // Mock the crypto worker to avoid bringing in the Web Worker bundle.
+// `migrateSoloRecords` now does the heavy lifting (unwrap → encrypt → persist)
+// inside the worker; the test mock echoes back the input batch with a fake
+// blob + byte count so the migrate caller's wire-shape can still be inspected.
 vi.mock("@/services/crypto/worker-client", () => ({
   cryptoWorker: {
-    encryptRecord: vi.fn(async () => ({
-      blob: new Uint8Array(64).fill(7),
-      plaintextByteCount: 42,
-    })),
+    migrateSoloRecords: vi.fn(
+      async (
+        _envelope: Uint8Array,
+        _persist: boolean,
+        records: Array<{ recordType: string; recordId: string }>,
+      ) =>
+        records.map((r) => ({
+          recordType: r.recordType,
+          recordId: r.recordId,
+          blob: new Uint8Array(64).fill(7),
+          plaintextByteCount: 42,
+        })),
+    ),
   },
 }));
 

@@ -1,11 +1,13 @@
 // Solo-to-family migration helper (architecture §8.7, Phase 7e).
 //
-// Reads all local Dexie records, re-encrypts each under the target family key,
-// then calls migrateSolo to upload the batch to the server.
+// Reads all local Dexie records, re-encrypts each under the target family key
+// inside the crypto worker, then calls migrateSolo to upload the batch.
 //
-// The target family key is passed as a base64url string obtained from the
-// acceptInvite response (the server provides a wrapped copy the new member
-// can unwrap with their device key).
+// B5c: the raw familyKey no longer crosses postMessage. The target key arrives
+// as a sealed envelope wrapped for this device's pubkey during acceptInvite;
+// the caller passes that envelope here and the crypto worker unwraps it
+// internally for the re-encrypt + (optionally) persists it as the new stored
+// familyKey once the upload succeeds.
 //
 // Wire-contract notes (see WORK_PLAN.md brief B2):
 //   - `migrationId` is required and is the backend idempotency key. We persist
@@ -118,17 +120,22 @@ async function getOrCreateRecordId(recordType: string, localId: string): Promise
 
 /**
  * Gathers all local domain records (transactions, accounts, categories, budgets)
- * from Dexie, re-encrypts each under the target family key via the crypto worker
- * (using a dedicated RPC that bypasses the stored key), and uploads the batch.
+ * from Dexie, asks the crypto worker to re-encrypt each under the target family
+ * key, and uploads the batch.
+ *
+ * The raw target familyKey stays inside the worker. The caller passes the
+ * sealed envelope wrapped for this device's pubkey (returned by acceptInvite)
+ * and the worker unwraps it on demand. On success the worker also persists
+ * the new key as the device's active familyKey (replacing the solo key).
  *
  * @param targetFamilyId  The family the user is joining.
- * @param targetFamilyKey The new family's key as raw bytes (provided by the
- *                        server wrapped in the user's device envelope,
- *                        unwrapped by caller before being passed here).
+ * @param targetEnvelope  Sealed-box envelope (80 bytes) of the new family's
+ *                        key, wrapped for this device's pubkey. Obtained
+ *                        client-side from the acceptInvite response.
  */
 export async function migrateSoloRecordsToFamily(
   targetFamilyId: string,
-  targetFamilyKey: Uint8Array,
+  targetEnvelope: Uint8Array,
 ): Promise<void> {
   const { cryptoWorker } = await import("@/services/crypto/worker-client");
 
@@ -157,9 +164,8 @@ export async function migrateSoloRecordsToFamily(
   const migrationId = await getOrCreateMigrationId(sourceFamilyId, targetFamilyId);
 
   const now = new Date().toISOString();
-  const reEncrypted: SoloRecord[] = [];
 
-  // Collect each record type and re-encrypt under the target family key.
+  // Collect each record type, mint stable UUIDs, and build the worker batch.
   const [transactions, accounts, categories, budgets] = await Promise.all([
     db.transactions.toArray(),
     db.accounts.toArray(),
@@ -167,7 +173,30 @@ export async function migrateSoloRecordsToFamily(
     db.budgets.toArray(),
   ]);
 
-  async function processRecords(
+  type WorkerBatchEntry = {
+    recordType: string;
+    recordId: string;
+    plaintext: Uint8Array;
+    meta: {
+      verByte: 1;
+      familyId: string;
+      recordId: string;
+      recordType: string;
+      addedByUserId: string;
+      editedByUserId: string;
+      updatedAtMap: Record<string, string>;
+      deletedAt: string;
+    };
+  };
+
+  const workerBatch: WorkerBatchEntry[] = [];
+  // Side-channel info we need after re-encryption to assemble SoloRecord[].
+  const sidecar: Array<{
+    isTrashed: boolean;
+    updatedAtMap: Record<string, string>;
+  }> = [];
+
+  async function collect(
     records: Record<string, unknown>[],
     recordType: string,
     getLocalId: (r: Record<string, unknown>) => string,
@@ -178,56 +207,57 @@ export async function migrateSoloRecordsToFamily(
         logger.warn("migrate: skipping record with no id", { recordType });
         continue;
       }
-
       const recordId = await getOrCreateRecordId(recordType, localId);
-
       const plaintext = new TextEncoder().encode(JSON.stringify(record));
       const updatedAtMap: Record<string, string> = { _all: now };
-
-      const meta = {
-        verByte: 1 as const,
-        familyId: targetFamilyId,
-        recordId,
+      const isTrashed = Boolean(record.isTrashed);
+      workerBatch.push({
         recordType,
-        addedByUserId: userId,
-        editedByUserId: userId,
-        updatedAtMap,
-        deletedAt: (record.isTrashed ? now : "") as string,
-      };
-
-      // Use the worker RPC that encrypts under an explicitly provided key
-      // rather than the stored key.
-      const { blob, plaintextByteCount } = await cryptoWorker.encryptRecord(
+        recordId,
         plaintext,
-        targetFamilyKey,
-        meta,
-      );
-
-      reEncrypted.push({
-        recordType,
-        recordId,
-        blob: toBase64Url(blob),
-        updatedAtMap,
-        addedByUser: userId,
-        editedByUser: userId,
-        deletedAt: record.isTrashed ? now : undefined,
-        plaintextByteCount,
+        meta: {
+          verByte: 1,
+          familyId: targetFamilyId,
+          recordId,
+          recordType,
+          addedByUserId: userId,
+          editedByUserId: userId,
+          updatedAtMap,
+          deletedAt: isTrashed ? now : "",
+        },
       });
+      sidecar.push({ isTrashed, updatedAtMap });
     }
   }
 
-  await processRecords(transactions as unknown as Record<string, unknown>[], "transaction", (r) =>
+  await collect(transactions as unknown as Record<string, unknown>[], "transaction", (r) =>
     String(r.id ?? ""),
   );
-  await processRecords(accounts as unknown as Record<string, unknown>[], "account", (r) =>
+  await collect(accounts as unknown as Record<string, unknown>[], "account", (r) =>
     String(r.id ?? ""),
   );
-  await processRecords(categories as unknown as Record<string, unknown>[], "category", (r) =>
+  await collect(categories as unknown as Record<string, unknown>[], "category", (r) =>
     String(r.id ?? ""),
   );
-  await processRecords(budgets as unknown as Record<string, unknown>[], "budget", (r) =>
+  await collect(budgets as unknown as Record<string, unknown>[], "budget", (r) =>
     String(r.id ?? ""),
   );
+
+  // Single worker call — unwraps the target key in-worker, encrypts every
+  // record, and (since we expect to swap to the target family on success)
+  // persists the new key. The raw key never crosses postMessage.
+  const encrypted = await cryptoWorker.migrateSoloRecords(targetEnvelope, true, workerBatch);
+
+  const reEncrypted: SoloRecord[] = encrypted.map((enc, idx) => ({
+    recordType: enc.recordType,
+    recordId: enc.recordId,
+    blob: toBase64Url(enc.blob),
+    updatedAtMap: sidecar[idx].updatedAtMap,
+    addedByUser: userId,
+    editedByUser: userId,
+    deletedAt: sidecar[idx].isTrashed ? now : undefined,
+    plaintextByteCount: enc.plaintextByteCount,
+  }));
 
   logger.info("migrate: uploading solo records", {
     count: reEncrypted.length,

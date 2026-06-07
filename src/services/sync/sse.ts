@@ -36,6 +36,9 @@ export interface SSEDeviceJoinedPayload {
   label: string;
   createdAt: string;
   pubKey?: string;
+  /** Best-effort excerpt of the joining device's user agent. Used by the
+   *  approval banner alongside the pubkey fingerprint (B5a). */
+  userAgent?: string;
 }
 
 export interface SSEDeviceActivatedPayload {

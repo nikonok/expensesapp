@@ -22,27 +22,142 @@ let cachedDevicePubKey: Uint8Array | null = null;
 /** Cached device private key (never leaves the worker). */
 let cachedDevicePrivKey: Uint8Array | null = null;
 
-// ── IndexedDB key persistence (inline, no Dexie dependency in worker) ─────────
+// ── IndexedDB key persistence (worker-only DB; isolated from Dexie main DB) ───
+//
+// B5d: raw key material lives in a Worker-only IndexedDB named
+// `expenses-app-keys`. The main thread's Dexie database (`expenses-app-db`) no
+// longer references `cipherKeys`. On first run after deploy we migrate any
+// pre-existing rows from the legacy store; subsequent runs read/write only the
+// worker-owned DB.
 
-const DB_NAME = "expenses-app-db";
-const STORE_NAME = "cipherKeys";
+const KEY_DB_NAME = "expenses-app-keys";
+const KEY_STORE_NAME = "cipherKeys";
+const LEGACY_DB_NAME = "expenses-app-db";
+const LEGACY_STORE_NAME = "cipherKeys";
 
+/** Open the worker-owned key DB, creating the object store on first use. */
 function openKeyDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    // Open without specifying a version so we match whatever version Dexie has
-    // already migrated to.  The cipherKeys store is created by Dexie's v3 migration
-    // (database.ts) before this code runs, so no onupgradeneeded logic is needed.
-    const req = indexedDB.open(DB_NAME);
+    const req = indexedDB.open(KEY_DB_NAME, 1);
+    req.onupgradeneeded = (ev) => {
+      const db = (ev.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains(KEY_STORE_NAME)) {
+        db.createObjectStore(KEY_STORE_NAME, { keyPath: "name" });
+      }
+    };
     req.onsuccess = (ev) => resolve((ev.target as IDBOpenDBRequest).result);
     req.onerror = () => reject(req.error);
   });
 }
 
+/**
+ * Open the legacy Dexie DB without specifying a version. Returns null when
+ * the cipherKeys store does not exist (i.e. fresh install) — the caller then
+ * skips the legacy migration entirely.
+ */
+function openLegacyDbIfPresent(): Promise<IDBDatabase | null> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(LEGACY_DB_NAME);
+    req.onsuccess = (ev) => {
+      const db = (ev.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains(LEGACY_STORE_NAME)) {
+        db.close();
+        resolve(null);
+        return;
+      }
+      resolve(db);
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/**
+ * Copy any rows in `expenses-app-db.cipherKeys` into `expenses-app-keys`. Runs
+ * at most once per worker session, guarded by `legacyMigrationDone`. Failures
+ * are swallowed: if the legacy store is absent or the migration fails, fresh
+ * key generation still works against the new DB.
+ */
+let legacyMigrationDone = false;
+async function migrateLegacyKeysOnce(): Promise<void> {
+  if (legacyMigrationDone) return;
+  legacyMigrationDone = true;
+  try {
+    const legacy = await openLegacyDbIfPresent();
+    if (!legacy) return;
+
+    // Read all rows from the legacy store.
+    const rows = await new Promise<Array<{ name: string; value: Uint8Array; createdAt?: string }>>(
+      (resolve, reject) => {
+        const tx = legacy.transaction(LEGACY_STORE_NAME, "readonly");
+        const store = tx.objectStore(LEGACY_STORE_NAME);
+        const req = store.getAll();
+        req.onsuccess = () =>
+          resolve(req.result as Array<{ name: string; value: Uint8Array; createdAt?: string }>);
+        req.onerror = () => reject(req.error);
+      },
+    );
+    legacy.close();
+
+    if (rows.length === 0) return;
+
+    // Write into the worker-owned DB only if the target row is absent.
+    const target = await openKeyDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = target.transaction(KEY_STORE_NAME, "readwrite");
+      const store = tx.objectStore(KEY_STORE_NAME);
+      let pending = rows.length;
+      let aborted = false;
+      for (const row of rows) {
+        const getReq = store.get(row.name);
+        getReq.onsuccess = () => {
+          if (aborted) return;
+          if (!getReq.result) {
+            const putReq = store.put({
+              name: row.name,
+              value: row.value,
+              createdAt: row.createdAt ?? new Date().toISOString(),
+            });
+            putReq.onerror = () => {
+              aborted = true;
+              reject(putReq.error);
+            };
+          }
+          pending--;
+          if (pending === 0 && !aborted) resolve();
+        };
+        getReq.onerror = () => {
+          aborted = true;
+          reject(getReq.error);
+        };
+      }
+      tx.oncomplete = () => target.close();
+    });
+
+    // Clear the legacy rows so reads after the next Dexie upgrade do not race.
+    const legacy2 = await openLegacyDbIfPresent();
+    if (legacy2) {
+      await new Promise<void>((resolve, reject) => {
+        const tx = legacy2.transaction(LEGACY_STORE_NAME, "readwrite");
+        const store = tx.objectStore(LEGACY_STORE_NAME);
+        const req = store.clear();
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+        tx.oncomplete = () => legacy2.close();
+      });
+    }
+  } catch {
+    // Swallow — legacy migration is best-effort. If it fails, the worker still
+    // operates against the new DB; users may need to re-run the recovery flow
+    // (or the device.activated path) to repopulate keys.
+  }
+}
+
 async function putKey(name: string, value: Uint8Array): Promise<void> {
+  await migrateLegacyKeysOnce();
   const db = await openKeyDb();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readwrite");
-    const store = tx.objectStore(STORE_NAME);
+    const tx = db.transaction(KEY_STORE_NAME, "readwrite");
+    const store = tx.objectStore(KEY_STORE_NAME);
     const req = store.put({ name, value, createdAt: new Date().toISOString() });
     req.onsuccess = () => resolve();
     req.onerror = () => reject(req.error);
@@ -52,10 +167,11 @@ async function putKey(name: string, value: Uint8Array): Promise<void> {
 }
 
 async function getKey(name: string): Promise<Uint8Array | null> {
+  await migrateLegacyKeysOnce();
   const db = await openKeyDb();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readonly");
-    const store = tx.objectStore(STORE_NAME);
+    const tx = db.transaction(KEY_STORE_NAME, "readonly");
+    const store = tx.objectStore(KEY_STORE_NAME);
     const req = store.get(name);
     req.onsuccess = () => {
       db.close();
@@ -67,6 +183,20 @@ async function getKey(name: string): Promise<Uint8Array | null> {
       reject(req.error);
     };
   });
+}
+
+async function clearAllKeys(): Promise<void> {
+  const db = await openKeyDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(KEY_STORE_NAME, "readwrite");
+    const store = tx.objectStore(KEY_STORE_NAME);
+    const req = store.clear();
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+    tx.oncomplete = () => db.close();
+  });
+  cachedDevicePubKey = null;
+  cachedDevicePrivKey = null;
 }
 
 // ── RPC message types ─────────────────────────────────────────────────────────
@@ -197,6 +327,41 @@ type Req =
       phrase: string;
       familyId: string;
       createdAt: string;
+    }
+  | {
+      /** Clears all key material from the worker-owned IndexedDB.
+       *  Used by `you.removed` and the in-app reset flow. */
+      id: number;
+      type: "clearAllStoredKeys";
+    }
+  | {
+      /** Computes a short fingerprint of a base64url-encoded device public key
+       *  via libsodium's `crypto_generichash` (BLAKE2b, 8-byte digest), then
+       *  encodes it as base32 (RFC 4648 alphabet, no padding) → 13 ASCII chars.
+       *  Used by `DeviceJoinedBanner` to show a human-verifiable fingerprint
+       *  next to Approve / Reject. */
+      id: number;
+      type: "fingerprintPublicKey";
+      pubKeyB64u: string;
+    }
+  | {
+      /** Re-encrypts a batch of solo records under the target family key.
+       *  The target key is provided as a sealed envelope wrapped for this
+       *  device's public key during accept-invite — the worker unwraps it
+       *  inside its own scope using the cached device private key, uses it
+       *  to re-encrypt each record, and then (if `persistAfter` is true)
+       *  replaces the stored familyKey on success. The raw familyKey never
+       *  crosses the postMessage boundary. */
+      id: number;
+      type: "migrateSoloRecords";
+      targetEnvelope: Uint8Array;
+      persistAfter: boolean;
+      records: Array<{
+        recordType: string;
+        recordId: string;
+        plaintext: Uint8Array;
+        meta: RecordMeta;
+      }>;
     };
 
 type Res = { id: number; ok: true; result?: unknown } | { id: number; ok: false; error: string };
@@ -444,6 +609,87 @@ self.onmessage = async (e: MessageEvent<Req>) => {
         );
         await putKey("familyKey", familyKey2);
         post({ id: req.id, ok: true });
+        return;
+      }
+      case "clearAllStoredKeys": {
+        await clearAllKeys();
+        post({ id: req.id, ok: true });
+        return;
+      }
+      case "fingerprintPublicKey": {
+        const sodium = await sodiumReady();
+        // Decode base64url.
+        const paddedFp = req.pubKeyB64u.replace(/-/g, "+").replace(/_/g, "/");
+        const padLenFp = (4 - (paddedFp.length % 4)) % 4;
+        const b64Fp = paddedFp + "=".repeat(padLenFp);
+        const binaryFp = atob(b64Fp);
+        const pubKeyBytes = new Uint8Array(binaryFp.length);
+        for (let i = 0; i < binaryFp.length; i++) pubKeyBytes[i] = binaryFp.charCodeAt(i);
+        const digest = sodium.crypto_generichash(8, pubKeyBytes);
+        // Base32 (RFC 4648), no padding. 8 bytes → 13 chars.
+        const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+        let bits = 0;
+        let value = 0;
+        let out = "";
+        for (let i = 0; i < digest.length; i++) {
+          value = (value << 8) | digest[i];
+          bits += 8;
+          while (bits >= 5) {
+            bits -= 5;
+            out += ALPHABET[(value >>> bits) & 0x1f];
+          }
+        }
+        if (bits > 0) out += ALPHABET[(value << (5 - bits)) & 0x1f];
+        post({ id: req.id, ok: true, result: out });
+        return;
+      }
+      case "migrateSoloRecords": {
+        // Unwrap the target family key inside the worker using the cached
+        // device keypair. The unwrapped key never leaves this scope.
+        const storedPubMig = cachedDevicePubKey ?? (await getKey("devicePubKey"));
+        const storedPrivMig = cachedDevicePrivKey ?? (await getKey("devicePrivKey"));
+        if (!storedPubMig || !storedPrivMig) {
+          post({
+            id: req.id,
+            ok: false,
+            error: "NoDeviceKey: device keypair not found in worker storage",
+          });
+          return;
+        }
+        const targetFamilyKey = await unwrapKeyForDevice(
+          req.targetEnvelope,
+          storedPubMig,
+          storedPrivMig,
+        );
+
+        const encrypted: Array<{
+          recordType: string;
+          recordId: string;
+          blob: Uint8Array;
+          plaintextByteCount: number;
+        }> = [];
+        for (const rec of req.records) {
+          const { blob, plaintextByteCount } = await encryptRecord(
+            rec.plaintext,
+            targetFamilyKey,
+            rec.meta,
+          );
+          encrypted.push({
+            recordType: rec.recordType,
+            recordId: rec.recordId,
+            blob,
+            plaintextByteCount,
+          });
+        }
+
+        if (req.persistAfter) {
+          await putKey("familyKey", targetFamilyKey);
+        }
+        // Best-effort zero of the local reference. JS can't enforce wipe, but
+        // we drop the binding so the value becomes garbage-collectable.
+        targetFamilyKey.fill(0);
+
+        post({ id: req.id, ok: true, result: encrypted });
         return;
       }
       default: {

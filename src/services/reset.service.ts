@@ -13,7 +13,6 @@ class ResetService {
         db.settings,
         db.backups,
         db.logs,
-        db.cipherKeys,
         db.pendingUploads,
         db.syncCursors,
       ],
@@ -26,11 +25,21 @@ class ResetService {
         await db.settings.clear();
         await db.backups.clear();
         await db.logs.clear();
-        await db.cipherKeys.clear();
         await db.pendingUploads.clear();
         await db.syncCursors.clear();
       },
     );
+
+    // Clear worker-owned key material (B5d). Done outside the Dexie transaction
+    // because the keys live in a separate IndexedDB (`expenses-app-keys`).
+    try {
+      const { cryptoWorker } = await import("@/services/crypto/worker-client");
+      await cryptoWorker.clearAllStoredKeys();
+    } catch {
+      // Worker failures during reset are non-fatal — the Dexie clear has
+      // already removed all domain data.
+    }
+
     window.dispatchEvent(new CustomEvent("backup-restored"));
   }
 }

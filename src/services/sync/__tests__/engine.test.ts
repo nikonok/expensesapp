@@ -37,6 +37,8 @@ vi.mock("@/services/crypto/worker-client", () => ({
     decryptRecordWithStoredKey: vi.fn(async () => mockDecryptResult),
     unwrapAndPersistFamilyKey: vi.fn(async () => undefined),
     wrapStoredFamilyKeyForDevice: vi.fn(async () => "wrapped-envelope-b64u"),
+    fingerprintPublicKey: vi.fn(async () => "ABCDEFGHJKLMN"),
+    clearAllStoredKeys: vi.fn(async () => undefined),
   },
 }));
 
@@ -464,7 +466,7 @@ describe("startLiveSync — record.changed triggers debounced pull", () => {
 });
 
 describe("startLiveSync — device.joined updates the store", () => {
-  it("dispatches setPendingDeviceJoin and schedules silentlyApproveDevice", async () => {
+  it("dispatches setPendingDeviceJoin with a fingerprint and never auto-approves (B5a)", async () => {
     vi.useFakeTimers();
 
     const disconnect = startLiveSync("family-live-002");
@@ -480,8 +482,18 @@ describe("startLiveSync — device.joined updates the store", () => {
     await vi.runAllTimersAsync();
 
     expect(mockSetPendingDeviceJoin).toHaveBeenCalledWith(
-      expect.objectContaining({ deviceId: "dev-new-001", pubKey: "test-pub-key-b64u" }),
+      expect.objectContaining({
+        deviceId: "dev-new-001",
+        pubKey: "test-pub-key-b64u",
+        fingerprint: "ABCDEFGHJKLMN",
+      }),
     );
+
+    // B5a: silentlyApproveDevice was removed. There must be no
+    // wrapStoredFamilyKeyForDevice call until the user explicitly approves
+    // via the banner.
+    const { cryptoWorker } = await import("@/services/crypto/worker-client");
+    expect(vi.mocked(cryptoWorker.wrapStoredFamilyKeyForDevice)).not.toHaveBeenCalled();
 
     disconnect();
     vi.useRealTimers();

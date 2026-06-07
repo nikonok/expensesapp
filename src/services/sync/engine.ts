@@ -433,7 +433,11 @@ const PULL_DEBOUNCE_MS = 500;
 /**
  * Connects SSE, wires event handlers, and returns a disconnect function.
  * - `record.changed` → debounced pullSince (max 1 pull per 500ms).
- * - `device.joined`  → updates useDeviceJoinStore so the UI can react.
+ * - `device.joined`  → updates useDeviceJoinStore so the UI can react and asks
+ *                      the user for an explicit Approve / Reject decision. The
+ *                      previous "silent approve after 500 ms" path was removed
+ *                      (B5a) — a malicious server can no longer auto-trigger
+ *                      a familyKey wrap to an attacker-controlled pubkey.
  * - `device.activated` → unwraps + persists familyKey via crypto worker, then
  *                        triggers a full pull so the new device is caught up.
  * - `you.removed`    → clears local Dexie data + signs out.
@@ -476,24 +480,35 @@ export function startLiveSync(familyId: string): () => void {
         }
         case "device.joined": {
           const p = payload as SSEPayloadMap["device.joined"];
-          // Dynamically import the store to avoid circular deps at module load time.
-          import("@/stores/device-join-store")
-            .then(({ useDeviceJoinStore }) => {
+          // B5a: surface the pending device to the user via the join store
+          // and wait for an explicit Approve / Reject decision. No auto-wrap.
+          (async () => {
+            let fingerprint: string | null = null;
+            if (p.pubKey) {
+              try {
+                const { cryptoWorker } = await import("@/services/crypto/worker-client");
+                fingerprint = await cryptoWorker.fingerprintPublicKey(p.pubKey);
+              } catch (err) {
+                logger.warn(
+                  "liveSync.device.joined.fingerprint",
+                  err instanceof Error ? err : undefined,
+                );
+              }
+            }
+            try {
+              const { useDeviceJoinStore } = await import("@/stores/device-join-store");
               useDeviceJoinStore.getState().setPendingDeviceJoin({
                 deviceId: p.deviceId,
                 label: p.label,
                 pubKey: p.pubKey ?? null,
+                fingerprint,
+                userAgent: p.userAgent ?? null,
+                createdAt: p.createdAt ?? null,
               });
-            })
-            .catch((err) => {
+            } catch (err) {
               logger.warn("liveSync.device.joined.store", err instanceof Error ? err : undefined);
-            });
-          // After 500ms delay, silently wrap + POST envelope to new device.
-          setTimeout(() => {
-            silentlyApproveDevice(p.deviceId, p.pubKey ?? null).catch((err) => {
-              logger.warn("liveSync.silentApprove.failed", err instanceof Error ? err : undefined);
-            });
-          }, 500);
+            }
+          })();
           break;
         }
         case "device.activated": {
@@ -522,7 +537,7 @@ export function startLiveSync(familyId: string): () => void {
         case "you.removed": {
           (async () => {
             try {
-              // Clear all local data (crypto keys + sync state + domain records).
+              // Clear all local Dexie domain data first.
               await Promise.all([
                 db.transactions.clear(),
                 db.accounts.clear(),
@@ -531,8 +546,17 @@ export function startLiveSync(familyId: string): () => void {
                 db.settings.clear(),
                 db.pendingUploads.clear(),
                 db.syncCursors.clear(),
-                db.cipherKeys.clear(),
               ]);
+              // Crypto key material lives in the worker-owned DB now (B5d).
+              try {
+                const { cryptoWorker } = await import("@/services/crypto/worker-client");
+                await cryptoWorker.clearAllStoredKeys();
+              } catch (err) {
+                logger.warn(
+                  "liveSync.you.removed.clearKeys.failed",
+                  err instanceof Error ? err : undefined,
+                );
+              }
               // Sign out via auth store.
               const { useAuthStore } = await import("@/services/auth/session");
               await useAuthStore.getState().signOut();
@@ -597,31 +621,47 @@ export function startLiveSync(familyId: string): () => void {
   };
 }
 
-// ── silentlyApproveDevice ─────────────────────────────────────────────────────
+// ── requestDeviceApproval / approveDevice / rejectDevice (B5a) ────────────────
+//
+// Replaces the old `silentlyApproveDevice` 500 ms auto-wrap path. The server
+// no longer dictates when a familyKey envelope is produced for a joining
+// device — the user must press Approve in the banner.
+//
+// requestDeviceApproval: invoked by the SSE branch when a `device.joined`
+// event arrives. It does NOT wrap the familyKey. It only resolves the pubkey
+// fingerprint (used by the UI) and stores the pending join in the device-join
+// store. The actual fingerprint computation lives in the SSE handler above.
+//
+// approveDevice: called from the UI when the user clicks "Approve". Wraps the
+// stored familyKey for the joining device's pubkey (in-worker), then POSTs
+// the envelope. The raw familyKey never crosses the postMessage boundary.
+//
+// rejectDevice: called from the UI when the user clicks "Reject". Records the
+// rejection locally (audit log) and asks the backend to revoke the joining
+// device session. The brief notes the orphan-route audit (B8) will replace
+// the existing `POST /v1/me/devices/{id}/revoke` with `DELETE
+// /v1/me/devices/{id}`; until then we call the existing endpoint.
 
-/**
- * Wraps the stored familyKey for a new device's pubKey and POSTs the envelope
- * to /api/v1/family/devices/{deviceId}/envelope.
- *
- * pubKey may be provided directly from the SSE event payload (preferred).
- * If null, falls back to GET /api/v1/me/devices/{deviceId} to retrieve it.
- *
- * NOTE: The pubKey-in-SSE-event field (`pubKey`) is a Phase 5 addition.
- * If the backend worker omits it, this function falls back to a GET request.
- */
-export async function silentlyApproveDevice(
+/** Resolve a pubkey for an inbound join, using the SSE payload when present
+ *  or falling back to GET /api/v1/me/devices/{id}. */
+async function resolveJoiningDevicePubKey(
   deviceId: string,
   pubKeyB64u: string | null,
-): Promise<void> {
+): Promise<string> {
+  if (pubKeyB64u) return pubKeyB64u;
+  const resp = await apiFetch<{ pubKey: string }>(`/api/v1/me/devices/${deviceId}`);
+  return resp.pubKey;
+}
+
+/**
+ * Approve a pending device join (B5a). Called only after explicit user
+ * confirmation in `DeviceJoinedBanner`. Wraps the stored familyKey for the
+ * device's pubkey and POSTs the envelope.
+ */
+export async function approveDevice(deviceId: string, pubKeyB64u: string | null): Promise<void> {
   const { cryptoWorker } = await import("@/services/crypto/worker-client");
 
-  let resolvedPubKey = pubKeyB64u;
-  if (!resolvedPubKey) {
-    // Fallback: fetch pubKey from backend.
-    const resp = await apiFetch<{ pubKey: string }>(`/api/v1/me/devices/${deviceId}`);
-    resolvedPubKey = resp.pubKey;
-  }
-
+  const resolvedPubKey = await resolveJoiningDevicePubKey(deviceId, pubKeyB64u);
   const envelopeB64u = await cryptoWorker.wrapStoredFamilyKeyForDevice(resolvedPubKey);
 
   await apiFetch(`/api/v1/family/devices/${deviceId}/envelope`, {
@@ -629,7 +669,20 @@ export async function silentlyApproveDevice(
     body: JSON.stringify({ envelope: envelopeB64u }),
   });
 
-  logger.info("liveSync.envelope.posted", { deviceId });
+  logger.info("liveSync.device.approved", { deviceId });
+}
+
+/**
+ * Reject a pending device join (B5a). Records a local audit log entry and
+ * revokes the joining device server-side. TODO(B8): swap to DELETE
+ * /v1/me/devices/{id} once the orphan-route audit lands.
+ */
+export async function rejectDevice(deviceId: string): Promise<void> {
+  logger.warn("liveSync.device.rejected", { deviceId });
+  // TODO(B8): use DELETE /v1/me/devices/{id} when the orphan-route audit
+  // replaces the existing POST .../revoke handler.
+  await apiFetch(`/api/v1/me/devices/${deviceId}/revoke`, { method: "POST" });
+  logger.info("liveSync.device.rejected.posted", { deviceId });
 }
 
 // ── Re-export cursor read for callers that only need the current cursor ────────

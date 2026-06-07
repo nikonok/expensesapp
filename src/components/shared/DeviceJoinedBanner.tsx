@@ -1,35 +1,59 @@
 // Banner shown on existing devices when a `device.joined` SSE event arrives.
-// Architecture §8.2, Phase 5e / Phase 6c (revoke wired).
+// Architecture §8.2, Phase 5e / WORK_PLAN.md brief B5a.
 //
-// Reads from useDeviceJoinStore. The Revoke action calls POST /v1/me/devices/{id}/revoke.
+// Reads from useDeviceJoinStore. The user MUST explicitly Approve before any
+// familyKey envelope is wrapped for the joining device — there is no silent
+// auto-approve any more (a malicious server can no longer race the user). The
+// pubkey fingerprint is shown alongside the device label and user-agent
+// excerpt so the user can compare against the joining device's own display.
 
 import { useState } from "react";
 import { useDeviceJoinStore } from "@/stores/device-join-store";
-import { apiFetch } from "@/services/auth/client";
+import { approveDevice, rejectDevice } from "@/services/sync/engine";
 import { useToast } from "./Toast";
 
 export function DeviceJoinedBanner() {
   const { pendingDeviceJoin, clear } = useDeviceJoinStore();
   const { show: showToast } = useToast();
-  const [revoking, setRevoking] = useState(false);
+  const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
 
   if (!pendingDeviceJoin) return null;
 
-  async function handleRevoke() {
-    if (revoking) return;
-    setRevoking(true);
+  const pending = pendingDeviceJoin;
+
+  async function handleApprove() {
+    if (busy) return;
+    setBusy("approve");
     try {
-      await apiFetch(`/api/v1/me/devices/${pendingDeviceJoin!.deviceId}/revoke`, {
-        method: "POST",
-      });
-      showToast("Device revoked", "success");
+      await approveDevice(pending.deviceId, pending.pubKey);
+      showToast("Device approved", "success");
       clear();
     } catch {
-      showToast("Failed to revoke device", "error");
+      showToast("Failed to approve device", "error");
     } finally {
-      setRevoking(false);
+      setBusy(null);
     }
   }
+
+  async function handleReject() {
+    if (busy) return;
+    setBusy("reject");
+    try {
+      await rejectDevice(pending.deviceId);
+      showToast("Device rejected", "success");
+      clear();
+    } catch {
+      showToast("Failed to reject device", "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const userAgentExcerpt = pending.userAgent
+    ? pending.userAgent.length > 60
+      ? pending.userAgent.slice(0, 60) + "…"
+      : pending.userAgent
+    : null;
 
   return (
     <div
@@ -70,18 +94,19 @@ export function DeviceJoinedBanner() {
             flex: 1,
           }}
         >
-          New device joined: <strong style={{ fontWeight: 500 }}>{pendingDeviceJoin.label}</strong>
+          New device joined: <strong style={{ fontWeight: 500 }}>{pending.label}</strong>
         </span>
 
         {/* Dismiss */}
         <button
           onClick={clear}
           aria-label="Dismiss"
+          disabled={busy !== null}
           style={{
             background: "none",
             border: "none",
             padding: "var(--space-1)",
-            cursor: "pointer",
+            cursor: busy !== null ? "not-allowed" : "pointer",
             color: "var(--color-text-muted)",
             fontFamily: '"DM Sans", sans-serif',
             fontSize: "var(--text-caption)",
@@ -90,40 +115,106 @@ export function DeviceJoinedBanner() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            opacity: busy !== null ? 0.5 : 1,
           }}
         >
           ✕
         </button>
       </div>
 
-      <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center" }}>
+      {pending.fingerprint && (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "var(--space-1)",
+            paddingTop: "var(--space-1)",
+          }}
+        >
+          <span
+            style={{
+              fontFamily: '"DM Sans", sans-serif',
+              fontSize: "var(--text-caption)",
+              color: "var(--color-text-muted)",
+            }}
+          >
+            Verify fingerprint on the joining device:
+          </span>
+          <span
+            style={{
+              fontFamily: '"JetBrains Mono", monospace',
+              fontSize: "var(--text-body)",
+              color: "var(--color-text)",
+              letterSpacing: "0.06em",
+              wordBreak: "break-all",
+            }}
+            data-testid="device-fingerprint"
+          >
+            {pending.fingerprint}
+          </span>
+        </div>
+      )}
+
+      {userAgentExcerpt && (
         <span
           style={{
             fontFamily: '"DM Sans", sans-serif',
             fontSize: "var(--text-caption)",
             color: "var(--color-text-muted)",
+            wordBreak: "break-word",
           }}
         >
-          This wasn&apos;t me →
+          {userAgentExcerpt}
         </span>
+      )}
+
+      <div
+        style={{
+          display: "flex",
+          gap: "var(--space-3)",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          paddingTop: "var(--space-1)",
+        }}
+      >
         <button
-          onClick={handleRevoke}
-          disabled={revoking}
+          onClick={handleReject}
+          disabled={busy !== null}
           style={{
             background: "none",
             border: "1px solid var(--color-expense)",
             borderRadius: 6,
-            padding: "var(--space-1) var(--space-3)",
+            padding: "var(--space-2) var(--space-3)",
             fontFamily: '"DM Sans", sans-serif',
             fontSize: "var(--text-caption)",
             color: "var(--color-expense)",
-            cursor: revoking ? "not-allowed" : "pointer",
-            opacity: revoking ? 0.5 : 1,
-            minHeight: 32,
-            minWidth: 44,
+            cursor: busy !== null ? "not-allowed" : "pointer",
+            opacity: busy !== null ? 0.5 : 1,
+            minHeight: 44,
+            minWidth: 88,
           }}
         >
-          {revoking ? "…" : "Revoke"}
+          {busy === "reject" ? "…" : "Reject"}
+        </button>
+        <button
+          onClick={handleApprove}
+          disabled={busy !== null}
+          style={{
+            background: "var(--color-primary)",
+            border: "1px solid var(--color-primary)",
+            borderRadius: 6,
+            padding: "var(--space-2) var(--space-3)",
+            fontFamily: '"DM Sans", sans-serif',
+            fontSize: "var(--text-caption)",
+            color: "var(--color-surface)",
+            fontWeight: 500,
+            cursor: busy !== null ? "not-allowed" : "pointer",
+            opacity: busy !== null ? 0.5 : 1,
+            minHeight: 44,
+            minWidth: 88,
+          }}
+        >
+          {busy === "approve" ? "…" : "Approve"}
         </button>
       </div>
     </div>

@@ -94,13 +94,19 @@ test("sync: push/pull single-device round-trip", async ({ page }) => {
     await cryptoWorker.generateAndPersistDeviceKey();
   });
 
-  // Seed a 32-byte familyKey directly into the worker's IndexedDB so that
+  // Seed a 32-byte familyKey directly into the worker-owned IndexedDB so that
   // encryptRecordWithStoredKey / decryptRecordWithStoredKey work without
   // going through the full wrapAndPersistFamilyKey ceremony.
-  // The worker reads from DB_NAME="expenses-app-db", STORE_NAME="cipherKeys".
+  // Post-B5d the worker reads from DB_NAME="expenses-app-keys", STORE_NAME="cipherKeys".
   await page.evaluate(async () => {
     await new Promise<void>((resolve, reject) => {
-      const req = indexedDB.open("expenses-app-db");
+      const req = indexedDB.open("expenses-app-keys", 1);
+      req.onupgradeneeded = (ev) => {
+        const db = (ev.target as IDBOpenDBRequest).result;
+        if (!db.objectStoreNames.contains("cipherKeys")) {
+          db.createObjectStore("cipherKeys", { keyPath: "name" });
+        }
+      };
       req.onsuccess = () => {
         const db = req.result;
         const tx = db.transaction("cipherKeys", "readwrite");
