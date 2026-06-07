@@ -1,7 +1,9 @@
 // Admin panel page (Phase 10e).
 //
 // Full-screen page at /admin. Only reachable by users with isAdmin=true.
-// Sidebar navigation (Users, Allowlist, Admins, Audit) with right-pane content.
+// Sidebar navigation (Users, Allowlist, Admins, Audit) with right-pane content
+// on viewports ≥ 600 px; on narrower viewports the sidebar collapses into a
+// horizontal scrollable tab strip stacked above the content pane.
 
 import { useState } from "react";
 import { useNavigate } from "react-router";
@@ -9,8 +11,22 @@ import { ArrowLeft, Users, Shield, List, FileText } from "lucide-react";
 import { UsersList } from "@/components/admin/UsersList";
 import { AllowlistEditor } from "@/components/admin/AllowlistEditor";
 import { AuditViewer } from "@/components/admin/AuditViewer";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 
 type AdminSection = "users" | "allowlist" | "admins" | "audit";
+
+interface NavEntry {
+  id: AdminSection;
+  label: string;
+  icon: React.ReactNode;
+}
+
+const NAV_ENTRIES: NavEntry[] = [
+  { id: "users", label: "Users", icon: <Users size={16} strokeWidth={1.5} /> },
+  { id: "allowlist", label: "Allowlist", icon: <List size={16} strokeWidth={1.5} /> },
+  { id: "admins", label: "Admins", icon: <Shield size={16} strokeWidth={1.5} /> },
+  { id: "audit", label: "Audit", icon: <FileText size={16} strokeWidth={1.5} /> },
+];
 
 interface NavItemProps {
   icon: React.ReactNode;
@@ -19,7 +35,7 @@ interface NavItemProps {
   onClick: () => void;
 }
 
-function NavItem({ icon, label, active, onClick }: NavItemProps) {
+function SidebarNavItem({ icon, label, active, onClick }: NavItemProps) {
   return (
     <button
       onClick={onClick}
@@ -59,6 +75,38 @@ function NavItem({ icon, label, active, onClick }: NavItemProps) {
   );
 }
 
+function TabChip({ icon, label, active, onClick }: NavItemProps) {
+  return (
+    <button
+      onClick={onClick}
+      role="tab"
+      aria-selected={active}
+      style={{
+        flexShrink: 0,
+        minHeight: "44px",
+        padding: "0 var(--space-4)",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "var(--space-2)",
+        background: active ? "var(--color-primary)" : "var(--color-surface)",
+        color: active ? "var(--color-bg)" : "var(--color-text-secondary)",
+        border: `1px solid ${active ? "transparent" : "var(--color-border)"}`,
+        borderRadius: "var(--radius-chip)",
+        fontFamily: '"DM Sans", sans-serif',
+        fontWeight: 500,
+        fontSize: "var(--text-caption)",
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+        filter: active ? "drop-shadow(0 0 6px oklch(72% 0.22 210 / 50%))" : "none",
+        transition: "background 100ms ease-out, color 100ms ease-out, filter 100ms ease-out",
+      }}
+    >
+      <span style={{ display: "inline-flex", flexShrink: 0 }}>{icon}</span>
+      {label}
+    </button>
+  );
+}
+
 function SectionTitle({ label }: { label: string }) {
   return (
     <div
@@ -79,6 +127,7 @@ function SectionTitle({ label }: { label: string }) {
 export default function AdminPage() {
   const navigate = useNavigate();
   const [section, setSection] = useState<AdminSection>("users");
+  const isMobile = useIsMobile();
 
   function renderContent() {
     switch (section) {
@@ -86,7 +135,7 @@ export default function AdminPage() {
         return (
           <>
             <SectionTitle label="Users" />
-            <UsersList />
+            <UsersList filter="all" />
           </>
         );
       case "allowlist":
@@ -100,7 +149,7 @@ export default function AdminPage() {
         return (
           <>
             <SectionTitle label="Admins" />
-            <UsersList />
+            <UsersList filter="admins" />
           </>
         );
       case "audit":
@@ -169,66 +218,91 @@ export default function AdminPage() {
           Admin
         </h1>
 
-        {/* Admin badge */}
-        <span
-          style={{
-            display: "inline-block",
-            padding: "2px 8px",
-            borderRadius: "var(--radius-chip)",
-            fontFamily: '"DM Sans", sans-serif',
-            fontWeight: 500,
-            fontSize: "var(--text-caption)",
-            background: "var(--color-primary-dim)",
-            color: "var(--color-primary)",
-          }}
-        >
-          Admin panel
-        </span>
+        {/* Admin badge — hidden on very narrow viewports to free header space. */}
+        {!isMobile && (
+          <span
+            style={{
+              display: "inline-block",
+              padding: "2px 8px",
+              borderRadius: "var(--radius-chip)",
+              fontFamily: '"DM Sans", sans-serif',
+              fontWeight: 500,
+              fontSize: "var(--text-caption)",
+              background: "var(--color-primary-dim)",
+              color: "var(--color-primary)",
+            }}
+          >
+            Admin panel
+          </span>
+        )}
       </header>
 
-      {/* Body: sidebar + content */}
-      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        {/* Sidebar */}
-        <nav
+      {isMobile ? (
+        // ── Mobile: tab strip above content, single column ───────────────────
+        <div
           style={{
-            width: "180px",
-            flexShrink: 0,
-            borderRight: "1px solid var(--color-border)",
             display: "flex",
             flexDirection: "column",
-            overflowY: "auto",
-            paddingTop: "var(--space-2)",
+            flex: 1,
+            overflow: "hidden",
           }}
         >
-          <NavItem
-            icon={<Users size={16} strokeWidth={1.5} />}
-            label="Users"
-            active={section === "users"}
-            onClick={() => setSection("users")}
-          />
-          <NavItem
-            icon={<List size={16} strokeWidth={1.5} />}
-            label="Allowlist"
-            active={section === "allowlist"}
-            onClick={() => setSection("allowlist")}
-          />
-          <NavItem
-            icon={<Shield size={16} strokeWidth={1.5} />}
-            label="Admins"
-            active={section === "admins"}
-            onClick={() => setSection("admins")}
-          />
-          <NavItem
-            icon={<FileText size={16} strokeWidth={1.5} />}
-            label="Audit"
-            active={section === "audit"}
-            onClick={() => setSection("audit")}
-          />
-        </nav>
+          <nav
+            role="tablist"
+            aria-label="Admin sections"
+            style={{
+              display: "flex",
+              flexDirection: "row",
+              gap: "var(--space-2)",
+              overflowX: "auto",
+              overflowY: "hidden",
+              padding: "var(--space-3) var(--space-4)",
+              borderBottom: "1px solid var(--color-border)",
+              scrollbarWidth: "none",
+              flexShrink: 0,
+            }}
+          >
+            {NAV_ENTRIES.map((entry) => (
+              <TabChip
+                key={entry.id}
+                icon={entry.icon}
+                label={entry.label}
+                active={section === entry.id}
+                onClick={() => setSection(entry.id)}
+              />
+            ))}
+          </nav>
 
-        {/* Main content pane */}
-        <main style={{ flex: 1, overflowY: "auto" }}>{renderContent()}</main>
-      </div>
+          <main style={{ flex: 1, overflowY: "auto" }}>{renderContent()}</main>
+        </div>
+      ) : (
+        // ── Desktop / tablet: sidebar + content ──────────────────────────────
+        <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+          <nav
+            style={{
+              width: "180px",
+              flexShrink: 0,
+              borderRight: "1px solid var(--color-border)",
+              display: "flex",
+              flexDirection: "column",
+              overflowY: "auto",
+              paddingTop: "var(--space-2)",
+            }}
+          >
+            {NAV_ENTRIES.map((entry) => (
+              <SidebarNavItem
+                key={entry.id}
+                icon={entry.icon}
+                label={entry.label}
+                active={section === entry.id}
+                onClick={() => setSection(entry.id)}
+              />
+            ))}
+          </nav>
+
+          <main style={{ flex: 1, overflowY: "auto" }}>{renderContent()}</main>
+        </div>
+      )}
     </div>
   );
 }

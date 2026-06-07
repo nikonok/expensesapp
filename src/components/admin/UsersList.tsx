@@ -6,7 +6,9 @@
 // serves as the display hint; actual per-device revoke is driven from this table).
 
 import { useState, useEffect, useCallback } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { useToast } from "@/components/shared/Toast";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 import {
   listUsers,
   suspendUser,
@@ -105,6 +107,10 @@ interface UserRowProps {
 
 function UserRow({ user, onSuspend, onUnsuspend, onPromote, onDemote, acting }: UserRowProps) {
   const isSuspended = user.suspendedAt !== null;
+  const isMobile = useIsMobile();
+  const [expanded, setExpanded] = useState(false);
+
+  const metaVisible = !isMobile || expanded;
 
   return (
     <div
@@ -175,74 +181,85 @@ function UserRow({ user, onSuspend, onUnsuspend, onPromote, onDemote, acting }: 
         )}
       </div>
 
-      {/* Sub row: email (if display name shown above), metadata */}
+      {/* Sub row: email (if display name shown above), metadata.
+          On mobile, collapsed behind a Details disclosure to keep the row scannable. */}
+      {metaVisible && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-3)",
+            flexWrap: "wrap",
+            marginBottom: "var(--space-2)",
+          }}
+        >
+          {user.displayName && (
+            <span
+              style={{
+                fontFamily: '"DM Sans", sans-serif',
+                fontSize: "var(--text-caption)",
+                color: "var(--color-text-secondary)",
+                wordBreak: "break-all",
+              }}
+            >
+              {user.email}
+            </span>
+          )}
+          <span
+            style={{
+              fontFamily: '"DM Sans", sans-serif',
+              fontSize: "var(--text-caption)",
+              color: "var(--color-text-secondary)",
+            }}
+          >
+            {user.deviceCount} device{user.deviceCount !== 1 ? "s" : ""}
+          </span>
+          <span
+            style={{
+              fontFamily: '"DM Sans", sans-serif',
+              fontSize: "var(--text-caption)",
+              color: "var(--color-text-secondary)",
+            }}
+          >
+            {user.familyMemberCount} family
+          </span>
+          <span
+            style={{
+              fontFamily: '"JetBrains Mono", monospace',
+              fontSize: "var(--text-caption)",
+              color:
+                user.storageUsagePct > 80
+                  ? "var(--color-expense)"
+                  : user.storageUsagePct > 60
+                    ? "oklch(72% 0.22 60)"
+                    : "var(--color-text-secondary)",
+            }}
+          >
+            {user.storageUsagePct.toFixed(1)}%
+          </span>
+          {user.lastSignInAt && (
+            <span
+              style={{
+                fontFamily: '"DM Sans", sans-serif',
+                fontSize: "var(--text-caption)",
+                color: "var(--color-text-secondary)",
+              }}
+            >
+              {new Date(user.lastSignInAt).toLocaleDateString()}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Action buttons */}
       <div
         style={{
           display: "flex",
-          alignItems: "center",
-          gap: "var(--space-3)",
+          gap: "var(--space-2)",
           flexWrap: "wrap",
-          marginBottom: "var(--space-2)",
+          alignItems: "center",
         }}
       >
-        {user.displayName && (
-          <span
-            style={{
-              fontFamily: '"DM Sans", sans-serif',
-              fontSize: "var(--text-caption)",
-              color: "var(--color-text-secondary)",
-            }}
-          >
-            {user.email}
-          </span>
-        )}
-        <span
-          style={{
-            fontFamily: '"DM Sans", sans-serif',
-            fontSize: "var(--text-caption)",
-            color: "var(--color-text-secondary)",
-          }}
-        >
-          {user.deviceCount} device{user.deviceCount !== 1 ? "s" : ""}
-        </span>
-        <span
-          style={{
-            fontFamily: '"DM Sans", sans-serif',
-            fontSize: "var(--text-caption)",
-            color: "var(--color-text-secondary)",
-          }}
-        >
-          {user.familyMemberCount} family
-        </span>
-        <span
-          style={{
-            fontFamily: '"JetBrains Mono", monospace',
-            fontSize: "var(--text-caption)",
-            color:
-              user.storageUsagePct > 80
-                ? "var(--color-expense)"
-                : user.storageUsagePct > 60
-                  ? "oklch(72% 0.22 60)"
-                  : "var(--color-text-secondary)",
-          }}
-        >
-          {user.storageUsagePct.toFixed(1)}%
-        </span>
-        {user.lastSignInAt && (
-          <span
-            style={{
-              fontFamily: '"DM Sans", sans-serif',
-              fontSize: "var(--text-caption)",
-              color: "var(--color-text-secondary)",
-            }}
-          >
-            {new Date(user.lastSignInAt).toLocaleDateString()}
-          </span>
-        )}
-      </div>
-
-      {/* Action buttons */}
-      <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
         {isSuspended ? (
           <SmallBtn
             label={acting ? "…" : "Unsuspend"}
@@ -278,6 +295,40 @@ function UserRow({ user, onSuspend, onUnsuspend, onPromote, onDemote, acting }: 
             onClick={() => onPromote(user.id)}
           />
         )}
+
+        {isMobile && (
+          <button
+            type="button"
+            aria-expanded={expanded}
+            aria-label={expanded ? "Hide user details" : "Show user details"}
+            onClick={() => setExpanded((v) => !v)}
+            style={{
+              marginLeft: "auto",
+              minHeight: "28px",
+              minWidth: "28px",
+              padding: "0 var(--space-2)",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+              background: "var(--color-surface-raised)",
+              color: "var(--color-text-secondary)",
+              border: "1px solid var(--color-border-strong)",
+              borderRadius: "var(--radius-btn)",
+              fontFamily: '"DM Sans", sans-serif',
+              fontWeight: 500,
+              fontSize: "var(--text-caption)",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {expanded ? (
+              <ChevronUp size={14} strokeWidth={1.5} />
+            ) : (
+              <ChevronDown size={14} strokeWidth={1.5} />
+            )}
+            <span>Details</span>
+          </button>
+        )}
       </div>
     </div>
   );
@@ -285,7 +336,14 @@ function UserRow({ user, onSuspend, onUnsuspend, onPromote, onDemote, acting }: 
 
 // ── UsersList ──────────────────────────────────────────────────────────────────
 
-export function UsersList() {
+interface UsersListProps {
+  // When "admins", only users with `isAdmin === true` are displayed.
+  // The "loaded" count and empty-state copy adapt accordingly.
+  // Filtering is client-side over the same paginated /admin/users endpoint.
+  filter?: "all" | "admins";
+}
+
+export function UsersList({ filter = "all" }: UsersListProps = {}) {
   const { show: showToast } = useToast();
 
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -394,7 +452,9 @@ export function UsersList() {
     );
   }
 
-  if (users.length === 0) {
+  const visibleUsers = filter === "admins" ? users.filter((u) => u.isAdmin) : users;
+
+  if (visibleUsers.length === 0) {
     return (
       <div
         style={{
@@ -404,10 +464,15 @@ export function UsersList() {
           color: "var(--color-text-secondary)",
         }}
       >
-        No users found.
+        {filter === "admins" ? "No admins found." : "No users found."}
       </div>
     );
   }
+
+  const countLabel =
+    filter === "admins"
+      ? `${visibleUsers.length} admin${visibleUsers.length !== 1 ? "s" : ""} loaded`
+      : `${visibleUsers.length} user${visibleUsers.length !== 1 ? "s" : ""} loaded`;
 
   return (
     <div>
@@ -420,10 +485,10 @@ export function UsersList() {
           borderBottom: "1px solid var(--color-border)",
         }}
       >
-        {users.length} user{users.length !== 1 ? "s" : ""} loaded
+        {countLabel}
       </div>
 
-      {users.map((user) => (
+      {visibleUsers.map((user) => (
         <UserRow
           key={user.id}
           user={user}
