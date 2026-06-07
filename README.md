@@ -1,6 +1,8 @@
 # Expenses App
 
-A personal finance tracking **Progressive Web App** built with React 19, TypeScript, and Tailwind CSS 4. Designed as a mobile-first Android PWA with full offline support — no server, no account, no cloud.
+A personal finance tracking **Progressive Web App** with end-to-end encrypted family sync.
+
+The frontend is a React 19 PWA that works fully offline against a local IndexedDB. An optional Go backend brokers **E2E-encrypted** sync between devices and family members — the server stores opaque ciphertext + AAD metadata only and never sees plaintext financial data. Sign in with Google to share a household; stay signed-out to use the app purely on-device.
 
 ## Screenshots
 
@@ -19,19 +21,27 @@ A personal finance tracking **Progressive Web App** built with React 19, TypeScr
 
 ## Features
 
-- **Accounts** — track multiple accounts (cash, bank, crypto, savings, debt/mortgage) with real-time balances
-- **Transactions** — income, expenses, and transfers with category tagging, note search, and bulk edit/delete
-- **Categories** — custom categories with drag-reorder, budgets, and an interactive donut chart breakdown
-- **Budget** — monthly budget tracking per category and debt account, with visual progress bars
-- **Overview** — spending trends, daily averages, per-category breakdowns, and a Recharts bar chart
-- **Multi-currency** — live exchange rates (open.er-api.com, 24h cache) with per-account currency and automatic conversion
-- **Debt tracking** — mortgage and loan tracking with payment split calculator, overpayment term-saved display
-- **Offline-first** — all data stored locally in IndexedDB via Dexie, no server required
-- **PWA** — installable on Android (and desktop), works without internet, full-screen app experience
-- **Backup / Export** — export transactions to XLSX, full JSON data backup and restore, scheduled auto-backup
-- **Onboarding** — 5-step first-run flow: language/currency, first account, seed categories, install prompt
+- **Accounts** — cash, bank, crypto, savings, and debt/mortgage accounts with stored real-time balances
+- **Transactions** — income, expense, and transfer records with category tagging, note search, and bulk operations
+- **Categories** — custom categories with drag-reorder, budgets, and an interactive donut breakdown
+- **Budget** — monthly budget tracking per category and debt account
+- **Overview** — spending trends, daily averages, per-category breakdowns
+- **Multi-currency** — live FX rates (open.er-api.com, 24h cache) with per-account currency
+- **Debt tracking** — mortgage / loan tracking with payment-split and overpayment term-saved calculator
+- **Offline-first** — every screen works without network; IndexedDB is the source of truth
+- **PWA** — installable on Android / desktop, full-screen, service-worker cached
+- **Backup / Export** — XLSX export, full JSON backup/restore, scheduled auto-backup
+- **Onboarding** — first-run flow for currency, first account, seed categories, install prompt
+- **Google sign-in** — optional account linking; sign-out leaves all local data intact
+- **Family sharing** — invite members to a household; shared accounts, categories, budgets, transactions
+- **E2E-encrypted sync** — XChaCha20-Poly1305 record envelopes with a per-family key wrapped to each device's X25519 public key; server stores ciphertext + AAD metadata only
+- **Web Push** — per-device push notifications for sync activity and reminders
+- **Admin panel** — `/admin` route for family ownership transfer, device revocation, snapshots, and quota inspection
+- **Snapshots & recovery** — server-side ciphertext snapshots; full restore flow for re-installs or new devices
 
 ## Tech Stack
+
+### Frontend (`src/`)
 
 | Layer       | Library                             |
 | ----------- | ----------------------------------- |
@@ -48,27 +58,56 @@ A personal finance tracking **Progressive Web App** built with React 19, TypeScr
 | Unit tests  | Vitest 4 + Testing Library          |
 | E2E tests   | Playwright (Pixel 7 device)         |
 
+### Backend (`backend/`)
+
+| Layer         | Library                                                                 |
+| ------------- | ----------------------------------------------------------------------- |
+| Runtime       | Go 1.26                                                                 |
+| HTTP router   | chi v5                                                                  |
+| Database      | SQLite (modernc.org/sqlite, WAL, single-writer)                         |
+| Query codegen | sqlc                                                                    |
+| Migrations    | pressly/goose                                                           |
+| Crypto        | libsodium-compatible NaCl primitives via `golang.org/x/crypto`          |
+| Auth          | Google ID token verification (`google.golang.org/api`); session cookies |
+| Push          | webpush-go (VAPID)                                                      |
+| Config        | caarlos0/env v11                                                        |
+| IDs / time    | UUID v7 (`google/uuid`); RFC3339+ms wire times                          |
+
 ## Getting Started
+
+### Frontend (offline-only mode)
 
 ```bash
 npm install
 npm run dev       # http://localhost:5173
 ```
 
-Or with [Task](https://taskfile.dev):
+The app opens to the configured startup tab (default: Transactions). On first launch a 5-step onboarding flow picks the currency, creates an account, and seeds categories. Sync features are gated behind Google sign-in and a configured backend URL.
+
+### Backend
+
+```bash
+cd backend
+go run ./cmd/api
+```
+
+Config comes from env vars (see `backend/CLAUDE.md` and `docs/backend/operator-runbook.md`). The backend exposes `/v1/*` and an `/admin` UI for family/device administration.
+
+### Task runner
+
+With [Task](https://taskfile.dev):
 
 ```bash
 task setup        # npm install + Playwright browsers
-task dev
+task ci           # lint -> test -> build
+task docker:up    # nginx-served frontend on http://localhost:80
 ```
-
-The app opens to the configured startup tab (default: Transactions). On first launch it runs a 5-step onboarding flow to pick currency, create an account, and seed categories.
 
 ## Scripts
 
 | Command               | Description                                            |
 | --------------------- | ------------------------------------------------------ |
-| `npm run dev`         | Development server with HMR (http://localhost:5173)    |
+| `npm run dev`         | Frontend dev server with HMR (http://localhost:5173)   |
 | `npm run build`       | TypeScript check + production build → `dist/`          |
 | `npm run preview`     | Serve production build locally (http://localhost:4173) |
 | `npm test`            | Vitest unit tests                                      |
@@ -76,108 +115,73 @@ The app opens to the configured startup tab (default: Transactions). On first la
 | `npm run lint`        | ESLint                                                 |
 | `npm run format`      | Prettier (auto-fix)                                    |
 | `npm run screenshots` | Regenerate PWA screenshot assets                       |
-| `task ci`             | Full CI pass: lint → test → build                      |
-| `task format:check`   | Check formatting without writing                       |
-| `task clean`          | Remove dist/, test-results/, e2e/screenshots/          |
-| `task docker:up`      | Run in Docker (nginx, http://localhost:80)             |
+| `go test ./...`       | Backend tests (from `backend/`)                        |
+| `go vet ./...`        | Backend static checks                                  |
 
-## Architecture Overview
+## Key concepts
 
-### Data model
+- **Stored balances, not derived.** `balance.service.ts` updates account balances atomically on every add/edit/delete.
+- **Minor units everywhere.** All money is integer cents/pence on the wire and in storage. Division by 100 happens only at display time.
+- **Soft delete only.** Domain records set `isTrashed = true`. Trash views exist for accounts and categories.
+- **E2E envelope.** Records leave the device as `XChaCha20-Poly1305` ciphertext bound to AAD (familyId, recordId, version). The backend persists the envelope verbatim — it cannot decrypt.
+- **Trust on first use (TOFU).** Device public keys are pinned the first time a peer signs in; subsequent rotations require explicit re-trust. See `docs/design-notes/key-rotation.md`.
 
-All data lives in IndexedDB (via Dexie, database name `expenses-app-db`, currently schema version 5). The main tables:
+## State management layers
 
-- **accounts** — assets, savings, and debt accounts; each has a stored `balance` in minor units (cents)
-- **categories** — expense and income categories, drag-sorted via `displayOrder`
-- **transactions** — income, expense, and transfer records; transfers are two rows sharing `transferGroupId`
-- **budgets** — planned amounts per category or debt account, keyed by `"YYYY-MM"` month
-- **exchangeRates** — cached rate responses from open.er-api.com, pruned after 90 days
-- **settings** — key-value store for app preferences
-- **backups** — full JSON snapshots created manually or on a schedule
-
-All monetary amounts are stored and passed in **minor units** (cents, pence, etc.). Division by 100 happens only at display time.
-
-### Balance accounting
-
-Balances are **stored, not derived**. `balance.service.ts` updates the account balance atomically in a Dexie transaction on every add, update, or delete. The `QuotaError` class signals IndexedDB storage exhaustion.
-
-### State management layers
-
-1. **Dexie + useLiveQuery** — reactive DB reads for all domain data
-2. **Zustand `ui-store`** — ephemeral UI state (period filters, transaction selection, category edit mode); lost on page reload
-3. **Zustand `settings-store`** — hydrated from DB on startup, written back on change
-
-### Routing
-
-Five tab routes (`/accounts`, `/categories`, `/transactions`, `/budget`, `/overview`) share the `TabLayout` shell (TopBar + ContentColumn + BottomNav). Heavy tabs (Budget, Overview) and the transaction input form are code-split with `React.lazy`.
-
-Full-screen routes (no BottomNav): `/transactions/new`, `/transactions/:id/edit`, `/accounts/trash`, `/settings`, `/onboarding`.
-
-### Startup sequence
-
-On every cold start the app:
-
-1. Runs `checkDatabaseIntegrity()` — shows a recovery screen on failure
-2. Loads settings from DB into Zustand
-3. Redirects to `/onboarding` if not yet completed, otherwise to the configured startup tab
-4. Runs scheduled auto-backup if the interval has elapsed
-
-### Path alias
-
-`@` resolves to `src/` — e.g. `import { db } from '@/db/database'`.
+1. **Dexie + useLiveQuery** — reactive DB reads for all domain data (frontend IndexedDB is currently at **schema v6**; see `src/db/database.ts`).
+2. **Zustand `ui-store`** — ephemeral UI state (filters, selection, edit mode); lost on reload.
+3. **Zustand `settings-store`** — hydrated from DB on startup, written back on change.
+4. **Sync engine (`src/services/sync/`)** — outbox + cursor tables drain to the backend in the background; conflicts resolved by `(updatedAt, recordId)` last-writer-wins per architecture spec.
 
 ## Testing
 
-**Unit tests** (Vitest, `node` environment, `fake-indexeddb`):
-
 ```bash
-npm test
-# or to run once (CI mode):
-npm test -- --run
+npm test                # frontend unit tests (Vitest)
+npm run test:e2e        # frontend e2e (Playwright, Pixel 7)
+go test ./... -C backend # backend tests (unit + integration)
 ```
 
-Test files live co-located next to the source file they test (e.g. `AccountForm.test.tsx` beside `AccountForm.tsx`), except pure utility tests which go in `src/utils/__tests__/`.
-
-**End-to-end tests** (Playwright, Pixel 7 device emulation):
-
-```bash
-npm run test:e2e
-```
-
-Tests are in `e2e/`. The dev server is started automatically. Specs cover onboarding, accounts, transactions, and mortgage overpayment flows.
-
-**Manual smoke tests**: 77 test cases in `docs/test-plan.md`, runnable via the `/smoke-test` Claude Code slash command (Playwright MCP, 390×844 viewport).
-
-## Pre-commit Hooks
-
-Formatting and lint-fix run automatically on staged files via **husky** + **lint-staged**. No manual step needed.
+Manual smoke tests live in `docs/test-plan.md` and run via the `/smoke-test` Claude Code slash command (Playwright MCP, 390×844 viewport).
 
 ## Docker
 
-A multi-stage Docker image (Node builder → nginx runtime) is included.
+A multi-stage frontend image (Node builder → nginx runtime) and a backend `Dockerfile` are included.
 
 ```bash
-task docker:build   # build image
-task docker:up      # start at http://localhost:80
+task docker:build   # build frontend image
+task docker:up      # start frontend at http://localhost:80
 task docker:down    # stop
 task docker:logs    # tail container logs
-task docker:rebuild # rebuild from scratch + restart
+task docker:rebuild # rebuild + restart
 ```
 
-The nginx config is in `nginx/nginx.conf`. The `docker-compose.yml` is in the project root.
+See `docs/deployment-setup.md` for the full Cloudflare Tunnel + Docker production stack (frontend + backend + auth env vars).
 
 ## Docs
 
-| File                                                   | Contents                                          |
-| ------------------------------------------------------ | ------------------------------------------------- |
-| [`docs/test-plan.md`](docs/test-plan.md)               | 77 manual smoke test cases (TC-001–TC-077)        |
-| [`docs/deployment-setup.md`](docs/deployment-setup.md) | Cloudflare Tunnel + Docker deployment guide       |
-| [`docs/archive/`](docs/archive/)                       | Initial planning specs (may be outdated)          |
-| [`CLAUDE.md`](CLAUDE.md)                               | Agent context: conventions, constraints, patterns |
+| File                                                                     | Contents                                                                       |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md)                                     | Top-level architecture: data model, sync protocol, trust model, threat surface |
+| [`docs/deployment-setup.md`](docs/deployment-setup.md)                   | Production deployment guide (Cloudflare Tunnel + Docker + backend env)         |
+| [`docs/backend/operator-runbook.md`](docs/backend/operator-runbook.md)   | Day-2 ops: env vars, snapshots, key rotation, incident playbooks               |
+| [`docs/backend/architecture.md`](docs/backend/architecture.md)           | Backend-internal architecture (routes, packages, DB schema)                    |
+| [`docs/design-notes/key-rotation.md`](docs/design-notes/key-rotation.md) | Work-in-progress design for device-key rotation and re-trust                   |
+| [`docs/test-plan.md`](docs/test-plan.md)                                 | Manual smoke test cases                                                        |
+| [`CLAUDE.md`](CLAUDE.md)                                                 | Repo-wide agent context: conventions, constraints, patterns                    |
+| [`backend/CLAUDE.md`](backend/CLAUDE.md)                                 | Backend package conventions and gotchas                                        |
+| [`src/db/CLAUDE.md`](src/db/CLAUDE.md)                                   | Dexie schema rules and migration conventions                                   |
+| [`src/services/CLAUDE.md`](src/services/CLAUDE.md)                       | Service-layer overview                                                         |
+| [`src/services/auth/CLAUDE.md`](src/services/auth/CLAUDE.md)             | Google sign-in + session handling                                              |
+| [`src/services/crypto/CLAUDE.md`](src/services/crypto/CLAUDE.md)         | Crypto worker, key material, envelope format                                   |
+| [`src/services/sync/CLAUDE.md`](src/services/sync/CLAUDE.md)             | Outbox / cursor sync engine                                                    |
+| [`src/services/family/CLAUDE.md`](src/services/family/CLAUDE.md)         | Family membership and invite flow                                              |
+| [`src/components/CLAUDE.md`](src/components/CLAUDE.md)                   | Component conventions                                                          |
+| [`src/hooks/CLAUDE.md`](src/hooks/CLAUDE.md)                             | Reactive hook conventions                                                      |
+| [`src/utils/CLAUDE.md`](src/utils/CLAUDE.md)                             | Pure-utility conventions                                                       |
 
 ## Built with Claude Code
 
-The frontend UI — components, animations, data flows, and overall architecture — was developed using [Claude Code](https://claude.ai/code) with a variety of skills and agents.
+Most of this codebase — frontend UI, backend handlers, sync protocol, and tests — was developed using [Claude Code](https://claude.ai/code) with a variety of skills and subagents.
 
 ## License
 

@@ -1,26 +1,33 @@
 # Expenses App — Manual Smoke Test Plan
 
 **Title**: Expenses App Manual Smoke Test Plan  
-**Version**: 1.1  
-**Date**: 2026-04-05  
+**Version**: 1.2  
+**Date**: 2026-06-07  
 **Author**: QA Engineering
 
 ---
 
 ## Coverage Summary
 
-| Section             | Test Cases |
-| ------------------- | ---------- |
-| 1. Onboarding       | 6          |
-| 2. Accounts         | 13         |
-| 3. Categories       | 10         |
-| 4. Transactions     | 17         |
-| 5. Budget           | 8          |
-| 6. Overview         | 6          |
-| 7. Settings         | 8          |
-| 8. Period Filtering | 5          |
-| 9. Data Integrity   | 4          |
-| **Total**           | **77**     |
+| Section                       | Test Cases |
+| ----------------------------- | ---------- |
+| 1. Onboarding                 | 6          |
+| 2. Accounts                   | 13         |
+| 3. Categories                 | 10         |
+| 4. Transactions               | 16         |
+| 5. Budget                     | 8          |
+| 6. Overview                   | 6          |
+| 7. Settings                   | 8          |
+| 8. Period Filtering           | 5          |
+| 9. Data Integrity             | 4          |
+| 10. Family Invite / Join      | 4          |
+| 11. Multi-Device Key Approval | 3          |
+| 12. Recovery Code             | 3          |
+| 13. Push Notifications        | 3          |
+| 14. Snapshot Restore          | 2          |
+| 15. Admin Panel               | 4          |
+| 16. Sync Conflict / Quota UX  | 2          |
+| **Total**                     | **97**     |
 
 ---
 
@@ -41,6 +48,8 @@ For each test session, set viewport before navigating:
 3. Confirm dark theme is applied (no light background)
 
 Date format used throughout this plan: **dd.MM.yyyy** (e.g. 05.04.2026)
+
+**Sign-In step (applies globally)**: The new first onboarding step is a Sign-In screen ("Continue with Google" / "Skip for now — keep things local"). Wherever a TC's preconditions say "Onboarding completed", "fresh app state", or "Fresh app state (IndexedDB cleared)", the implicit first action is to tap **"Skip for now — keep things local"** on the Sign-In screen unless the TC explicitly exercises the Google sign-in path (sections 10–16). Sections 10–16 (Family Invite, Multi-Device Key Approval, Recovery Code, Push, Snapshot, Admin, Sync conflict) require the operator to **complete the Google sign-in** instead of skipping.
 
 ---
 
@@ -472,7 +481,7 @@ Date format used throughout this plan: **dd.MM.yyyy** (e.g. 05.04.2026)
 
 **Area**: Categories  
 **Priority**: P1  
-**Preconditions**: Fresh app state (all categories deleted or no categories exist). Navigate to `/categories`.
+**Preconditions**: Fresh app state (all categories deleted or no categories exist). Sign-In step skipped ("Skip for now — keep things local"). Navigate to `/categories`.
 
 **Steps**:
 
@@ -1002,7 +1011,7 @@ Date format used throughout this plan: **dd.MM.yyyy** (e.g. 05.04.2026)
 
 **Area**: Budget  
 **Priority**: P1  
-**Preconditions**: Fresh app state with no transactions and no budget amounts set. Navigate to `/budget`.
+**Preconditions**: Fresh app state with no transactions and no budget amounts set. Sign-In step skipped ("Skip for now — keep things local"). Navigate to `/budget`.
 
 **Steps**:
 
@@ -1096,7 +1105,7 @@ Date format used throughout this plan: **dd.MM.yyyy** (e.g. 05.04.2026)
 
 **Area**: Overview  
 **Priority**: P1  
-**Preconditions**: Fresh app state with no transactions, or period filter set to a range with no transactions. Navigate to `/overview`.
+**Preconditions**: Fresh app state with no transactions, or period filter set to a range with no transactions. Sign-In step skipped ("Skip for now — keep things local") if starting from a clean install. Navigate to `/overview`.
 
 **Steps**:
 
@@ -1415,4 +1424,418 @@ Date format used throughout this plan: **dd.MM.yyyy** (e.g. 05.04.2026)
 
 ---
 
-_End of test plan. Total test cases: 77 (TC-001 through TC-076, plus TC-075)._
+---
+
+## 10. Family Invite / Join
+
+> **Prerequisites for this section**: Two signed-in Google accounts on two devices/browser profiles ("Owner" and "Recipient"). The dev backend must be reachable and the Owner account must be on the allowlist (or admin-bypass enabled). Replace the placeholder email `recipient@example.com` with the second test account's address.
+
+### TC-077 — Owner generates an invite
+
+**Area**: Family  
+**Priority**: P0  
+**Preconditions**: Owner signed in via Google on the Sign-In screen. Onboarding completed. Navigate to `/settings`.
+
+**Steps**:
+
+1. Locate the **Family** section.
+2. Confirm a "Family (1 member)" header is shown with the owner's name/email.
+3. In the "Invite by email" field, type `recipient@example.com`.
+4. Tap **Send**.
+5. Wait for the success toast.
+
+**Expected Result**: Toast "Invite sent" appears. The input clears. No client-side error logged in the console. The Recipient account now has a pending invite (verified in TC-079).
+
+---
+
+### TC-078 — Send button disabled when input is empty or invalid
+
+**Area**: Family  
+**Priority**: P2  
+**Preconditions**: Owner signed in via Google. Navigate to `/settings` → Family section.
+
+**Steps**:
+
+1. Confirm the **Send** button is disabled while the email input is empty.
+2. Type a single space, observe the button.
+3. Type `not-an-email`, tap Send.
+4. Type `recipient@example.com`, observe the button.
+
+**Expected Result**: Send is disabled with empty/whitespace input. Submitting a malformed email surfaces a toast error ("Failed to send invite" or a validation message from the backend). With a valid email, Send becomes enabled.
+
+---
+
+### TC-079 — Recipient sees and accepts the invite
+
+**Area**: Family  
+**Priority**: P0  
+**Preconditions**: TC-077 completed (an invite for the Recipient is pending). Recipient signed in via Google on a second device/browser. Onboarding completed (no existing solo records, or accept the "start fresh" path of the migration dialog). Navigate to `/settings`.
+
+**Steps**:
+
+1. Locate the **Family** section.
+2. Confirm a "Pending invites" header is shown with the Owner's display name/email.
+3. Tap **Accept** next to the invite.
+4. Wait for the toast.
+5. Scroll up and observe the member list count.
+
+**Expected Result**: Toast "Joined family!" appears. The invite disappears from "Pending invites". The member list now shows "Family (2 members)" with both the Owner and Recipient. On the Owner's device, the member list updates within ~30 s (next sync poll) or immediately on reload.
+
+---
+
+### TC-080 — Recipient declines an invite
+
+**Area**: Family  
+**Priority**: P1  
+**Preconditions**: A second invite has been sent from Owner to Recipient (repeat TC-077 with a third address, or send a fresh one to Recipient if they declined previously). Recipient signed in, navigate to `/settings`.
+
+**Steps**:
+
+1. Locate the pending invite in the Family section.
+2. Tap **Decline**.
+3. Wait for the toast.
+
+**Expected Result**: Toast "Invite declined" appears. The invite disappears from the list. No member is added on the Owner's side.
+
+---
+
+## 11. Multi-Device Key Approval (B5 explicit approval with fingerprint)
+
+> Tests the explicit-approval flow (architecture §8.2): when a second device signs in with the same Google account, the existing device must tap **Approve** and verify a matching fingerprint before the family key is wrapped for the new device.
+
+### TC-081 — Approve a new device join (happy path)
+
+**Area**: Multi-Device  
+**Priority**: P0  
+**Preconditions**: Existing Device A is signed in and has the family key locally (verified by seeing decrypted accounts). Device B is a fresh browser profile / Incognito with no local state.
+
+**Steps**:
+
+1. On Device B, navigate to http://localhost:5173.
+2. Tap **Continue with Google** on the Sign-In screen and complete the OAuth flow with the same Google account as Device A.
+3. After sign-in, Device B lands on the "Waiting for approval" screen with a pulse animation.
+4. Switch focus to Device A.
+5. On Device A, wait for the in-app banner "New device joined: \<label\>" to appear at the top.
+6. Note the **fingerprint** hex string shown inside the banner (formatted in JetBrains Mono with `data-testid="device-fingerprint"`).
+7. On Device B, note the device fingerprint displayed (matching value should be visible somewhere — typically on the waiting screen or via `chrome://serviceworker-internals` / debug console). Confirm the two strings match character-for-character.
+8. Tap **Approve** on Device A.
+
+**Expected Result**: Device A toasts "Device approved" and the banner dismisses. Within ~5 s (SSE/poll), Device B's waiting screen flips to the `/accounts` tab with the family data decrypted and visible. `awaitingEnvelope` flag in the auth store transitions from `true` → `false`.
+
+---
+
+### TC-082 — Reject a new device join
+
+**Area**: Multi-Device  
+**Priority**: P0  
+**Preconditions**: Existing Device A is signed in. Device C is a fresh browser profile.
+
+**Steps**:
+
+1. On Device C, complete Google sign-in (as in TC-081). Device C lands on the waiting screen.
+2. On Device A, wait for the "New device joined" banner.
+3. Tap **Reject**.
+4. Observe Device A and Device C.
+
+**Expected Result**: Device A toasts "Device rejected" and the banner dismisses. Device C remains on the waiting screen (no envelope was wrapped). After 30 s on Device C, the screen transitions to the recovery-code-entry fallback. The Owner's family key is never exposed to Device C.
+
+---
+
+### TC-083 — Banner is dismissable without approval; reappears on next event
+
+**Area**: Multi-Device  
+**Priority**: P2  
+**Preconditions**: A pending device join exists for Device A (Device D has just signed in).
+
+**Steps**:
+
+1. On Device A, see the "New device joined" banner with the **✕** dismiss button.
+2. Tap **✕**.
+3. Confirm the banner disappears (no toast).
+4. Reload Device A (F5).
+5. Observe whether the banner reappears.
+
+**Expected Result**: Step 3: The banner is hidden locally but the server still has Device D in `pending` state (no envelope wrapped). Step 5: After reload, if the SSE subscription re-emits the `device.joined` event, the banner reappears. The operator can then Approve or Reject. Dismissing the banner is purely a UI action — it does NOT implicitly approve or reject.
+
+---
+
+## 12. Recovery Code
+
+> Tests the recovery-code reveal and regenerate flows in `Settings → Security` (architecture §9.6).
+
+### TC-084 — Reveal recovery code (warm reveal)
+
+**Area**: Security  
+**Priority**: P0  
+**Preconditions**: Operator signed in via Google. Family key is present locally (synced at least once). Navigate to `/settings` and scroll to the **Security** section.
+
+**Steps**:
+
+1. Locate "Show recovery code".
+2. Tap it.
+3. If a reauth grant dialog appears, complete it (re-enter Google credentials or biometric step depending on browser).
+4. Wait for the reveal to complete.
+5. Observe the 4-column word grid (24 cells numbered 1–24).
+6. Tap **Copy**.
+7. Confirm a toast "Copied — will clear in 30s" appears.
+8. After ~30 s, paste into a text editor outside the app — clipboard should be empty.
+9. Tap **Hide**.
+
+**Expected Result**: Step 5: Exactly 24 BIP-39 words are shown, each numbered, rendered in JetBrains Mono. Step 8: Clipboard is empty (cleared automatically). Step 9: The grid is replaced by the "Show recovery code" button again.
+
+---
+
+### TC-085 — Recovery code reveal fails with no family
+
+**Area**: Security  
+**Priority**: P1  
+**Preconditions**: Operator signed in via Google but has not yet completed onboarding / no family is synced locally (cursor table empty). Navigate to `/settings` → Security.
+
+**Steps**:
+
+1. Tap "Show recovery code".
+2. Observe the toast or error.
+
+**Expected Result**: Toast "No family synced yet — cannot reveal phrase" appears. The grid is NOT displayed. No crash, no spinner stuck on screen.
+
+---
+
+### TC-086 — Regenerate recovery code
+
+**Area**: Security  
+**Priority**: P1  
+**Preconditions**: Family key present locally. Navigate to `/settings` → Security.
+
+**Steps**:
+
+1. Tap **Regenerate recovery code**.
+2. Confirm a destructive-style dialog appears with body "This will invalidate your current recovery code and create a new one. Make sure to save the new code."
+3. Tap **Cancel** the first time and confirm nothing changes.
+4. Tap **Regenerate recovery code** again, tap **Regenerate** in the dialog.
+5. Complete the reauth grant if prompted.
+6. Wait for the worker round-trip.
+7. After success, tap **Show recovery code** and reveal the new phrase.
+
+**Expected Result**: Step 6: Toast "Recovery code regenerated" appears. Any previously revealed phrase in the UI is cleared. Step 7: The newly revealed phrase is different from the old one. A backend POST to `/api/v1/account/recovery/regenerate` succeeded (verify in Network tab if needed). Old recovery code is no longer valid (would require a fresh device sign-in to fully verify).
+
+---
+
+## 13. Push Notifications
+
+> Tests `Settings → Notifications → Push notifications` toggles (subscribe/unsubscribe with persistence across reload).
+
+### TC-087 — Enable push subscription
+
+**Area**: Notifications  
+**Priority**: P0  
+**Preconditions**: Operator signed in via Google. Browser supports `Notification` and `PushManager` (Chromium-based). `VITE_VAPID_PUBLIC_KEY` env var is set in the dev build. Navigate to `/settings`.
+
+**Steps**:
+
+1. Locate the **Notifications** section.
+2. Tap the "Push notifications" toggle to enable.
+3. Browser prompts for Notification permission — choose **Allow**.
+4. Wait for the toggle to settle in the ON state.
+5. Open DevTools → Application → Service Workers → confirm a push subscription is registered.
+6. Open DevTools → Application → IndexedDB → `expensesapp` → `settings` and confirm `pushSubscriptionId` is set to a non-empty UUID-like string.
+
+**Expected Result**: Toggle is ON. Additional rows appear ("Daily reminder", "Missed-day", "Family digest", "Quiet hours") because they are gated on the push toggle. Backend POST to `/api/v1/push/subscribe` returned 200 with an `id`.
+
+---
+
+### TC-088 — Push subscription persists across reload
+
+**Area**: Notifications  
+**Priority**: P0  
+**Preconditions**: TC-087 completed (push toggle ON).
+
+**Steps**:
+
+1. Reload the page (F5).
+2. Navigate to `/settings` → Notifications.
+3. Observe the "Push notifications" toggle.
+
+**Expected Result**: The toggle is still ON after reload. The dependent rows (daily reminder, missed-day, etc.) are still visible. The `useEffect` in `NotificationSetting.tsx` reads the live `PushManager.getSubscription()` and matches it against the stored `pushSubscriptionId` — if it had cleared on reload that would be a regression.
+
+---
+
+### TC-089 — Disable push subscription
+
+**Area**: Notifications  
+**Priority**: P1  
+**Preconditions**: TC-087 completed (push toggle ON).
+
+**Steps**:
+
+1. Navigate to `/settings` → Notifications.
+2. Tap the "Push notifications" toggle to OFF.
+3. Open DevTools → Application → Service Workers — confirm no push subscription remains.
+4. Open DevTools → Application → IndexedDB → `expensesapp` → `settings` — confirm `pushSubscriptionId` is `null`.
+5. Reload the page.
+6. Observe the toggle.
+
+**Expected Result**: Toggle is OFF immediately after step 2. Dependent rows (daily reminder, etc.) are hidden. Backend DELETE to `/api/v1/push/subscribe/{id}` was issued. After reload, the toggle remains OFF (persistence is symmetrical).
+
+---
+
+## 14. Snapshot Restore
+
+> Tests `Settings → Backup → Snapshot restore` (architecture §14 + `sync.barrier`).
+
+### TC-090 — List server snapshots and restore the most recent
+
+**Area**: Backup  
+**Priority**: P0  
+**Preconditions**: Operator signed in via Google. Family has at least one server-side daily snapshot (created automatically by the backend's nightly job — verify by hitting `/api/v1/snapshots` directly, or wait for a real overnight run on dev). Navigate to `/settings`.
+
+**Steps**:
+
+1. Locate the **Backup** section.
+2. Tap **Snapshot restore** to expand.
+3. Observe the list of snapshots (each row shows a date in JetBrains Mono).
+4. Pick the most recent snapshot and tap **Restore**.
+5. Confirm the destructive-style dialog appears with the snapshot date interpolated in the body.
+6. Tap **Restore** in the dialog.
+7. Wait for the restore + pull to complete.
+
+**Expected Result**: Step 3: At least one row is listed (or the empty-state "No snapshots yet"). Step 6: Toast "Snapshot restored" appears. The local Dexie database is rebuilt from scratch with data from the restored snapshot. The sync cursor is replaced with the snapshot's `newCursor`. A subsequent `pullSince(familyId, undefined)` ran (verify via console logs) and the app's accounts/transactions now reflect the snapshot's state. `sync.barrier` was applied so no in-flight outbox writes are lost or doubled.
+
+---
+
+### TC-091 — Cancel snapshot restore from confirmation dialog
+
+**Area**: Backup  
+**Priority**: P1  
+**Preconditions**: TC-090 step 1–3 completed (snapshot list visible).
+
+**Steps**:
+
+1. Tap **Restore** next to any snapshot row.
+2. The confirmation dialog appears.
+3. Tap **Cancel**.
+
+**Expected Result**: Dialog closes. No restore occurs. No toast. Snapshot list remains expanded and interactive. Local database is unchanged.
+
+---
+
+## 15. Admin Panel
+
+> Tests admin user/allowlist actions with mobile responsive layout. Resize viewport to **390×844** (Android mobile) for all cases unless noted otherwise.
+
+### TC-092 — Admin panel mobile layout (narrow viewport)
+
+**Area**: Admin  
+**Priority**: P0  
+**Preconditions**: Operator signed in via Google with `isAdmin = true` on the backend. Viewport set to 390×844. Navigate to `/admin`.
+
+**Steps**:
+
+1. Confirm the page title "Admin" is visible in the top bar with a back arrow on the left.
+2. Confirm the "Admin panel" badge (next to the title) is HIDDEN on this narrow viewport.
+3. Confirm a horizontal scrollable tab strip is shown below the header containing chips: Users, Allowlist, Admins, Audit.
+4. The sidebar (180px column) is NOT visible.
+5. Tap each tab chip and confirm the content pane below swaps without page reload.
+6. Each tab chip has `min-height: 44px` (touch target).
+
+**Expected Result**: Layout is single-column (header + tab strip + scrollable content). No horizontal page scrollbar on the body. The active tab chip is styled with `var(--color-primary)` background and a glow filter. Sidebar nav is suppressed (the `useIsMobile` hook returned `true`).
+
+---
+
+### TC-093 — Admin panel desktop layout (wide viewport)
+
+**Area**: Admin  
+**Priority**: P2  
+**Preconditions**: Admin signed in. Resize viewport to **960×900**. Navigate to `/admin`.
+
+**Steps**:
+
+1. Confirm the "Admin panel" badge IS visible next to the page title.
+2. Confirm a vertical sidebar (180px) is shown on the left with Users / Allowlist / Admins / Audit items.
+3. The tab chip strip is NOT shown.
+4. Click each sidebar entry and confirm the right pane updates.
+
+**Expected Result**: Sidebar is sticky on the left, content pane is on the right. Active sidebar item is styled with a 3px primary-color left border and primary-dim background. No mobile tab strip rendered.
+
+---
+
+### TC-094 — Suspend and unsuspend a user
+
+**Area**: Admin  
+**Priority**: P0  
+**Preconditions**: Admin signed in. Viewport 390×844. At least one non-admin user other than self exists in the Users tab. Navigate to `/admin` → Users.
+
+**Steps**:
+
+1. Locate a row for a non-admin user (status: Active).
+2. Tap **Suspend** in the row's action area.
+3. Wait for the toast.
+4. Confirm the status badge updates from "Active" to "Suspended" (red dim background) without page reload.
+5. Tap **Unsuspend** on the same row.
+6. Confirm the badge flips back to "Active" (green dim background).
+
+**Expected Result**: Both actions toast "User suspended" / "User unsuspended". The row updates optimistically. Suspended users cannot sign in (would require switching to that user's browser to fully verify). All buttons remain `min-height: 32px`, `min-width: 44px` on mobile.
+
+---
+
+### TC-095 — Add and remove an allowlist entry
+
+**Area**: Admin  
+**Priority**: P1  
+**Preconditions**: Admin signed in. Viewport 390×844. Navigate to `/admin` → Allowlist.
+
+**Steps**:
+
+1. In the "Add email" input, type `newuser@example.com`.
+2. Optionally type a note in the note field (e.g. "Family member").
+3. Tap **Add**.
+4. Wait for the toast "Added to allowlist".
+5. Confirm the new row appears in the allowlist below.
+6. Tap the trash/× icon on the new row.
+7. Confirm the destructive dialog appears: "Remove newuser@example.com from the allowlist? They will no longer be able to sign up."
+8. Tap **Remove**.
+9. Confirm toast "Removed from allowlist".
+
+**Expected Result**: All controls fit within the 390-pixel viewport (no horizontal scroll). The email input + Add button + note field stack vertically on narrow viewports. After step 9, the row is removed from the list. The user `newuser@example.com` can no longer complete sign-up until re-added.
+
+---
+
+## 16. Sync Conflict / Quota UX
+
+> Tests the toast/banner UX when the server rejects a sync push with `413 Payload Too Large` (family storage quota exceeded — `sync-store.lastError === "quota-exceeded"`).
+
+### TC-096 — 413 quota-exceeded banner appears in Sync settings
+
+**Area**: Sync  
+**Priority**: P0  
+**Preconditions**: Operator signed in via Google. Family has many records and is at or above the server-configured storage quota — or use a test fixture / backend env override to force the next push to return 413. Navigate to `/transactions/new` and create one more transaction to trigger a push.
+
+**Steps**:
+
+1. Save the new transaction.
+2. Wait ~5 seconds for the sync engine to attempt a push.
+3. Navigate to `/settings` and locate the **Sync** section.
+4. Observe the alert region at the top of the Sync section.
+
+**Expected Result**: An alert banner appears at the top of the Sync section with `role="alert"`, red text and a red bottom border. Body text: "Sync paused — family storage quota exceeded. Free up space (delete old data or contact the admin) and the queued changes will retry automatically next sign-in." The "Last sync" row shows the previous successful sync time (not the failed attempt). Pending records remain in the outbox but are marked terminal (no auto-retry until next sign-in).
+
+---
+
+### TC-097 — Banner persists across navigation but clears on next successful sync
+
+**Area**: Sync  
+**Priority**: P1  
+**Preconditions**: TC-096 produced the quota-exceeded banner.
+
+**Steps**:
+
+1. Navigate from `/settings` to `/transactions` and back to `/settings`.
+2. Confirm the banner is still shown (state stored in Zustand `useSyncStore.lastError`).
+3. Free up quota on the backend (admin action, or revert the test fixture).
+4. Sign out and sign in again to retry the outbox.
+5. Once the next sync push succeeds, navigate to `/settings`.
+
+**Expected Result**: Step 2: Banner persists. Step 5: Banner is gone (Zustand `lastError` was reset by the successful sync). "Last sync" row updates to the current time.
+
+---
+
+_End of test plan. Total test cases: 97 (TC-001 through TC-076, plus TC-075, plus TC-077 through TC-097)._
