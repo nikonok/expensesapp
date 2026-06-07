@@ -1,58 +1,55 @@
 # Deployment Setup Guide
 
-This guide covers the one-time steps to deploy the expenses PWA to a home Ubuntu server using GitHub Actions and Cloudflare Tunnel.
-
-**Architecture overview:**
-
-```
-Browser → Cloudflare Edge (HTTPS) → outbound tunnel → cloudflared container → app container (HTTP)
-
-GitHub Actions runner
-  → cloudflared access ssh --hostname ssh-expenses.yourdomain.com
-  → Cloudflare Edge (checks Access service token)
-  → cloudflared container on server
-  → localhost:22 (sshd — only listens on loopback, never exposed externally)
-```
-
-Cloudflare terminates HTTPS. The server requires no public IP and exposes no inbound ports — all connectivity is outbound via the tunnel.
+End-to-end runbook for deploying the expenses PWA + API to a home Ubuntu server using GitHub Actions and Cloudflare Tunnel. Run the one-time setup sections (1–5) in order, then trigger a deploy (section 7).
 
 ---
 
-## Prerequisites
+## 1. Architecture
 
-- Ubuntu server (20.04+) — no public IP required
-- Docker and Docker Compose plugin installed on the server
-- Domain managed in Cloudflare (with proxy enabled)
-- GitHub repository for this project
+```mermaid
+flowchart LR
+  B[Browser] -->|HTTPS| CFE[Cloudflare Edge]
+  CFE -->|outbound tunnel| CFD[cloudflared container]
+  CFD -->|http://app:80| APP[app container - nginx + PWA]
+  CFD -->|http://api:8080| API[api container - Go]
+  CFD -->|host-gateway:22| SSHD[host sshd 127.0.0.1:22]
+
+  GH[GitHub Actions runner] -->|cloudflared access ssh| CFE
+  GH -.->|service token| ACC[Cloudflare Access]
+  ACC -.->|gate| CFE
+```
+
+Key properties:
+
+- **No public IP, no inbound ports.** The server only makes outbound connections.
+- **Cloudflare terminates TLS** at the edge. The tunnel speaks plain HTTP to `app:80` and `api:8080` over the internal Docker `tunnel` network.
+- **Path-based routing.** `https://<APP_HOSTNAME>/api/*` reaches the Go backend; everything else reaches the static PWA. Routing is configured in the tunnel's public hostname rules (manually or via the workflow's API step).
+- **SSH for deploys** goes through `cloudflared access ssh`, gated by a Cloudflare Access service token. The host's sshd listens on loopback only.
 
 ---
 
-## 1. Install Docker on the server
+## 2. One-time server provisioning
+
+Prerequisites: Ubuntu 20.04+ server, domain managed in Cloudflare (proxy enabled), GitHub repo for this project.
+
+### 2a. Install Docker
 
 ```bash
-# Install Docker Engine (official script)
 curl -fsSL https://get.docker.com | sh
-
-# Verify Docker Compose plugin is available
-docker compose version
+docker compose version   # verify the Compose plugin is available
 ```
 
----
+### 2b. Create the `deploy` user
 
-## 2. Create the deploy user
-
-The deploy user has no shell password and no sudo superpowers beyond the specific `docker compose` commands needed for deployment.
+The deploy user has no shell password and no sudo rights beyond a narrow set of `docker compose` commands.
 
 ```bash
-# Create user
 sudo useradd -m -s /bin/bash deploy
 
-# Set up SSH directory
 sudo mkdir -p /home/deploy/.ssh
 sudo chmod 700 /home/deploy/.ssh
 sudo chown deploy:deploy /home/deploy/.ssh
 
-# Grant sudo rights for docker compose only — hardcoded path prevents abuse
 sudo tee /etc/sudoers.d/deploy-docker << 'EOF'
 deploy ALL=(ALL) NOPASSWD: /usr/bin/docker compose -f /home/deploy/expensesapp/docker-compose.yml build *
 deploy ALL=(ALL) NOPASSWD: /usr/bin/docker compose -f /home/deploy/expensesapp/docker-compose.yml up *
@@ -61,38 +58,25 @@ deploy ALL=(ALL) NOPASSWD: /usr/bin/docker compose -f /home/deploy/expensesapp/d
 deploy ALL=(ALL) NOPASSWD: /usr/bin/docker compose -f /home/deploy/expensesapp/docker-compose.yml logs *
 EOF
 sudo chmod 440 /etc/sudoers.d/deploy-docker
-
-# Validate before it takes effect
-sudo visudo -cf /etc/sudoers.d/deploy-docker
+sudo visudo -cf /etc/sudoers.d/deploy-docker   # validate
 ```
 
-> **Security note — docker compose and privilege escalation:** The sudoers rules above restrict `docker compose` to a hardcoded file path, but they do **not** restrict the _contents_ of that file. Because `deploy` owns the git repo (and therefore `docker-compose.yml`), a compromised deploy user can rewrite the file to mount the host filesystem and gain root. This is an inherent limitation of any docker-compose-over-sudo setup — `docker` access is effectively root-equivalent when the user controls the compose file.
->
-> For a personal home server this is an acceptable trade-off: the deploy user has no shell password, SSH is key-only, and no public ports are exposed. If you want to harden further, move `docker-compose.yml` to a root-owned path outside the git repo (e.g. `/etc/expensesapp/docker-compose.yml`) and update the sudoers rules and deploy workflow to point there. The `git pull` in the deploy workflow would then only update source code, and compose changes would require manual root intervention.
+> **Security note — docker compose and privilege escalation.** The sudoers rules above pin the compose file path but do not restrict its _contents_. Because `deploy` owns the git repo (and therefore `docker-compose.yml`), a compromised deploy user can rewrite the file to mount the host filesystem and gain root. This is inherent to any docker-compose-over-sudo setup. For a personal home server this is an acceptable trade-off: the deploy user has no shell password, SSH is key-only, and no public ports are exposed. To harden further, move `docker-compose.yml` to a root-owned path outside the repo and update the sudoers rules and workflow accordingly.
 
----
-
-## 3. Generate a deploy SSH key (on your local machine)
+### 2c. Generate the deploy SSH key (on your local machine)
 
 ```bash
 ssh-keygen -t ed25519 -C "github-actions-expensesapp" -f ~/.ssh/expensesapp_deploy
 ```
 
-This produces two files:
+You now have two files:
 
-- `expensesapp_deploy` — **private key** → goes into GitHub Secrets
-- `expensesapp_deploy.pub` — **public key** → goes onto the server
+- `expensesapp_deploy` — private key, goes into GitHub Secret `SSH_KEY`
+- `expensesapp_deploy.pub` — public key, goes onto the server
 
----
-
-## 4. Add the public key to the server
+### 2d. Install the public key on the server
 
 ```bash
-# Copy the public key contents into authorized_keys with restrictions:
-#   no-agent-forwarding  — prevents SSH agent hijacking
-#   no-pty               — no interactive shell; commands only
-#   no-user-rc           — skip .bashrc/.bash_profile
-#   no-X11-forwarding    — no X11 tunneling
 sudo tee /home/deploy/.ssh/authorized_keys << EOF
 no-agent-forwarding,no-pty,no-user-rc,no-X11-forwarding $(cat ~/.ssh/expensesapp_deploy.pub)
 EOF
@@ -101,24 +85,20 @@ sudo chmod 600 /home/deploy/.ssh/authorized_keys
 sudo chown deploy:deploy /home/deploy/.ssh/authorized_keys
 ```
 
-> **Critical:** The `authorized_keys` file must be owned by `deploy`, not `root`. If you run `sudo tee` to write this file, it will be owned by `root` and sshd will silently refuse to read it — key authentication will fail with no useful error on the client side. The sshd log will show: `Could not open user 'deploy' authorized keys: Permission denied`. Always run `chown` after writing the file.
->
-> Verify ownership is correct:
+> **Critical:** `authorized_keys` must be owned by `deploy`, not `root`. If you write the file via `sudo tee` and forget the `chown`, sshd silently ignores it. Verify:
 >
 > ```bash
 > sudo ls -la /home/deploy/.ssh/
 > # authorized_keys must show: -rw------- deploy deploy
 > ```
 
----
+### 2e. Harden sshd
 
-## 5. Harden SSH daemon
-
-Add to `/etc/ssh/sshd_config` (or create `/etc/ssh/sshd_config.d/hardening.conf`):
+Create `/etc/ssh/sshd_config.d/hardening.conf`:
 
 ```
-# Optional hardening: bind sshd to loopback only so it is unreachable even on the
-# local network. Skip this if other users need to SSH in from the LAN.
+# Optional: bind sshd to loopback so it is unreachable from the LAN.
+# Skip this if other users still need to SSH from the local network.
 # ListenAddress 127.0.0.1
 
 PasswordAuthentication no
@@ -133,265 +113,293 @@ Match User deploy
 Reload:
 
 ```bash
-sudo sshd -t          # test config first
+sudo sshd -t                    # test config first
 sudo systemctl reload ssh
 ```
 
----
-
-## 6. Clone the repository on the server
+### 2f. Clone the repository on the server
 
 ```bash
 sudo -u deploy git clone https://github.com/<your-org>/expensesapp.git /home/deploy/expensesapp
 ```
 
-The `.env` file (containing the Cloudflare tunnel token) is written automatically on every GitHub Actions deploy run. No manual `.env` creation is needed.
+The `.env` file is written automatically by the deploy workflow — do not create it by hand for normal operation.
 
 ---
 
-## 7. Set up Cloudflare Tunnel
+## 3. One-time Cloudflare setup
 
-### 7a. Create the tunnel
+### 3a. DNS
 
-1. Log in to [Cloudflare Dashboard](https://dash.cloudflare.com)
-2. Go to **Zero Trust** → **Networks** → **Tunnels**
-3. Click **Create a tunnel** → choose **Cloudflared** → name it `expensesapp-home`
-4. On the next screen, copy the token from the install command — it looks like `eyJhIjoiY...`
-   (you only need the long token string, not the full `cloudflared service install` command)
-5. Click **Next**
+In Cloudflare DNS, the public hostnames (`expenses.example.com` and `ssh-expenses.example.com`) are created **automatically** as CNAMEs by the tunnel public-hostname configuration in step 3b. You do not need to create them manually. If you want them ahead of time, add proxied `CNAME` records pointing at `<tunnel-id>.cfargotunnel.com`.
 
-### 7b. Configure the web app public hostname
+### 3b. Create the tunnel (manual, one-time)
 
-Still in the tunnel creation wizard (or later via the tunnel's **Public Hostname** tab):
+1. Cloudflare Dashboard → **Zero Trust** → **Networks** → **Tunnels**.
+2. **Create a tunnel** → **Cloudflared** → name it `expensesapp-home`.
+3. On the **Install connector** screen, copy the long token string (`eyJhIjoiY...`). This becomes the `CLOUDFLARE_TUNNEL_TOKEN` GitHub Secret. Ignore the install command itself — the server runs cloudflared via Docker Compose.
+4. Click **Next**.
+5. **Public Hostnames** — add two routes:
 
-| Field        | Value                            |
-| ------------ | -------------------------------- |
-| Subdomain    | your subdomain (e.g. `expenses`) |
-| Domain       | your Cloudflare-managed domain   |
-| Service type | `HTTP`                           |
-| URL          | `http://app:80`                  |
+   | Subdomain      | Domain               | Service type | URL               |
+   | -------------- | -------------------- | ------------ | ----------------- |
+   | `expenses`     | your CF-managed zone | `HTTP`       | `http://app:80`   |
+   | `ssh-expenses` | your CF-managed zone | `SSH`        | `host-gateway:22` |
 
-> **Important**: the URL must be `http://app:80` — `app` is the Docker service name, resolved via Docker internal DNS. Do not use `localhost` or `127.0.0.1`.
+   > Why `http://app:80` and `host-gateway:22`: cloudflared runs inside Docker. `app` resolves via Docker's internal DNS to the PWA container. `host-gateway` is Docker's special name for the host machine — required for SSH because sshd runs on the host, not in a container. Both are wired up in `docker-compose.yml`.
 
-Click **Save tunnel**.
+6. **Save tunnel.**
 
-### 7c. Add an SSH public hostname to the same tunnel
+**`/api/*` routing.** If you provide `CF_API_TOKEN` (plus `CF_ACCOUNT_ID` and `CF_TUNNEL_ID`) as GitHub Secrets, the workflow's `Ensure Cloudflare tunnel ingress` step rewrites the full ingress list on every deploy — so `/api/*` is routed to `http://api:8080` automatically and you can ignore the next paragraph. If you do **not** provide `CF_API_TOKEN`, add the following route manually in the tunnel's **Public Hostname** tab before the catch-all:
 
-In the tunnel's **Public Hostname** tab → **Add a public hostname**:
+| Subdomain  | Domain    | Path     | Service type | URL               |
+| ---------- | --------- | -------- | ------------ | ----------------- |
+| `expenses` | your zone | `^/api/` | `HTTP`       | `http://api:8080` |
 
-| Field        | Value                                   |
-| ------------ | --------------------------------------- |
-| Subdomain    | `ssh-expenses` (or any name you prefer) |
-| Domain       | your Cloudflare-managed domain          |
-| Service type | `SSH`                                   |
-| URL          | `host-gateway:22`                       |
+Order matters: the `/api/*` rule must precede the catch-all `http://app:80` rule, otherwise the API is unreachable.
 
-Save. The cloudflared container on the server will now route connections to this hostname into the host's SSH daemon.
+### 3c. SSL/TLS mode
 
-> **Why `host-gateway` and not `localhost`**: cloudflared runs inside a Docker container, so `localhost` refers to the container's own loopback — not the host machine. `host-gateway` is a Docker special value that resolves to the host's IP on the bridge network. The `extra_hosts` entry in `docker-compose.yml` makes this name available inside the container.
+Cloudflare dashboard → your domain → **SSL/TLS** → set mode to **Full** (not **Full (strict)** — the origin is plain HTTP, so strict verification would fail).
 
-### 7d. Record the server's SSH host key
+### 3d. Create the Cloudflare Access SSH application
 
-The GitHub Actions workflow needs to verify the server's identity, but `ssh-keyscan` cannot reach the server (no public IP). Instead, capture the host key directly on the server and store it in a GitHub Secret.
+Gates the SSH hostname with a service-token policy.
 
-Run this **on the server**, replacing the hostname with your actual SSH subdomain:
+1. Zero Trust → **Access** → **Applications** → **Add an application** → **Self-hosted**.
+2. **Application name**: `expensesapp SSH`.
+3. **Application domain**: `ssh-expenses.example.com` (matches step 3b).
+4. **Next.**
+5. **Policy name**: `GitHub Actions deploy`.
+6. **Action**: **Service Auth** (not Allow/Block — those require an interactive browser login).
+7. **Include** rule → Selector **Service Token** → leave the value empty for now (you'll fill it after 3e).
+8. **Next** → **Add application**.
 
-```bash
-echo "ssh-expenses.yourdomain.com $(awk '{print $1, $2}' /etc/ssh/ssh_host_ed25519_key.pub)"
-```
+### 3e. Create the Cloudflare Access service token
 
-The output looks like:
-
-```
-ssh-expenses.yourdomain.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA...
-```
-
-Copy this entire line — it becomes the `SSH_KNOWN_HOST` GitHub Secret.
-
-### 7e. Create a Cloudflare Access application for SSH
-
-This gates the SSH hostname with a policy — only requests presenting a valid service token are allowed through.
-
-1. Zero Trust Dashboard → **Access** → **Applications** → **Add an application** → **Self-hosted**
-2. **Application name**: `expensesapp SSH`
-3. **Application domain**: `ssh-expenses.yourdomain.com` (your SSH subdomain from 7c)
-4. Click **Next**
-5. **Policy name**: `GitHub Actions deploy`
-6. **Action**: select **Service Auth**
-
-   > This is required. Other actions (Allow, Block) redirect to a browser login page, which does not work for non-interactive machine access.
-
-7. Under **Configure rules**, add an **Include** rule:
-   - Selector: **Service Token**
-   - Value: _(leave blank for now — you will fill this in after step 7f)_
-8. Click **Next** → **Add application**
-
-### 7f. Create a Cloudflare Access service token
-
-Service tokens are how GitHub Actions authenticates to Cloudflare Access without a browser.
-
-1. Zero Trust Dashboard → **Access** → **Service Auth** → **Service Tokens** → **Create Service Token**
-2. **Name**: `github-actions-expensesapp`
-3. **Service Token Duration**: Non-expiring (recommended — manual rotation when needed)
-4. Click **Generate token**
-5. **Copy both values now** — the Client Secret is shown only once:
+1. Zero Trust → **Access** → **Service Auth** → **Service Tokens** → **Create Service Token**.
+2. **Name**: `github-actions-expensesapp`.
+3. **Duration**: Non-expiring (recommended — manual rotation when needed).
+4. **Generate token.**
+5. **Copy both values now** — the secret is shown only once:
    - **Client ID** → `CF_ACCESS_CLIENT_ID` GitHub Secret
    - **Client Secret** → `CF_ACCESS_CLIENT_SECRET` GitHub Secret
-6. Go back to the Access application created in 7e → **Edit** → edit the policy → set the **Service Token** rule value to the token you just created → **Save**
+6. Return to the Access application from 3d → **Edit** → set the **Service Token** rule to the token you just created → **Save**.
 
-### 7g. SSL/TLS mode
+### 3f. Record the server's SSH host key
 
-In the Cloudflare dashboard, go to your domain → **SSL/TLS** → set mode to **Full**.
-
-(Not "Full (strict)" — the origin is plain HTTP, so strict verification would fail.)
-
----
-
-## 8. Configure GitHub Secrets
-
-In the GitHub repository: **Settings** → **Secrets and variables** → **Actions** → **New repository secret**.
-
-| Secret name               | Value                                                                                                   |
-| ------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `SSH_HOST`                | The Cloudflare SSH hostname — e.g. `ssh-expenses.yourdomain.com`                                        |
-| `SSH_USER`                | `deploy`                                                                                                |
-| `SSH_KEY`                 | Full contents of `~/.ssh/expensesapp_deploy` (private key, including `-----BEGIN` and `-----END` lines) |
-| `SSH_KNOWN_HOST`          | The host key line from step 7d — `ssh-expenses.yourdomain.com ssh-ed25519 AAAA...`                      |
-| `APP_DIR`                 | `/home/deploy/expensesapp`                                                                              |
-| `CLOUDFLARE_TUNNEL_TOKEN` | The `eyJhIjoiY...` token from step 7a                                                                   |
-| `CF_ACCESS_CLIENT_ID`     | Client ID from step 7f                                                                                  |
-| `CF_ACCESS_CLIENT_SECRET` | Client Secret from step 7f                                                                              |
-
----
-
-## 9. First deployment
-
-The Cloudflare tunnel is what makes SSH possible for GitHub Actions — but the tunnel only exists once the containers are running. This means the very first start must be done **manually on the server**. After that, all future deployments go through GitHub Actions.
-
-### 9a. Bootstrap: start the containers manually (once)
-
-On the server (via physical access, local network SSH, or any other method you have right now):
+`ssh-keyscan` cannot reach the server (no public IP), so capture the key directly. On the server:
 
 ```bash
-bash /home/deploy/expensesapp/scripts/bootstrap.sh
+echo "ssh-expenses.example.com $(awk '{print $1, $2}' /etc/ssh/ssh_host_ed25519_key.pub)"
 ```
 
-The script will prompt for your Cloudflare tunnel token, write `.env`, build and start the containers, then print the cloudflared logs. Once you see `Registered tunnel connection`, the SSH hostname (`ssh-expenses.yourdomain.com`) is live and GitHub Actions can reach it.
-
-> **Note:** The script runs with `sudo` and ensures `.env` is owned by `deploy:deploy`. If you ever manually re-create `.env` using `sudo`, run `sudo chown deploy:deploy /home/deploy/expensesapp/.env` afterwards — otherwise the deploy user cannot overwrite it and the GitHub Actions step will fail with `Permission denied`.
-
-You can also pass the token via environment to skip the prompt:
-
-```bash
-CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoiY... bash /home/deploy/expensesapp/scripts/bootstrap.sh
-```
-
-### 9b. All subsequent deployments: GitHub Actions
-
-1. Push your code to the `main` branch (or confirm it is already up to date)
-2. In GitHub: **Actions** → **Deploy to Server** → **Run workflow** → **Run workflow**
-3. Watch the logs — the final step (`Pull, build, and restart`) shows `docker compose ps`
-4. All containers should show status `Up` and `(healthy)`
+The single-line output (e.g. `ssh-expenses.example.com ssh-ed25519 AAAAC3Nz...`) becomes the `SSH_KNOWN_HOST` GitHub Secret.
 
 ---
 
-## 10. Verify
+## 4. One-time Google OAuth setup
+
+The app authenticates users via Google Sign-In. The same OAuth **Client ID** is used by both the frontend (`VITE_GOOGLE_OAUTH_CLIENT_ID`, baked into the Vite bundle) and the backend (`GOOGLE_OAUTH_CLIENT_ID`, used to verify ID tokens). There is no client secret — only the public Client ID.
+
+1. Go to https://console.cloud.google.com and create a new project (e.g. `expensesapp`).
+2. **APIs & Services** → **OAuth consent screen**:
+   - **User Type**: **External**.
+   - **App name**: `Expenses` (or whatever you like).
+   - **User support email** and **Developer contact**: your email.
+   - **Scopes**: leave default — only `openid`, `email`, `profile` are needed.
+   - **Test users**: add the Google account you'll sign in with (and any family members). External apps in testing mode reject all other accounts.
+3. **APIs & Services** → **Credentials** → **Create credentials** → **OAuth 2.0 Client ID**:
+   - **Application type**: **Web application**.
+   - **Name**: `Expenses Web`.
+   - **Authorized JavaScript origins**: `https://expenses.example.com` (your `APP_HOSTNAME`). For local development add `http://localhost:5173`.
+   - **Authorized redirect URIs**: leave empty — Google Sign-In with the JS library uses popup/postMessage, not redirects.
+4. **Create.** Copy the **Client ID** (it ends in `.apps.googleusercontent.com`).
+5. Set both GitHub Secrets to the same value:
+
+   ```bash
+   gh secret set GOOGLE_OAUTH_CLIENT_ID      --body "1234-abc.apps.googleusercontent.com"
+   gh secret set VITE_GOOGLE_OAUTH_CLIENT_ID --body "1234-abc.apps.googleusercontent.com"
+   ```
+
+   The `VITE_*` variant is read at build time and baked into the static JS bundle. The non-prefixed variant is read at runtime by the Go backend to verify Google ID tokens.
+
+> While the OAuth consent screen is in **Testing** mode, only accounts listed under **Test users** can sign in. For a personal/family app you can stay in Testing mode indefinitely. Publishing to Production triggers Google's verification process — only needed if you want strangers to sign in.
+
+---
+
+## 5. One-time VAPID key generation
+
+Web Push notifications require a VAPID key pair. The **public** key is shipped to the browser (bundled by Vite and surfaced by the backend), and the **private** key signs push messages from the backend.
+
+Run on your local laptop (the keys never need to live on the server filesystem outside of `.env`):
 
 ```bash
-# On the server — check containers are running
+docker run --rm node:alpine npx -y web-push generate-vapid-keys --json > vapid.json
+
+gh secret set VAPID_PUBLIC_KEY      --body "$(jq -r .publicKey  vapid.json)"
+gh secret set VAPID_PRIVATE_KEY     --body "$(jq -r .privateKey vapid.json)"
+gh secret set VAPID_SUBJECT         --body "mailto:you@example.com"
+gh secret set VITE_VAPID_PUBLIC_KEY --body "$(jq -r .publicKey  vapid.json)"
+
+shred -u vapid.json
+```
+
+`VAPID_SUBJECT` must be a `mailto:` URL (or an `https://` URL); push providers may use it to contact you about abuse.
+
+> **Rotation invalidates all push subscriptions.** Browsers tie a subscription to the public key it was created with. If you rotate VAPID keys, every device must re-subscribe — users will simply stop receiving notifications until they re-open the app and accept the prompt again. Rotate only when you have reason to believe the private key is compromised.
+
+---
+
+## 6. GitHub Secrets
+
+All secrets live under **Settings** → **Secrets and variables** → **Actions** in the GitHub repo. The deploy workflow refuses to start if a required secret is missing; `docker compose up` fails noisily if a `:?` env in `docker-compose.yml` is unset.
+
+### Required secrets
+
+| Name                          | Purpose                                                                | How to obtain                                   | Example (redacted)                                                          |
+| ----------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------- |
+| `SSH_HOST`                    | Cloudflare SSH hostname the workflow connects to                       | The `ssh-expenses` subdomain from §3b           | `ssh-expenses.example.com`                                                  |
+| `SSH_USER`                    | Server user the workflow logs in as                                    | The user created in §2b                         | `deploy`                                                                    |
+| `SSH_KEY`                     | Private key for the deploy user (full PEM, including BEGIN/END lines)  | `cat ~/.ssh/expensesapp_deploy` (from §2c)      | `-----BEGIN OPENSSH PRIVATE KEY-----\n…\n-----END OPENSSH PRIVATE KEY-----` |
+| `SSH_KNOWN_HOST`              | Pinned server host key — defeats SSH MITM                              | The single-line output from §3f                 | `ssh-expenses.example.com ssh-ed25519 AAAA…`                                |
+| `APP_DIR`                     | Absolute path to the repo on the server                                | The clone target from §2f                       | `/home/deploy/expensesapp`                                                  |
+| `CLOUDFLARE_TUNNEL_TOKEN`     | Long-lived tunnel credential — boots cloudflared on the server         | The `eyJhIjoiY…` token shown once at §3b step 3 | `eyJhIjoiY2…`                                                               |
+| `CF_ACCESS_CLIENT_ID`         | Service-token ID — Access lets the workflow's SSH ProxyCommand through | Client ID from §3e                              | `abcd1234.access`                                                           |
+| `CF_ACCESS_CLIENT_SECRET`     | Service-token secret — same purpose as above                           | Client Secret from §3e (shown once)             | `f00bar…`                                                                   |
+| `BOOTSTRAP_ADMIN_EMAIL`       | First Google account allowed to sign in; gets promoted to root         | Your Google account email                       | `you@example.com`                                                           |
+| `GOOGLE_OAUTH_CLIENT_ID`      | Backend-side OAuth Client ID — verifies Google ID tokens               | Client ID from §4 step 4                        | `1234-abc.apps.googleusercontent.com`                                       |
+| `VITE_GOOGLE_OAUTH_CLIENT_ID` | Same value — baked into the Vite bundle at build time                  | Same as `GOOGLE_OAUTH_CLIENT_ID`                | `1234-abc.apps.googleusercontent.com`                                       |
+| `VAPID_PUBLIC_KEY`            | Backend-side public key — surfaced via `/v1/push/key`                  | From §5 (`jq -r .publicKey`)                    | `BMyP…` (base64url, 65 bytes)                                               |
+| `VAPID_PRIVATE_KEY`           | Signs push messages — server-only                                      | From §5 (`jq -r .privateKey`)                   | `_kS…` (base64url, 32 bytes)                                                |
+| `VAPID_SUBJECT`               | `mailto:` or `https:` contact for push abuse reports                   | Your support email                              | `mailto:you@example.com`                                                    |
+| `VITE_VAPID_PUBLIC_KEY`       | Same public key as `VAPID_PUBLIC_KEY` — baked into the Vite bundle     | Same as `VAPID_PUBLIC_KEY`                      | `BMyP…`                                                                     |
+| `APP_HOSTNAME`                | Public PWA hostname — used by the workflow's health-check              | The `expenses` subdomain from §3b               | `expenses.example.com`                                                      |
+
+### Optional — automatic `/api/*` ingress
+
+Provide all three to let the workflow rewrite tunnel ingress on every deploy. Skip them and configure ingress manually per §3b instead.
+
+| Name            | Purpose                                               | How to obtain                                                                                                                                                                                                                                                                                                                 | Example (redacted)                     |
+| --------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `CF_API_TOKEN`  | Cloudflare API token authorising tunnel-config writes | Cloudflare Dashboard → **My Profile** → **API Tokens** → **Create Token** → use template **`Cloudflare Tunnel Write`** (exact name in the dashboard's API token template list; the alternatives **`Cloudflare One Connectors Write`** or **`Cloudflare One Connector: cloudflared Write`** also work). Scope to your account. | `cf_token_abcd…`                       |
+| `CF_ACCOUNT_ID` | Account whose tunnel is being configured              | Dashboard → any zone → **Overview** sidebar → **Account ID**                                                                                                                                                                                                                                                                  | `1234567890abcdef`                     |
+| `CF_TUNNEL_ID`  | UUID of the tunnel created in §3b                     | Zero Trust → **Networks** → **Tunnels** → click the tunnel → ID in the URL                                                                                                                                                                                                                                                    | `12345678-90ab-cdef-1234-567890abcdef` |
+
+> **Coverage check.** Every env declared as required (`:?`) in `docker-compose.yml` is set by the workflow from a GitHub Secret of the matching name. The required envs are: `BOOTSTRAP_ADMIN_EMAIL`, `GOOGLE_OAUTH_CLIENT_ID`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`. The Cloudflare tunnel container reads `CLOUDFLARE_TUNNEL_TOKEN` (no `:?`, but the container will fail without it).
+
+---
+
+## 7. First deploy
+
+You can either push to `main` (auto-trigger is up to you — currently the workflow runs only via `workflow_dispatch`) or trigger manually:
+
+1. Confirm every required secret in §6 is set: **Settings** → **Secrets and variables** → **Actions**.
+2. **Actions** → **Deploy to Server** → **Run workflow** → **Run workflow**.
+3. Watch the run. The job has several steps; the ones that fail loudly when something is misconfigured are:
+   - **Configure SSH** — wrong `SSH_KEY`/`SSH_KNOWN_HOST` shows up here.
+   - **Ensure Cloudflare tunnel ingress** (only if `CF_API_TOKEN` is set) — wrong account/tunnel ID or insufficient token scope fails with a JSON error from the Cloudflare API.
+   - **Write .env to server** — permission errors here usually mean `/home/deploy/expensesapp/.env` is owned by `root` from an earlier manual edit; fix with `sudo chown deploy:deploy /home/deploy/expensesapp/.env` on the server.
+   - **Pull, build, and restart** — surfaces docker-compose errors. A missing `:?` env (see §6) fails here with a clear message.
+   - **Health check** — final gate. Hits `https://$APP_HOSTNAME/v1/health` up to 6 times with 5-second backoffs. If this passes, the deploy is healthy.
+
+After the first successful deploy:
+
+- Visit `https://expenses.example.com` — the PWA should load over HTTPS.
+- Sign in with the Google account you put in `BOOTSTRAP_ADMIN_EMAIL`. The backend auto-promotes the first sign-in matching that address to root.
+- All subsequent deploys are just repeating step 2 above.
+
+### Bootstrapping when the tunnel does not exist yet
+
+The deploy workflow uses the tunnel to reach the server, but the tunnel only exists once cloudflared is running. For the very first start, run `bash /home/deploy/expensesapp/scripts/bootstrap.sh` on the server (via console / local network SSH). The script prompts for the tunnel token, writes `.env`, and starts the containers. Once cloudflared logs `Registered tunnel connection`, GitHub Actions can take over.
+
+### Smoke checks on the server
+
+```bash
 sudo docker compose -f /home/deploy/expensesapp/docker-compose.yml ps
-
-# Check cloudflared connected successfully
-sudo docker compose -f /home/deploy/expensesapp/docker-compose.yml logs cloudflared
-# Look for: "Registered tunnel connection"
-
-# Verify network isolation — only app + cloudflared should appear
-sudo docker network inspect expensesapp_tunnel
+sudo docker compose -f /home/deploy/expensesapp/docker-compose.yml logs cloudflared | grep -i "registered tunnel"
+sudo docker network inspect expensesapp_tunnel    # app, api, cloudflared only
+curl -fsS https://expenses.example.com/v1/health   # 200 OK from the API
 ```
 
-Visit `https://<your-subdomain>.<your-domain>` — the app should load over HTTPS.
+### Debugging the SSH tunnel
 
-> **Note**: Direct SSH from outside the server no longer works — sshd only listens on `127.0.0.1`. This is intentional. All SSH goes through `cloudflared access ssh`.
-
-### Debug the Cloudflare SSH tunnel
-
-If GitHub Actions SSH fails, test the full tunnel path from your local machine (install cloudflared first if needed):
+Install cloudflared locally, then:
 
 ```bash
 cloudflared access ssh \
-  --hostname ssh-expenses.yourdomain.com \
+  --hostname ssh-expenses.example.com \
   --id <CF_ACCESS_CLIENT_ID> \
   --secret <CF_ACCESS_CLIENT_SECRET>
 ```
 
-Expected outputs and what they mean:
+| Output                                                       | Meaning                                                                                                                                            |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SSH-2.0-OpenSSH_…` then `Invalid SSH identification string` | **Success** — tunnel + auth work; the error is cloudflared receiving no SSH client on stdin.                                                       |
+| `websocket: bad handshake`                                   | Access rejected the connection. Check service token, policy action (must be **Service Auth**), and that the SSH route points to `host-gateway:22`. |
+| `dial tcp … connection refused`                              | Tunnel auth works but sshd is unreachable. Check the route URL in the Cloudflare dashboard and that sshd is running on the host.                   |
+| Password prompt                                              | Key auth failed — confirm `authorized_keys` ownership and that `SSH_KEY` matches the public key.                                                   |
 
-| Output                                                         | Meaning                                                                                                                                                                                   |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SSH-2.0-OpenSSH_...` then `Invalid SSH identification string` | **Success** — tunnel and auth work; the error is just cloudflared receiving no SSH client on stdin                                                                                        |
-| `websocket: bad handshake`                                     | Cloudflare Access rejected the connection — check service token, policy action (must be **Service Auth**), and that the SSH hostname route points to `host-gateway:22` not `localhost:22` |
-| `dial tcp ... connection refused`                              | Tunnel auth works but sshd is unreachable — check the hostname route URL in Cloudflare dashboard                                                                                          |
-| Password prompt                                                | Key auth failed — check `authorized_keys` ownership (`deploy:deploy`) and that `SSH_KEY` secret matches the public key on the server                                                      |
-
-To also test the SSH key authentication end-to-end:
+End-to-end test including the SSH key:
 
 ```bash
 ssh -i ~/.ssh/expensesapp_deploy \
     -o "ProxyCommand=cloudflared access ssh --hostname %h --id <CF_ACCESS_CLIENT_ID> --secret <CF_ACCESS_CLIENT_SECRET>" \
-    deploy@ssh-expenses.yourdomain.com \
+    deploy@ssh-expenses.example.com \
     "echo works"
 ```
 
-Should print `works`. If it does, GitHub Actions will work.
+If this prints `works`, GitHub Actions will succeed.
 
 ---
 
-## Ongoing maintenance
+## 8. Rotating secrets
 
-### Rotating the deploy SSH key
+The general pattern is: update the source of truth, run `gh secret set NAME`, then trigger a deploy.
+
+### Deploy SSH key (`SSH_KEY`)
 
 ```bash
-# 1. Generate a new key
 ssh-keygen -t ed25519 -C "github-actions-expensesapp-$(date +%Y%m)" -f ~/.ssh/expensesapp_deploy_new
-
-# 2. Add the new public key to the server (keep old key active until new one is confirmed working)
-# Edit /home/deploy/.ssh/authorized_keys on the server, append new line
-
-# 3. Update SSH_KEY secret in GitHub with the new private key
-
-# 4. Run a test deployment to confirm it works
-
-# 5. Remove the old public key from authorized_keys on the server
+# Append the new public key to /home/deploy/.ssh/authorized_keys on the server (keep the old one)
+gh secret set SSH_KEY < ~/.ssh/expensesapp_deploy_new
+# Trigger a deploy; once green, remove the old public key from authorized_keys
 ```
 
-Rotate every 90 days or immediately if the key is suspected to be compromised.
+Rotate every 90 days or immediately on suspected compromise.
 
-### Rotating the Cloudflare tunnel token
+### Cloudflare tunnel token (`CLOUDFLARE_TUNNEL_TOKEN`)
 
-1. Cloudflare dashboard → **Zero Trust** → **Networks** → **Tunnels** → your tunnel → **...** → **Rotate token**
-2. Copy the new token
-3. Update `CLOUDFLARE_TUNNEL_TOKEN` secret in GitHub
-4. Run a deployment — the new token is written to `.env` and the container restarts with it
+1. Zero Trust → **Networks** → **Tunnels** → your tunnel → **…** → **Rotate token**.
+2. `gh secret set CLOUDFLARE_TUNNEL_TOKEN --body "<new-token>"`.
+3. Trigger a deploy — the new token is written to `.env` and the container restarts with it.
 
-### Rotating the Cloudflare Access service token
+### Cloudflare Access service token (`CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET`)
 
-1. Zero Trust Dashboard → **Access** → **Service Auth** → **Service Tokens** → **Create Service Token** (new token)
-2. Copy the new Client ID and Client Secret
-3. Update `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` secrets in GitHub
-4. Edit the Access application policy (step 7e) to point the Service Token rule at the new token — Save
-5. Run a test deployment to confirm it works
-6. Delete the old service token
+1. Zero Trust → **Access** → **Service Auth** → **Service Tokens** → create a new token; copy both values.
+2. `gh secret set CF_ACCESS_CLIENT_ID --body "<new-id>"` and `gh secret set CF_ACCESS_CLIENT_SECRET --body "<new-secret>"`.
+3. Edit the Access application policy (§3d) — point the Service Token rule at the new token → **Save**.
+4. Trigger a deploy. Once green, delete the old token.
 
-Rotate when suspected compromised, or on your regular key rotation schedule.
+### Google OAuth Client ID (`GOOGLE_OAUTH_CLIENT_ID` / `VITE_GOOGLE_OAUTH_CLIENT_ID`)
 
-### Updating Docker base images
+Create a new OAuth Client in Cloud Console (§4 step 3), then:
 
-Run a deployment with `--no-cache` (already the default in the workflow) to pick up the latest `nginx:1.27-alpine` patches.
-
-For `cloudflared`, the `docker-compose.yml` currently uses `:latest`. It is recommended to pin this to a specific version tag for reproducible, auditable deploys:
-
-```yaml
-image: cloudflare/cloudflared:2025.x.x # replace with the current release
+```bash
+gh secret set GOOGLE_OAUTH_CLIENT_ID      --body "<new-client-id>"
+gh secret set VITE_GOOGLE_OAUTH_CLIENT_ID --body "<new-client-id>"
 ```
 
-Check the current release at https://github.com/cloudflare/cloudflared/releases, update the tag in `docker-compose.yml`, and run a deployment. Update this tag whenever you rotate the tunnel token or on your regular maintenance schedule.
+Trigger a deploy. The frontend bundle is rebuilt with the new ID; existing browser sessions stay valid (the backend continues to honour cookies it has already issued), but any new sign-in must come through the new Client ID. Delete the old OAuth Client in Cloud Console once the deploy is green.
+
+### VAPID keys (`VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VITE_VAPID_PUBLIC_KEY`)
+
+Regenerate per §5 and re-`gh secret set` all four entries (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` if it changed, `VITE_VAPID_PUBLIC_KEY`). Trigger a deploy. As noted in §5, all existing push subscriptions are invalidated; users must re-subscribe.
+
+### Bootstrap admin (`BOOTSTRAP_ADMIN_EMAIL`)
+
+Only matters for first-boot promotion. After the initial root account exists in the database, changing this secret has no effect on existing data. To change root, use the admin UI inside the running app.
+
+### Server-side `.env`
+
+Never edit the server's `.env` by hand for normal operation. It is rewritten on every deploy from GitHub Secrets — manual edits will be silently overwritten. If you must edit it for an emergency, make sure to set the corresponding GitHub Secret afterwards so the next deploy does not regress.
