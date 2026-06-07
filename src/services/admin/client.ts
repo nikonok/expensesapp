@@ -33,6 +33,8 @@ export interface AllowlistEntry {
   email: string;
   note: string | null;
   addedAt: string;
+  /** User id of the admin who added this entry (B8). */
+  addedBy: string;
 }
 
 export interface AuditLogEntry {
@@ -42,6 +44,8 @@ export interface AuditLogEntry {
   action: string;
   targetKind: string | null;
   targetId: string | null;
+  /** Free-form JSON describing the event (B8). */
+  detailJson: string | null;
   createdAt: string;
 }
 

@@ -148,20 +148,14 @@ describe("approveDevice", () => {
     );
   });
 
-  it("falls back to GET /api/v1/me/devices/{id} when no pubkey is provided", async () => {
-    apiFetch.mockResolvedValueOnce({ pubKey: "fallback-pub-key-b64u" } as never);
+  it("throws when called without a pubkey (B8 — orphan fallback removed)", async () => {
     const { approveDevice } = await import("../engine");
 
-    await approveDevice("dev-no-pub", null);
+    await expect(approveDevice("dev-no-pub", null)).rejects.toThrow(/missing pubKey/i);
 
-    // First call resolves the pubkey, second posts the envelope.
-    expect(apiFetch).toHaveBeenNthCalledWith(1, "/api/v1/me/devices/dev-no-pub");
-    expect(wrapStoredFamilyKeyForDevice).toHaveBeenCalledWith("fallback-pub-key-b64u");
-    expect(apiFetch).toHaveBeenNthCalledWith(
-      2,
-      "/api/v1/family/devices/dev-no-pub/envelope",
-      expect.objectContaining({ method: "POST" }),
-    );
+    // No envelope wrap attempted; no HTTP calls fired.
+    expect(wrapStoredFamilyKeyForDevice).not.toHaveBeenCalled();
+    expect(apiFetch).not.toHaveBeenCalled();
   });
 });
 

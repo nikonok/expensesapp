@@ -80,7 +80,13 @@ vi.mock("@/services/auth/session", () => ({
 }));
 
 import { pushRecords, pullRecords } from "../client";
-import { enqueuePush, flushOutbox, pullSince, startLiveSync } from "../engine";
+import {
+  enqueuePush,
+  flushOutbox,
+  pullSince,
+  startLiveSync,
+  writeDecryptedRecord,
+} from "../engine";
 import { getCursor, encodeCursor } from "../cursor";
 import type { RawRecord } from "../types";
 
@@ -497,6 +503,193 @@ describe("startLiveSync — device.joined updates the store", () => {
 
     disconnect();
     vi.useRealTimers();
+  });
+});
+
+// ── B8 — 413 quota-exceeded path ─────────────────────────────────────────────
+
+describe("flushOutbox — 413 quota terminal (B8)", () => {
+  it("marks every record in the batch terminal and sets lastError=quota-exceeded", async () => {
+    Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+
+    const record = makeRawRecord({ recordId: "aaaaaaaa-bbbb-7ccc-8ddd-0000000004a1" });
+    await enqueuePush(record);
+
+    interface QuotaErr extends Error {
+      status: number;
+    }
+    const quotaErr = new Error("payload too large") as QuotaErr;
+    quotaErr.status = 413;
+    vi.mocked(pushRecords).mockRejectedValueOnce(quotaErr);
+
+    await flushOutbox();
+
+    const rows = await db.pendingUploads.toArray();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].terminal).toBe(true);
+
+    // A subsequent flush with NO new mock must not call pushRecords again
+    // (terminal rows are skipped).
+    vi.mocked(pushRecords).mockClear();
+    await flushOutbox();
+    expect(pushRecords).not.toHaveBeenCalled();
+  });
+});
+
+// ── B8 — empty currentBlob (invalid-parentVersion) conflict path ─────────────
+
+describe("flushOutbox — invalid-parentVersion conflict (B8)", () => {
+  it("re-enqueues with parentVersion=0 without decrypting an empty currentBlob", async () => {
+    Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+
+    const recordId = "aaaaaaaa-bbbb-7ccc-8ddd-0000000004b1";
+    await enqueuePush(makeRawRecord({ recordId, parentVersion: 7 }));
+
+    vi.mocked(pushRecords).mockResolvedValueOnce({
+      accepted: [],
+      conflicts: [
+        {
+          recordId,
+          currentBlob: "",
+          currentVersion: 0,
+          currentUpdatedAtMap: {},
+        },
+      ],
+    });
+
+    await flushOutbox();
+
+    const rows = await db.pendingUploads.toArray();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].parentVersion).toBe(0);
+    expect(rows[0].recordId).toBe(recordId);
+
+    // Crucially: NO decrypt was attempted for the empty currentBlob.
+    const { cryptoWorker } = await import("@/services/crypto/worker-client");
+    expect(vi.mocked(cryptoWorker.decryptRecordWithStoredKey)).not.toHaveBeenCalled();
+    expect(vi.mocked(cryptoWorker.encryptRecordWithStoredKey)).toHaveBeenCalledTimes(1);
+    //                                                          ^ only the initial enqueue
+  });
+});
+
+// ── B8 — tombstone propagation on pull ───────────────────────────────────────
+
+describe("writeDecryptedRecord — tombstone propagation (B8)", () => {
+  beforeEach(async () => {
+    await db.transactions.clear();
+    await db.accounts.clear();
+    await db.categories.clear();
+    await db.budgets.clear();
+    await db.settings.clear();
+  });
+
+  it("hard-deletes a transaction when meta.deletedAt is non-null", async () => {
+    await db.transactions.add({
+      id: 42,
+      type: "EXPENSE",
+      date: "2024-01-01",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      displayOrder: 0,
+      accountId: 1,
+      categoryId: 1,
+      currency: "USD",
+      amount: 100,
+      amountMainCurrency: 100,
+      exchangeRate: 1,
+      note: "",
+      isTrashed: false,
+      transferGroupId: null,
+      transferDirection: null,
+      createdAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+    } as Parameters<typeof db.transactions.put>[0]);
+
+    await writeDecryptedRecord(
+      "transaction",
+      { id: 42 },
+      { recordId: "tx-42", deletedAt: "2024-02-01T00:00:00.000Z" },
+    );
+
+    const remaining = await db.transactions.get(42);
+    expect(remaining).toBeUndefined();
+  });
+
+  it("soft-deletes an account (sets isTrashed=true) when meta.deletedAt is set", async () => {
+    await db.accounts.add({
+      id: 7,
+      name: "Old account",
+      type: "REGULAR",
+      currency: "USD",
+      balance: 0,
+      startingBalance: 0,
+      description: "",
+      icon: "wallet",
+      color: "oklch(70% 0.2 200)",
+      isTrashed: false,
+      includeInTotal: true,
+      createdAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+    } as Parameters<typeof db.accounts.put>[0]);
+
+    await writeDecryptedRecord(
+      "account",
+      { id: 7 },
+      { recordId: "acc-7", deletedAt: "2024-02-01T00:00:00.000Z" },
+    );
+
+    const row = await db.accounts.get(7);
+    expect(row).toBeDefined();
+    expect(row?.isTrashed).toBe(true);
+  });
+
+  it("soft-deletes a category (sets isTrashed=true) when meta.deletedAt is set", async () => {
+    await db.categories.add({
+      id: 3,
+      name: "Old cat",
+      type: "EXPENSE",
+      icon: "tag",
+      color: "oklch(70% 0.2 200)",
+      displayOrder: 0,
+      isTrashed: false,
+      createdAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+    } as Parameters<typeof db.categories.put>[0]);
+
+    await writeDecryptedRecord(
+      "category",
+      { id: 3 },
+      { recordId: "cat-3", deletedAt: "2024-02-01T00:00:00.000Z" },
+    );
+
+    const row = await db.categories.get(3);
+    expect(row).toBeDefined();
+    expect(row?.isTrashed).toBe(true);
+  });
+
+  it("performs an upsert (no delete) when meta.deletedAt is empty/absent", async () => {
+    const txPayload = {
+      id: 9,
+      type: "EXPENSE",
+      date: "2024-01-01",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      displayOrder: 0,
+      accountId: 1,
+      categoryId: 1,
+      currency: "USD",
+      amount: 250,
+      amountMainCurrency: 250,
+      exchangeRate: 1,
+      note: "",
+      isTrashed: false,
+      transferGroupId: null,
+      transferDirection: null,
+      createdAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+    };
+    await writeDecryptedRecord("transaction", txPayload, { recordId: "tx-9", deletedAt: null });
+
+    const row = await db.transactions.get(9);
+    expect(row?.amount).toBe(250);
   });
 });
 

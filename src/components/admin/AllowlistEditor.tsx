@@ -223,16 +223,37 @@ export function AllowlistEditor() {
             )}
           </div>
 
-          <span
+          <div
             style={{
-              fontFamily: '"DM Sans", sans-serif',
-              fontSize: "var(--text-caption)",
-              color: "var(--color-text-secondary)",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-end",
+              gap: 2,
               flexShrink: 0,
             }}
           >
-            {new Date(entry.addedAt).toLocaleDateString()}
-          </span>
+            <span
+              style={{
+                fontFamily: '"DM Sans", sans-serif',
+                fontSize: "var(--text-caption)",
+                color: "var(--color-text-secondary)",
+              }}
+            >
+              {new Date(entry.addedAt).toLocaleDateString()}
+            </span>
+            {entry.addedBy && (
+              <span
+                style={{
+                  fontFamily: '"JetBrains Mono", monospace',
+                  fontSize: "10px",
+                  color: "var(--color-text-muted)",
+                }}
+                title={`Added by user ${entry.addedBy}`}
+              >
+                by {entry.addedBy.slice(0, 8)}
+              </span>
+            )}
+          </div>
 
           <button
             onClick={() => setConfirmRemove(entry.email)}

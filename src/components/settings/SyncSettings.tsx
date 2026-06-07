@@ -11,6 +11,7 @@ export function SyncSettings() {
   const isSignedIn = useAuthStore((s) => s.isSignedIn);
   const lastSyncAt = useSyncStore((s) => s.lastSyncAt);
   const isSyncing = useSyncStore((s) => s.isSyncing);
+  const lastError = useSyncStore((s) => s.lastError);
 
   const [pbsSupported, setPbsSupported] = useState<boolean | null>(null);
   const [pbsRegistered, setPbsRegistered] = useState<boolean | null>(null);
@@ -52,6 +53,26 @@ export function SyncSettings() {
 
   return (
     <div>
+      {/* B8 — quota-exceeded banner: shown when the engine marked uploads
+          terminal after a 413 response. Stays until lastError changes. */}
+      {lastError === "quota-exceeded" && (
+        <div
+          role="alert"
+          style={{
+            padding: "var(--space-3) var(--space-4)",
+            background: "var(--color-expense-dim, oklch(62% 0.28 18 / 12%))",
+            borderBottom: "1px solid var(--color-expense)",
+            color: "var(--color-expense)",
+            fontFamily: '"DM Sans", sans-serif',
+            fontSize: "var(--text-caption)",
+            lineHeight: 1.4,
+          }}
+        >
+          Sync paused — family storage quota exceeded. Free up space (delete old data or contact the
+          admin) and the queued changes will retry automatically next sign-in.
+        </div>
+      )}
+
       {/* Last sync */}
       <div
         style={{

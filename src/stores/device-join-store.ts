@@ -9,8 +9,10 @@ import { create } from "zustand";
 export interface PendingDeviceJoin {
   deviceId: string;
   label: string;
-  /** Device public key (base64url). Present if the SSE event carried it.
-   *  Null means we'll fetch it lazily via GET /api/v1/me/devices/{id}. */
+  /** Device public key (base64url). The backend `device.joined` SSE payload
+   *  always carries it; this is `string | null` only to model the brief moment
+   *  before the fingerprint computation completes (or if a future server omits
+   *  it). The Approve flow refuses to wrap a key without a pubKey. */
   pubKey: string | null;
   /** 13-char base32 fingerprint of the pubkey, computed by the crypto worker
    *  via `crypto_generichash(8, pubKey)`. Used to show a human-verifiable

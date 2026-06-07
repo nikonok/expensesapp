@@ -23,6 +23,8 @@ export interface PendingUpload {
   lastFailedAt: string | null;
   /** familyId associated with this record (for key lookup). */
   familyId: string;
+  /** B8 — set when the server returned a terminal status (e.g. 413). */
+  terminal?: boolean;
 }
 
 // ── Sync cursor ───────────────────────────────────────────────────────────────

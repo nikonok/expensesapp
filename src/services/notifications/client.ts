@@ -24,6 +24,9 @@ export interface NotificationSettings {
   quietStart: string;
   /** Quiet hours end in HH:MM. */
   quietEnd: string;
+  /** ISO-8601 UTC timestamp of the last server-side update. Optional because
+   *  older backend builds may omit it (B8). */
+  updatedAt?: string;
 }
 
 export type PatchNotificationSettingsBody = Partial<NotificationSettings>;

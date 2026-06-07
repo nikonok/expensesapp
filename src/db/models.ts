@@ -191,6 +191,10 @@ export interface PendingUpload {
   addedByUserId?: string;
   /** ID of the user who produced this edit (carried in AAD). */
   editedByUserId?: string;
+  /** B8 — set when the server rejected the upload with a terminal status (e.g.
+   *  HTTP 413 quota exceeded). Flush attempts skip terminal rows; the UI
+   *  surfaces them via `useSyncStore.lastError = "quota-exceeded"`. */
+  terminal?: boolean;
 }
 
 // ── Sync cursors (Phase 4e — per-family pull position) ───────────────────────

@@ -14,11 +14,11 @@ import { transactionSchema, accountSchema, categorySchema, budgetSchema } from "
 import { pushRecords, pullRecords } from "./client";
 import { getCursor, setCursor, encodeCursor } from "./cursor";
 import { mergePayloads } from "./merge";
-import type { RawRecord, PullResponse, ConflictRecord } from "./types";
+import type { RawRecord, PullResponse, ConflictRecord, PulledRecord } from "./types";
 import { useSyncStore } from "@/stores/sync-store";
 import { connectSSE } from "./sse";
 import type { SSEEventType, SSEPayloadMap } from "./sse";
-import { apiFetch } from "@/services/auth/client";
+import { apiFetch, type ApiError } from "@/services/auth/client";
 
 const PUSH_BATCH_SIZE = 50;
 
@@ -112,7 +112,11 @@ export async function flushOutbox(): Promise<void> {
   useSyncStore.getState().setIsSyncing(true);
 
   try {
-    const batch = await db.pendingUploads.limit(PUSH_BATCH_SIZE).toArray();
+    // Skip rows previously marked terminal (e.g. quota-exceeded). They stay in
+    // the outbox so the UI can surface a banner but never get re-sent.
+    const batch = (await db.pendingUploads.limit(PUSH_BATCH_SIZE * 2).toArray())
+      .filter((p) => !p.terminal)
+      .slice(0, PUSH_BATCH_SIZE);
     if (batch.length === 0) return;
 
     let response;
@@ -129,6 +133,28 @@ export async function flushOutbox(): Promise<void> {
         })),
       });
     } catch (err) {
+      // B8 — treat HTTP 413 as a terminal quota error. Mark every record in
+      // the batch as terminal so we stop retrying them, and surface a
+      // quota-exceeded banner via the sync store.
+      const status = (err as ApiError | undefined)?.status;
+      if (status === 413) {
+        await db.transaction("rw", db.pendingUploads, async () => {
+          for (const item of batch) {
+            if (item.id !== undefined) {
+              await db.pendingUploads.update(item.id, {
+                terminal: true,
+                lastFailedAt: new Date().toISOString(),
+              });
+            }
+          }
+        });
+        useSyncStore.getState().setLastError("quota-exceeded");
+        logger.error("sync push 413 quota-exceeded; marked terminal", {
+          count: batch.length,
+        });
+        return;
+      }
+
       // Network-level or 5xx error — mark all batch items as failed.
       const now = new Date().toISOString();
       await db.transaction("rw", db.pendingUploads, async () => {
@@ -218,10 +244,37 @@ export async function flushOutbox(): Promise<void> {
 // ── Conflict resolution (§7.6) ────────────────────────────────────────────────
 
 async function resolveConflict(local: PendingUpload, conflict: ConflictRecord): Promise<void> {
-  const { cryptoWorker } = await import("@/services/crypto/worker-client");
-
   const addedByUserId = local.addedByUserId ?? "";
   const editedByUserId = local.editedByUserId ?? "";
+
+  // B8 — invalid-parentVersion path: the backend returns an empty currentBlob
+  // (with currentVersion=0 and no map) when a brand-new record arrived with a
+  // non-zero parentVersion, or when a per-record quota check rejected the row.
+  // There's nothing to decrypt + merge — just re-enqueue the existing local
+  // ciphertext with parentVersion=0 so the next push treats it as a new record.
+  if (conflict.currentBlob === "") {
+    const requeued: PendingUpload = {
+      recordId: local.recordId,
+      recordType: local.recordType,
+      blob: local.blob,
+      updatedAtMap: local.updatedAtMap,
+      deletedAt: local.deletedAt,
+      parentVersion: 0,
+      plaintextByteCount: local.plaintextByteCount,
+      attempts: 0,
+      lastFailedAt: null,
+      familyId: local.familyId,
+      addedByUserId,
+      editedByUserId,
+    };
+    await db.pendingUploads.add(requeued);
+    logger.info("sync conflict: invalid-parentVersion → re-enqueued at v0", {
+      recordId: local.recordId,
+    });
+    return;
+  }
+
+  const { cryptoWorker } = await import("@/services/crypto/worker-client");
 
   // Build meta for local blob decryption using the originally-stored editor IDs.
   // Falling back to empty strings preserves the previous behaviour for outbox
@@ -347,7 +400,7 @@ export async function pullSince(
 
       const payload = JSON.parse(new TextDecoder().decode(decrypted)) as Record<string, unknown>;
 
-      await writeDecryptedRecord(pulled.recordType, payload);
+      await writeDecryptedRecord(pulled.recordType, payload, pulled);
     }
 
     // Advance the cursor.
@@ -367,12 +420,29 @@ export async function pullSince(
 
 // ── Write decrypted record to Dexie ──────────────────────────────────────────
 
-async function writeDecryptedRecord(
+/**
+ * B8 — tombstone propagation. When the pulled record carries a non-empty
+ * `deletedAt`, the payload represents a soft-deleted row. For accounts and
+ * categories we keep the local row (Dexie soft-delete: `isTrashed = true`)
+ * so the trash views still work. For transactions / budgets / settings we
+ * hard-delete the local row by id.
+ */
+export async function writeDecryptedRecord(
   recordType: string,
   payload: Record<string, unknown>,
+  meta?: Pick<PulledRecord, "deletedAt" | "recordId">,
 ): Promise<void> {
+  const isTombstone = !!(meta && meta.deletedAt && meta.deletedAt !== "");
+
   switch (recordType) {
     case "transaction": {
+      if (isTombstone) {
+        const localId = (payload as { id?: number }).id;
+        if (typeof localId === "number") {
+          await db.transactions.delete(localId);
+        }
+        return;
+      }
       const result = transactionSchema.safeParse(payload);
       if (!result.success) {
         logger.warn("pullSince: invalid transaction payload, skipping", {
@@ -384,6 +454,14 @@ async function writeDecryptedRecord(
       break;
     }
     case "account": {
+      if (isTombstone) {
+        const localId = (payload as { id?: number }).id;
+        if (typeof localId === "number") {
+          // Soft-delete: keep the row so the trash view still works.
+          await db.accounts.update(localId, { isTrashed: true });
+        }
+        return;
+      }
       const result = accountSchema.safeParse(payload);
       if (!result.success) {
         logger.warn("pullSince: invalid account payload, skipping", {
@@ -395,6 +473,14 @@ async function writeDecryptedRecord(
       break;
     }
     case "category": {
+      if (isTombstone) {
+        const localId = (payload as { id?: number }).id;
+        if (typeof localId === "number") {
+          // Soft-delete: keep the row so the trash view still works.
+          await db.categories.update(localId, { isTrashed: true });
+        }
+        return;
+      }
       const result = categorySchema.safeParse(payload);
       if (!result.success) {
         logger.warn("pullSince: invalid category payload, skipping", {
@@ -406,6 +492,13 @@ async function writeDecryptedRecord(
       break;
     }
     case "budget": {
+      if (isTombstone) {
+        const localId = (payload as { id?: number }).id;
+        if (typeof localId === "number") {
+          await db.budgets.delete(localId);
+        }
+        return;
+      }
       const result = budgetSchema.safeParse(payload);
       if (!result.success) {
         logger.warn("pullSince: invalid budget payload, skipping", {
@@ -417,6 +510,13 @@ async function writeDecryptedRecord(
       break;
     }
     case "settings":
+      if (isTombstone) {
+        const key = (payload as { key?: string }).key;
+        if (typeof key === "string") {
+          await db.settings.delete(key);
+        }
+        return;
+      }
       // Settings payload: { key: string; value: unknown }
       await db.settings.put(payload as Parameters<typeof db.settings.put>[0]);
       break;
@@ -621,16 +721,11 @@ export function startLiveSync(familyId: string): () => void {
   };
 }
 
-// ── requestDeviceApproval / approveDevice / rejectDevice (B5a) ────────────────
+// ── approveDevice / rejectDevice (B5a, B8) ────────────────────────────────────
 //
 // Replaces the old `silentlyApproveDevice` 500 ms auto-wrap path. The server
 // no longer dictates when a familyKey envelope is produced for a joining
 // device — the user must press Approve in the banner.
-//
-// requestDeviceApproval: invoked by the SSE branch when a `device.joined`
-// event arrives. It does NOT wrap the familyKey. It only resolves the pubkey
-// fingerprint (used by the UI) and stores the pending join in the device-join
-// store. The actual fingerprint computation lives in the SSE handler above.
 //
 // approveDevice: called from the UI when the user clicks "Approve". Wraps the
 // stored familyKey for the joining device's pubkey (in-worker), then POSTs
@@ -638,20 +733,12 @@ export function startLiveSync(familyId: string): () => void {
 //
 // rejectDevice: called from the UI when the user clicks "Reject". Records the
 // rejection locally (audit log) and asks the backend to revoke the joining
-// device session. The brief notes the orphan-route audit (B8) will replace
-// the existing `POST /v1/me/devices/{id}/revoke` with `DELETE
-// /v1/me/devices/{id}`; until then we call the existing endpoint.
-
-/** Resolve a pubkey for an inbound join, using the SSE payload when present
- *  or falling back to GET /api/v1/me/devices/{id}. */
-async function resolveJoiningDevicePubKey(
-  deviceId: string,
-  pubKeyB64u: string | null,
-): Promise<string> {
-  if (pubKeyB64u) return pubKeyB64u;
-  const resp = await apiFetch<{ pubKey: string }>(`/api/v1/me/devices/${deviceId}`);
-  return resp.pubKey;
-}
+// device session via `POST /v1/me/devices/{id}/revoke`.
+//
+// B8: the `GET /v1/me/devices/{id}` fallback used to fetch a missing pubkey
+// has been dropped. The backend `device.joined` SSE payload always carries
+// `pubKey` (see backend/internal/auth/handlers.go:299-304), so there is no
+// scenario where the banner reaches Approve without a pubkey already in hand.
 
 /**
  * Approve a pending device join (B5a). Called only after explicit user
@@ -659,10 +746,15 @@ async function resolveJoiningDevicePubKey(
  * device's pubkey and POSTs the envelope.
  */
 export async function approveDevice(deviceId: string, pubKeyB64u: string | null): Promise<void> {
-  const { cryptoWorker } = await import("@/services/crypto/worker-client");
+  if (!pubKeyB64u) {
+    // Should never happen: the SSE `device.joined` payload always includes
+    // pubKey, and the banner is the only caller. Bail loudly rather than
+    // attempting a network round-trip that no backend endpoint serves.
+    throw new Error("approveDevice: missing pubKey in pending join");
+  }
 
-  const resolvedPubKey = await resolveJoiningDevicePubKey(deviceId, pubKeyB64u);
-  const envelopeB64u = await cryptoWorker.wrapStoredFamilyKeyForDevice(resolvedPubKey);
+  const { cryptoWorker } = await import("@/services/crypto/worker-client");
+  const envelopeB64u = await cryptoWorker.wrapStoredFamilyKeyForDevice(pubKeyB64u);
 
   await apiFetch(`/api/v1/family/devices/${deviceId}/envelope`, {
     method: "POST",
@@ -674,13 +766,10 @@ export async function approveDevice(deviceId: string, pubKeyB64u: string | null)
 
 /**
  * Reject a pending device join (B5a). Records a local audit log entry and
- * revokes the joining device server-side. TODO(B8): swap to DELETE
- * /v1/me/devices/{id} once the orphan-route audit lands.
+ * revokes the joining device server-side.
  */
 export async function rejectDevice(deviceId: string): Promise<void> {
   logger.warn("liveSync.device.rejected", { deviceId });
-  // TODO(B8): use DELETE /v1/me/devices/{id} when the orphan-route audit
-  // replaces the existing POST .../revoke handler.
   await apiFetch(`/api/v1/me/devices/${deviceId}/revoke`, { method: "POST" });
   logger.info("liveSync.device.rejected.posted", { deviceId });
 }

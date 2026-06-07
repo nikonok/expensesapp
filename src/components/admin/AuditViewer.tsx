@@ -24,6 +24,14 @@ function formatAction(action: string): string {
   return ACTION_LABELS[action] ?? action.replace(/_/g, " ");
 }
 
+function formatDetailJson(raw: string): string {
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
+  }
+}
+
 function actionColor(action: string): string {
   if (
     action === "user.suspend" ||
@@ -95,6 +103,28 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
           >
             {entry.targetKind}: {entry.targetId}
           </span>
+        )}
+
+        {/* Detail JSON (B8) — render as a compact monospace block when set. */}
+        {entry.detailJson && (
+          <pre
+            style={{
+              margin: "var(--space-1) 0 0 0",
+              padding: "var(--space-2)",
+              background: "var(--color-surface-raised)",
+              border: "1px solid var(--color-border)",
+              borderRadius: 4,
+              fontFamily: '"JetBrains Mono", monospace',
+              fontSize: "11px",
+              color: "var(--color-text-secondary)",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+              maxHeight: 160,
+              overflow: "auto",
+            }}
+          >
+            {formatDetailJson(entry.detailJson)}
+          </pre>
         )}
       </div>
 

@@ -27,6 +27,8 @@ export function ActiveDevicesList() {
   const [loading, setLoading] = useState(true);
   const [revoking, setRevoking] = useState<string | null>(null);
   const [confirmSelfSignOut, setConfirmSelfSignOut] = useState(false);
+  const [signingOutAll, setSigningOutAll] = useState(false);
+  const [confirmSignOutAll, setConfirmSignOutAll] = useState(false);
 
   const loadDevices = useCallback(async () => {
     setLoading(true);
@@ -68,6 +70,24 @@ export function ActiveDevicesList() {
       setConfirmSelfSignOut(true);
     } else {
       revokeDevice(deviceId);
+    }
+  }
+
+  // B8 — call POST /v1/auth/signout-all which revokes every session for this
+  // user (across all devices). After it succeeds the current cookie is also
+  // gone, so navigate to sign-in.
+  async function signOutAll() {
+    setSigningOutAll(true);
+    try {
+      await apiFetch("/api/v1/auth/signout-all", { method: "POST" });
+      showToast("Signed out of all devices", "success");
+      useAuthStore.getState().signOut();
+      navigate("/signin", { replace: true });
+    } catch {
+      showToast("Failed to sign out of all devices", "error");
+    } finally {
+      setSigningOutAll(false);
+      setConfirmSignOutAll(false);
     }
   }
 
@@ -199,6 +219,36 @@ export function ActiveDevicesList() {
         );
       })}
 
+      {/* B8 — Sign out all devices (calls POST /v1/auth/signout-all) */}
+      <div
+        style={{
+          padding: "var(--space-3) var(--space-4)",
+          borderTop: "1px solid var(--color-border)",
+          display: "flex",
+          justifyContent: "flex-end",
+        }}
+      >
+        <button
+          onClick={() => setConfirmSignOutAll(true)}
+          disabled={signingOutAll}
+          aria-label="Sign out of all devices"
+          style={{
+            background: "none",
+            border: "1px solid var(--color-expense)",
+            borderRadius: 6,
+            padding: "var(--space-2) var(--space-3)",
+            fontFamily: '"DM Sans", sans-serif',
+            fontSize: "var(--text-caption)",
+            color: "var(--color-expense)",
+            cursor: signingOutAll ? "not-allowed" : "pointer",
+            opacity: signingOutAll ? 0.5 : 1,
+            minHeight: 44,
+          }}
+        >
+          {signingOutAll ? "Signing out…" : "Sign out all devices"}
+        </button>
+      </div>
+
       <ConfirmDialog
         isOpen={confirmSelfSignOut}
         title="Sign out of this device"
@@ -209,6 +259,16 @@ export function ActiveDevicesList() {
           if (currentDeviceId) revokeDevice(currentDeviceId);
         }}
         onCancel={() => setConfirmSelfSignOut(false)}
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        isOpen={confirmSignOutAll}
+        title="Sign out of all devices"
+        body="This will revoke every active session for your account. You will need to sign in again on every device."
+        confirmLabel="Sign out all"
+        onConfirm={signOutAll}
+        onCancel={() => setConfirmSignOutAll(false)}
         variant="destructive"
       />
     </div>
