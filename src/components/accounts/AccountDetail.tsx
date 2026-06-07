@@ -4,6 +4,7 @@ import { Archive, ArrowDownCircle, ArrowUpCircle, List, Plus } from "lucide-reac
 import { db } from "../../db/database";
 import type { Account } from "../../db/models";
 import { adjustBalance } from "../../services/balance.service";
+import { pushAccount } from "../../services/sync/push-helpers";
 import { useUIStore } from "../../stores/ui-store";
 import BottomSheet from "../layout/BottomSheet";
 import { Numpad } from "../shared/Numpad";
@@ -102,10 +103,12 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
   const handleArchive = async () => {
     setIsArchiving(true);
     try {
+      const now = new Date().toISOString();
       await db.accounts.update(account.id!, {
         isTrashed: true,
-        updatedAt: new Date().toISOString(),
+        updatedAt: now,
       });
+      await pushAccount({ ...account, isTrashed: true, updatedAt: now });
       onClose();
     } finally {
       setIsArchiving(false);

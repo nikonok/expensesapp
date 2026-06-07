@@ -11,6 +11,7 @@ vi.mock("../../db/database", () => ({
       where: vi.fn(),
       update: vi.fn().mockResolvedValue(1),
       add: vi.fn().mockResolvedValue(1),
+      get: vi.fn().mockResolvedValue({ id: 42, plannedAmount: 50000 }),
     },
   },
 }));
@@ -21,6 +22,10 @@ vi.mock("../shared/Toast", () => ({
 
 vi.mock("./BudgetStats", () => ({
   BudgetStats: () => null,
+}));
+
+vi.mock("../../services/sync/push-helpers", () => ({
+  pushBudget: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../layout/BottomSheet", () => ({

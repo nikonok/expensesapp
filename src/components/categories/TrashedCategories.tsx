@@ -5,13 +5,17 @@ import { db } from "../../db/database";
 import { EmptyState } from "../shared/EmptyState";
 import { getLucideIcon } from "../shared/IconPicker";
 import { getUTCISOString } from "../../utils/date-utils";
+import { pushCategory } from "../../services/sync/push-helpers";
 
 export default function TrashedCategories() {
   const navigate = useNavigate();
   const trashed = useCategories(undefined, true).filter((c) => c.isTrashed);
 
   async function handleRestore(id: number) {
-    await db.categories.update(id, { isTrashed: false, updatedAt: getUTCISOString() });
+    const now = getUTCISOString();
+    await db.categories.update(id, { isTrashed: false, updatedAt: now });
+    const restored = await db.categories.get(id);
+    if (restored) await pushCategory(restored);
   }
 
   return (

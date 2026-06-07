@@ -82,4 +82,21 @@ db.version(4).stores({
   syncCursors: "&familyId",
 });
 
+// v5 — extend pendingUploads with editor IDs (no new indexes; field-only change).
+// Dexie still requires re-declaring the full schema in the new version block.
+db.version(5).stores({
+  accounts: "++id, type, name, isTrashed, currency",
+  categories: "++id, type, name, isTrashed, displayOrder",
+  transactions:
+    "++id, date, accountId, categoryId, type, isTrashed, [date+displayOrder], [accountId+date], transferGroupId, toAccountId",
+  budgets: "++id, categoryId, accountId, month, [categoryId+month], [accountId+month]",
+  exchangeRates: "++id, baseCurrency, &[baseCurrency+date]",
+  settings: "key",
+  backups: "++id, createdAt",
+  logs: "++id, timestamp, level",
+  cipherKeys: "name",
+  pendingUploads: "++id, recordId, attempts",
+  syncCursors: "&familyId",
+});
+
 export { db };

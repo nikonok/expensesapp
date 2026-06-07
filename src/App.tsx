@@ -9,6 +9,8 @@ import {
   setupBroadcastChannelListener,
   teardownBackgroundSync,
 } from "./services/sync/background-sync";
+import { startLiveSync, flushOutbox } from "./services/sync/engine";
+import { getLocalFamilyId } from "./services/family/active-family";
 import { ToastProvider, useToast } from "./components/shared/Toast";
 import { checkDatabaseIntegrity } from "./services/integrity.service";
 import { checkAndRunAutoBackup, setAutoBackupSchedule } from "./services/backup.service";
@@ -142,7 +144,8 @@ function AppRoutes() {
   // ── Background catch-up sync (Phase 12) ──────────────────────────────────
   // Set up foreground visibilitychange catch-up and BroadcastChannel listener
   // whenever the user is signed in. The PBS registration is also attempted here.
-  // On sign-out everything is torn down.
+  // Also connects the live SSE stream and flushes any pending outbox uploads
+  // queued while offline. On sign-out everything is torn down.
   useEffect(() => {
     if (!isLoaded) return;
     if (!isSignedIn) {
@@ -152,7 +155,32 @@ function AppRoutes() {
     setupForegroundCatchUp();
     setupBroadcastChannelListener();
     registerCatchUpPeriodicSync().catch(() => {});
+
+    let disconnect: (() => void) | null = null;
+    let cancelled = false;
+    (async () => {
+      try {
+        const familyId = await getLocalFamilyId();
+        if (cancelled || !familyId) return;
+        disconnect = startLiveSync(familyId);
+        // Flush anything that was queued while offline / signed out.
+        flushOutbox().catch((err) => {
+          logger.warn(
+            "sync.flush.startup.failed",
+            err instanceof Error ? err : new Error(String(err)),
+          );
+        });
+      } catch (err) {
+        logger.warn(
+          "sync.liveSync.start.failed",
+          err instanceof Error ? err : new Error(String(err)),
+        );
+      }
+    })();
+
     return () => {
+      cancelled = true;
+      if (disconnect) disconnect();
       teardownBackgroundSync();
     };
   }, [isLoaded, isSignedIn]);
@@ -258,6 +286,7 @@ function AppRoutes() {
         <Route path="settings" element={<SettingsPage />} />
         <Route path="admin" element={<AdminRoute />} />
         <Route path="onboarding" element={<OnboardingPage />} />
+        <Route path="signin" element={<OnboardingPage initialStep="sign-in" />} />
         <Route path="devices/waiting" element={<DeviceJoinWaiting />} />
         {import.meta.env.DEV && CryptoDemoPage && (
           <Route path="dev/crypto-demo" element={<CryptoDemoPage />} />

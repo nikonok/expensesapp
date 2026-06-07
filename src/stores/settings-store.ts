@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { db } from "../db/database";
+import { pushSetting, SYNCED_SETTING_KEYS } from "../services/sync/push-helpers";
 
 interface SettingsStore {
   mainCurrency: string;
@@ -13,6 +14,9 @@ interface SettingsStore {
   lastAutoBackupAt: string | null;
   hasCompletedOnboarding: boolean;
   logLevel: "all" | "errors";
+  /** Backend-issued push subscription id (from POST /v1/push/subscribe).
+   *  Persisted so an unsubscribe after reload can DELETE the right row. */
+  pushSubscriptionId: string | null;
   isLoaded: boolean;
 
   load: () => Promise<void>;
@@ -31,6 +35,7 @@ const VALID_SETTING_KEYS = new Set([
   "lastAutoBackupAt",
   "hasCompletedOnboarding",
   "logLevel",
+  "pushSubscriptionId",
 ]);
 
 const DEFAULTS: Omit<SettingsStore, "load" | "update" | "isLoaded"> = {
@@ -45,6 +50,7 @@ const DEFAULTS: Omit<SettingsStore, "load" | "update" | "isLoaded"> = {
   lastAutoBackupAt: null,
   hasCompletedOnboarding: false,
   logLevel: "errors",
+  pushSubscriptionId: null,
 };
 
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
@@ -89,6 +95,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         logLevel: (["all", "errors"] as const).includes(map["logLevel"] as "all" | "errors")
           ? (map["logLevel"] as "all" | "errors")
           : DEFAULTS.logLevel,
+        pushSubscriptionId:
+          typeof map["pushSubscriptionId"] === "string"
+            ? (map["pushSubscriptionId"] as string)
+            : DEFAULTS.pushSubscriptionId,
         isLoaded: true,
       });
     } catch (err) {
@@ -111,6 +121,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       console.error("Failed to persist setting:", key, err);
       set({ [key]: prev } as Partial<SettingsStore>);
       throw err;
+    }
+    if (SYNCED_SETTING_KEYS.has(key)) {
+      await pushSetting(key, value);
     }
   },
 }));

@@ -2,6 +2,7 @@ import { useNavigate } from "react-router";
 import { RotateCcw, Trash2 } from "lucide-react";
 import { db } from "../../db/database";
 import { useAccounts } from "../../hooks/use-accounts";
+import { pushAccount } from "../../services/sync/push-helpers";
 import { EmptyState } from "../shared/EmptyState";
 import { getLucideIcon } from "../shared/IconPicker";
 import TopBar from "../layout/TopBar";
@@ -12,10 +13,13 @@ export default function TrashedAccounts() {
   const trashed = allAccounts.filter((a) => a.isTrashed);
 
   const handleRestore = async (id: number) => {
+    const now = new Date().toISOString();
     await db.accounts.update(id, {
       isTrashed: false,
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
     });
+    const restored = await db.accounts.get(id);
+    if (restored) await pushAccount(restored);
   };
 
   return (

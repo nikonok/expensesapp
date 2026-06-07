@@ -16,6 +16,7 @@ import { useSettingsStore } from "../../stores/settings-store";
 import { formatNumpadDisplay } from "../../utils/numpad-utils";
 import { calculateMortgagePayment } from "../../services/debt-payment.service";
 import { formatAmount } from "../../utils/currency-utils";
+import { pushAccount } from "../../services/sync/push-helpers";
 
 interface AccountFormProps {
   isOpen: boolean;
@@ -128,8 +129,6 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
       setDebtSubtype("regular");
       setDebtInputMode("original");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    // Intentional: re-init only when account identity changes, not on every Dexie reactive re-render.
   }, [isOpen, editAccount?.id, mainCurrency]);
 
   const handleCurrencyChange = (c: string) => {
@@ -302,9 +301,11 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
           debtOriginalAmount: data.debtOriginalAmount ?? null,
           updatedAt: now,
         });
+        const saved = await db.accounts.get(editAccount.id);
+        if (saved) await pushAccount(saved);
       } else {
         const sb = Math.round(parseFloat(startingBalance) * 100) || 0;
-        await db.accounts.add({
+        const newAccount = {
           name: data.name,
           type: data.type,
           color: data.color,
@@ -324,7 +325,9 @@ export default function AccountForm({ isOpen, onClose, editAccount }: AccountFor
           debtOriginalAmount: data.debtOriginalAmount ?? null,
           createdAt: now,
           updatedAt: now,
-        });
+        };
+        const id = await db.accounts.add(newAccount);
+        await pushAccount({ ...newAccount, id });
       }
       onClose();
     } catch (err) {

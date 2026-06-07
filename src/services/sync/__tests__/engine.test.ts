@@ -126,6 +126,21 @@ describe("enqueuePush", () => {
     expect(rows[0].lastFailedAt).toBeNull();
   });
 
+  it("persists addedByUserId and editedByUserId on the pendingUploads row", async () => {
+    Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+
+    const record = makeRawRecord({
+      addedByUserId: "user-aaa",
+      editedByUserId: "user-bbb",
+    });
+    await enqueuePush(record);
+
+    const rows = await db.pendingUploads.toArray();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].addedByUserId).toBe("user-aaa");
+    expect(rows[0].editedByUserId).toBe("user-bbb");
+  });
+
   it("triggers flushOutbox immediately when online (accepted path)", async () => {
     Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
 

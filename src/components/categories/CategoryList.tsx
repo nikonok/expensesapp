@@ -38,6 +38,7 @@ import DebtPaymentCard from "./DebtPaymentCard";
 
 import type { Category, Account } from "../../db/models";
 import { getUTCISOString, parsePeriodFilter } from "../../utils/date-utils";
+import { pushCategory } from "../../services/sync/push-helpers";
 
 export default function CategoryList() {
   const navigate = useNavigate();
@@ -161,10 +162,13 @@ export default function CategoryList() {
   async function handleConfirmTrash() {
     if (confirmTrash === null) return;
     try {
+      const now = getUTCISOString();
       await db.categories.update(confirmTrash, {
         isTrashed: true,
-        updatedAt: getUTCISOString(),
+        updatedAt: now,
       });
+      const saved = await db.categories.get(confirmTrash);
+      if (saved) await pushCategory(saved);
       setConfirmTrash(null);
     } catch (err) {
       console.error("Failed to trash category:", err);
@@ -218,6 +222,9 @@ export default function CategoryList() {
 
     try {
       await db.categories.bulkPut(updates);
+      for (const cat of updates) {
+        await pushCategory(cat);
+      }
     } catch (err) {
       console.error("Failed to save category order:", err);
       showToast("Failed to save order", "error");

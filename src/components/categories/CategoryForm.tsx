@@ -7,6 +7,7 @@ import type { Category, CategoryType } from "../../db/models";
 import { getUTCISOString } from "../../utils/date-utils";
 import { CHAR_LIMITS, COLOR_PALETTE, ICON_LIST } from "../../utils/constants";
 import { categorySchema } from "../../utils/validation";
+import { pushCategory } from "../../services/sync/push-helpers";
 
 interface CategoryFormProps {
   isOpen: boolean;
@@ -73,11 +74,13 @@ export default function CategoryForm({
           icon,
           updatedAt: now,
         });
+        const saved = await db.categories.get(editCategory.id);
+        if (saved) await pushCategory(saved);
       } else {
         // Get max displayOrder
         const all = await db.categories.toArray();
         const maxOrder = all.reduce((max, c) => Math.max(max, c.displayOrder), -1);
-        await db.categories.add({
+        const newCategory = {
           name: trimmedName,
           type: defaultType,
           color,
@@ -86,7 +89,9 @@ export default function CategoryForm({
           isTrashed: false,
           createdAt: now,
           updatedAt: now,
-        });
+        };
+        const id = await db.categories.add(newCategory);
+        await pushCategory({ ...newCategory, id });
       }
       handleClose();
     } catch {

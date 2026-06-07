@@ -82,6 +82,8 @@ export async function enqueuePush(record: RawRecord): Promise<void> {
     attempts: 0,
     lastFailedAt: null,
     familyId: record.familyId,
+    addedByUserId: record.addedByUserId,
+    editedByUserId: record.editedByUserId,
   };
 
   await db.pendingUploads.add(pending);
@@ -218,16 +220,19 @@ export async function flushOutbox(): Promise<void> {
 async function resolveConflict(local: PendingUpload, conflict: ConflictRecord): Promise<void> {
   const { cryptoWorker } = await import("@/services/crypto/worker-client");
 
-  // Build meta for local blob decryption (we need a placeholder meta for local).
+  const addedByUserId = local.addedByUserId ?? "";
+  const editedByUserId = local.editedByUserId ?? "";
+
+  // Build meta for local blob decryption using the originally-stored editor IDs.
+  // Falling back to empty strings preserves the previous behaviour for outbox
+  // rows persisted before the schema bump.
   const localMeta = {
     verByte: 1 as const,
     familyId: local.familyId,
     recordId: local.recordId,
     recordType: local.recordType,
-    // We don't have the original editor IDs stored; use empty strings — they're
-    // only used for tie-breaking, not for AAD verification of an existing blob.
-    addedByUserId: "",
-    editedByUserId: "",
+    addedByUserId,
+    editedByUserId,
     updatedAtMap: local.updatedAtMap,
     deletedAt: local.deletedAt ?? "",
   };
@@ -237,8 +242,8 @@ async function resolveConflict(local: PendingUpload, conflict: ConflictRecord): 
     familyId: local.familyId,
     recordId: local.recordId,
     recordType: local.recordType,
-    addedByUserId: "",
-    editedByUserId: "",
+    addedByUserId,
+    editedByUserId,
     updatedAtMap: conflict.currentUpdatedAtMap,
     deletedAt: "",
   };
@@ -256,13 +261,13 @@ async function resolveConflict(local: PendingUpload, conflict: ConflictRecord): 
   const localPayload = JSON.parse(new TextDecoder().decode(localPt)) as Record<string, unknown>;
   const serverPayload = JSON.parse(new TextDecoder().decode(serverPt)) as Record<string, unknown>;
 
-  // LWW merge.
+  // LWW merge. Pass editor IDs for tie-breaking (engine §7.6).
   const { mergedPayload, mergedMap } = mergePayloads(
     localPayload,
     serverPayload,
     local.updatedAtMap,
     conflict.currentUpdatedAtMap,
-    "",
+    editedByUserId,
     "",
   );
 
@@ -273,8 +278,8 @@ async function resolveConflict(local: PendingUpload, conflict: ConflictRecord): 
     familyId: local.familyId,
     recordId: local.recordId,
     recordType: local.recordType,
-    addedByUserId: "",
-    editedByUserId: "",
+    addedByUserId,
+    editedByUserId,
     updatedAtMap: mergedMap,
     deletedAt: local.deletedAt ?? "",
   };
@@ -295,6 +300,8 @@ async function resolveConflict(local: PendingUpload, conflict: ConflictRecord): 
     attempts: 0,
     lastFailedAt: null,
     familyId: local.familyId,
+    addedByUserId,
+    editedByUserId,
   };
 
   await db.pendingUploads.add(requeued);

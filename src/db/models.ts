@@ -187,6 +187,10 @@ export interface PendingUpload {
   lastFailedAt: string | null;
   /** familyId for key-lookup during re-encryption on conflict merge. */
   familyId: string;
+  /** ID of the user who originally created this record (carried in AAD). */
+  addedByUserId?: string;
+  /** ID of the user who produced this edit (carried in AAD). */
+  editedByUserId?: string;
 }
 
 // ── Sync cursors (Phase 4e — per-family pull position) ───────────────────────

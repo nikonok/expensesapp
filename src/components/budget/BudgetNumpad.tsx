@@ -7,6 +7,7 @@ import { db } from "../../db/database";
 import { getUTCISOString } from "../../utils/date-utils";
 import { budgetSchema } from "../../utils/validation";
 import { useToast } from "../shared/Toast";
+import { pushBudget } from "../../services/sync/push-helpers";
 
 interface BudgetNumpadProps {
   categoryId?: number;
@@ -66,15 +67,19 @@ export function BudgetNumpad({
           plannedAmount: result,
           updatedAt: now,
         });
+        const saved = await db.budgets.get(existing.id!);
+        if (saved) await pushBudget(saved);
       } else {
-        await db.budgets.add({
+        const newBudget = {
           categoryId: categoryId ?? null,
           accountId: accountId ?? null,
           month: currentMonth,
           plannedAmount: result,
           createdAt: now,
           updatedAt: now,
-        });
+        };
+        const id = await db.budgets.add(newBudget);
+        await pushBudget({ ...newBudget, id });
       }
 
       onClose();
