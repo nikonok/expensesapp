@@ -4,15 +4,27 @@
 
 ## What this project is
 
-A personal finance tracking **Progressive Web App** (PWA). React 19 + TypeScript + Vite + Tailwind CSS 4 + Dexie (IndexedDB). Primary platform: Android mobile. Works in any browser.
+A personal finance tracking **Progressive Web App** with optional family sync. Two cooperating packages:
+
+- **Frontend** — React 19 + TypeScript + Vite + Tailwind CSS 4 + Dexie (IndexedDB). PWA targeting Android Chrome first; works in any modern browser.
+- **Backend** — Go 1.26 service (`backend/`) exposing the sync API, push delivery, snapshot storage, and admin tools. SQLite via sqlc-generated queries.
+- **End-to-end encrypted family sync** — accounts/categories/transactions/budgets/settings are encrypted on-device with a family-derived key. The server stores only opaque ciphertext blobs + AAD inputs; it never sees plaintext financial data.
+- **Google Sign-In** authenticates the user against the backend (allowlist-gated). Sign-in is optional — the app remains fully usable offline as a solo PWA.
+- **Web Push** delivers daily reminders and family-activity nudges via a service worker.
+
+Per-package `CLAUDE.md` files exist under each major package (e.g. `backend/CLAUDE.md`, plus subdirectory READMEs where present) — read those before editing a package.
 
 ## Historical specs
 
-Initial planning specs live in `docs/archive/` (may be outdated — trust the code over these):
+Initial planning specs live in `docs/archive/` and `docs/backend/` (may be outdated — trust the code over these):
 
 - `docs/archive/spec.md` — original business logic / feature requirements
 - `docs/archive/design_spec.md` — visual design tokens, typography, component specs
 - `docs/archive/architect_spec.md` — technical architecture, data model, module contracts
+- `docs/backend/architecture.md` — backend service architecture (sync, snapshots, push, admin)
+- `docs/backend/business-requirements.md` — backend product requirements
+- `docs/backend/operator-runbook.md` — operator playbook for the deployed backend
+- `WORK_PLAN.md` (repo root) — the live engineering plan / open work tracker
 
 ## Manual testing
 
@@ -38,6 +50,8 @@ recharts@3.8.1        xlsx@0.18.5            workbox-window@7.4.0
 vitest@4.1.2          prettier@3.8.1         eslint@10.1.0
 ```
 
+Backend is Go 1.26 — see `backend/go.mod`.
+
 ## Project structure (src/)
 
 ```
@@ -45,36 +59,55 @@ db/
   database.ts       Dexie DB definition, schema (v1 — all dev migrations collapsed for release), indexes
   models.ts         TypeScript interfaces: Account, Category, Transaction, Budget, etc.
   seed.ts           Default category presets, currency list used during onboarding
-  sync-stub.ts      No-op server sync stub (future feature)
+  sync-stub.ts      Legacy no-op stub kept for import-compat; live sync lives in services/sync/
 stores/
-  ui-store.ts       Zustand: ephemeral UI state — filters, selection, edit mode
-  settings-store.ts Zustand: settings cache (reads DB on load, writes back on change)
+  ui-store.ts          Zustand: ephemeral UI state — filters, selection, edit mode
+  settings-store.ts    Zustand: settings cache (reads DB on load, writes back on change)
+  sync-store.ts        Zustand: live sync status (connected, queued, last error)
+  device-join-store.ts Zustand: device-join handshake state for new family members
 services/
-  balance.service.ts    Stored-balance mutations; applyTransaction / updateTransaction / deleteTransaction
-  backup.service.ts     JSON full-DB backup/restore + scheduled auto-backup
-  debt-payment.service.ts  Mortgage/debt math: payment split, term-saved, monthly payment
+  account/          Backend account ops (delete, recovery, log export) used by Settings
+  admin/            Admin API client (allowlist, users, audit)
+  auth/             Google Sign-In client, session store, silent re-auth
+  crypto/           E2E crypto: argon2id KDF, libsodium init, AAD, record cipher,
+                    envelope, recovery codes, version negotiation, Worker offload
+  family/           Family lifecycle: init, migrate-solo, active-family selector
+  notifications/    Notification-prefs API client
+  push/             Web Push subscribe / unsubscribe client
+  snapshots/        Encrypted snapshot upload/restore client
+  sync/             Live sync engine: client, cursor, merge, SSE stream, background-sync
+  balance.service.ts        Stored-balance mutations; applyTransaction / updateTransaction / deleteTransaction
+  backup.service.ts         JSON full-DB backup/restore + scheduled auto-backup
+  debt-payment.service.ts   Mortgage/debt math: payment split, term-saved, monthly payment
   exchange-rate.service.ts  Fetch + cache rates from open.er-api.com (24h TTL)
-  export.service.ts     XLSX export of transactions for a date range
-  integrity.service.ts  DB health check (runs at app startup before settings load)
-  math-parser.ts        Arithmetic expression evaluator for the Numpad (PEMDAS, minor-unit output)
+  export.service.ts         XLSX export of transactions for a date range
+  integrity.service.ts      DB health check (runs at app startup before settings load)
+  log.service.ts            Client-side structured log buffer (for support bundle export)
+  math-parser.ts            Arithmetic expression evaluator for the Numpad (PEMDAS, minor-unit output)
   notification.service.ts   Daily reminder scheduling via Web Notifications API
+  reset.service.ts          Full local-data reset (sign-out, wipe Dexie, unregister SW)
 hooks/
   use-accounts.ts       useAccounts(includeTrashed?), useAccount(id)
   use-budgets.ts        useBudgets(month)
   use-categories.ts     useCategories(type?, includeTrashed?), useCategory(id)
   use-exchange-rate.ts  useExchangeRate(from, to) — React hook wrapper around exchangeRateService
   use-install-prompt.ts useInstallPrompt() — PWA install prompt state
+  use-sw-update.ts      Detect a waiting service worker + trigger SKIP_WAITING
   use-total-balance.ts  useTotalBalance() — net worth across all accounts, currency-converted
   use-transactions.ts   useTransactions({ filter, accountId?, categoryId?, noteContains? })
   use-translation.ts    Re-export of useTranslation from react-i18next
 pages/
-  AccountsPage.tsx      Accounts tab (also handles nested /accounts/new, /accounts/:id sheets)
-  BudgetPage.tsx        Budget tab — lazy loaded
-  CategoriesPage.tsx    Categories tab (also handles /categories/trash nested route)
-  OnboardingPage.tsx    Wrapper for OnboardingFlow
-  OverviewPage.tsx      Overview tab — lazy loaded
-  SettingsPage.tsx      Full-screen settings page
-  TransactionsPage.tsx  Transactions tab
+  AccountsPage.tsx       Accounts tab (also handles nested /accounts/new, /accounts/:id sheets)
+  AdminPage.tsx          Admin console (allowlist + users + audit) — gated by backend role
+  BudgetPage.tsx         Budget tab — lazy loaded
+  CategoriesPage.tsx     Categories tab (also handles /categories/trash nested route)
+  CryptoDemoPage.tsx     Dev-only crypto sandbox at /dev/crypto-demo
+  DeviceJoinWaiting.tsx  Pending-device screen shown after submitting a join code
+  OnboardingPage.tsx     Wrapper for OnboardingFlow
+  OverviewPage.tsx       Overview tab — lazy loaded
+  RecoveryCodePage.tsx   Standalone re-entry of a recovery code (e.g. for unlocking)
+  SettingsPage.tsx       Full-screen settings page
+  TransactionsPage.tsx   Transactions tab
 components/
   layout/
     BottomNav.tsx       5-tab bottom navigation bar
@@ -89,12 +122,16 @@ components/
     ComingSoonStub.tsx  Greyed-out wrapper with toast for unimplemented features
     ConfirmDialog.tsx   Reusable destructive/default confirmation dialog
     CurrencyPicker.tsx  Searchable currency dropdown with Intl display names
+    DeviceJoinedBanner.tsx  Banner shown when a new device joins your family
     EmptyState.tsx      Centered empty-state with icon, heading, optional CTA
     ErrorBoundary.tsx   React error boundary; shows reload button in prod
     FilterChips.tsx     Horizontal scrollable chip group for filter selection
     IconPicker.tsx      Lucide icon picker (ICON_LIST from constants.ts)
+    InstallPopup.tsx    PWA install prompt popup
     IntegrityErrorScreen.tsx  Full-screen DB error recovery (restore from backup)
     Numpad.tsx          Calculator-style input with arithmetic expression support (with test)
+    NumpadDisplay.tsx   Numpad expression-display readout (with test)
+    OnboardingCompletePopup.tsx  Post-onboarding success popup
     PeriodFilter.tsx    Period selector with prev/next navigation
     Toast.tsx           Toast notification system (ToastProvider + useToast)
   accounts/
@@ -104,6 +141,10 @@ components/
     AccountList.tsx     Sorted list of account cards
     TotalWealth.tsx     Net worth header with multi-currency aggregation (with test)
     TrashedAccounts.tsx Full-screen trash view for accounts (/accounts/trash)
+  admin/
+    AllowlistEditor.tsx Manage the email allowlist
+    AuditViewer.tsx     Browse admin/audit events
+    UsersList.tsx       List + manage signed-up users
   categories/
     CategoryCard.tsx    Category row with spend/budget bar
     CategoryForm.tsx    Create/edit category form
@@ -111,6 +152,9 @@ components/
     DebtPaymentCard.tsx Debt account payment card with mortgage calculator (with test)
     DonutChart.tsx      Custom SVG donut chart — no Recharts (with test)
     TrashedCategories.tsx  Trash view nested inside /categories
+  onboarding/
+    RecoveryCodeEntry.tsx  Recovery-code input grid (with test)
+    RecoveryCodeSetup.tsx  Generate + display a new recovery code during onboarding
   transactions/
     SelectionToolbar.tsx  Bulk-select toolbar (delete/trash selected)
     TransactionDayHeader.tsx  Date group header with daily income/expense totals
@@ -129,28 +173,41 @@ components/
     OverviewSummary.tsx   Income vs expense summary cards
     SpendingBarChart.tsx  Recharts bar chart of spending over time
   settings/
-    BackupSettings.tsx    Backup/restore/auto-backup settings (with test)
-    ExportSettings.tsx    XLSX export date-range settings (with test)
-    InstallSetting.tsx    PWA install prompt button
-    LanguageSetting.tsx   Language selector (currently English only)
+    AccountDeletion.tsx       Delete-my-account flow (with test)
+    ActiveDevicesList.tsx     Live list of devices in the family
+    BackupSettings.tsx        Backup/restore/auto-backup settings (with test)
+    ExportSettings.tsx        XLSX export date-range settings (with test)
+    FamilySettings.tsx        Family create/join/leave + migrate-solo
+    HapticFeedbackSetting.tsx Haptic toggle
+    InstallSetting.tsx        PWA install prompt button
+    LanguageSetting.tsx       Language selector (currently English only)
+    LogSettings.tsx           Client log capture toggle
     MainCurrencySetting.tsx   Main currency picker
     NotificationSetting.tsx   Daily reminder time setting
-    SettingsView.tsx      Full settings layout with section headers (with test)
+    ResetAppSetting.tsx       Local-data wipe button
+    SecuritySettings.tsx      Sign-out, recovery code, key info
+    SettingsView.tsx          Full settings layout with section headers (with test)
+    SnapshotRestore.tsx       Restore an encrypted server snapshot
     StartupScreenSetting.tsx  Default startup tab picker
-    ThemeSetting.tsx      Dark/light toggle (light shows humor dialog)
+    SupportLogs.tsx           Export client log bundle for support
+    SyncSettings.tsx          Sync on/off + status
+    ThemeSetting.tsx          Dark/light toggle (light shows humor dialog)
 onboarding/
-  OnboardingFlow.tsx    5-step onboarding: welcome → currency → first account → categories → install prompt
+  OnboardingFlow.tsx    6-step onboarding: sign-in → (recovery-code) → welcome → currency → first-account → categories
+  SignInStep.tsx        Google Sign-In step (skippable for solo offline mode)
 i18n/
   index.ts              i18next setup
   locales/en.json       All English translations (single locale)
 utils/
+  backup-validation.ts  Validate restore payload schema
   constants.ts          COLOR_PALETTE (24 swatches), ICON_LIST, CHAR_LIMITS, defaults
+  currency-search.ts    Fuzzy search helpers for the currency picker
   currency-utils.ts     formatAmount, formatAmountNoSymbol, convertAmount, getCurrencySymbol
   date-utils.ts         parsePeriodFilter, formatDate, shiftPeriod, autoScaleChartBuckets, etc.
   numpad-utils.ts       formatNumpadDisplay — formats arithmetic expression strings for display
   transaction-utils.ts  isDebtPayment, isExpenseForReporting, getDayTotals
   validation.ts         Zod schemas: accountSchema, categorySchema, transactionSchema, budgetSchema, settingSchemas
-  __tests__/            Unit tests for currency-utils, date-utils, math-parser, numpad-utils
+  __tests__/            Unit tests for utils
 types/
   index.ts              PeriodFilter, PeriodFilterType, TabName, CategoryViewType
 styles/
@@ -161,6 +218,12 @@ App.tsx                 BrowserRouter, route tree, DB integrity check on startup
 main.tsx                React root mount + i18n init
 vite-env.d.ts           Vite env type declarations
 ```
+
+## Backend / family / sync
+
+The Go backend lives under `backend/` and owns: Google OAuth + sessions, the family/device model, encrypted record sync (`/sync`), encrypted snapshots, Web Push delivery, admin/allowlist, and audit logs. The client uses sqlc-generated queries only — never hand-written SQL. AAD generation MUST stay byte-identical between Go (`backend/internal/crypto/aad.go`) and TS (`src/services/crypto/aad.ts`); golden vectors in `backend/internal/crypto/testdata/aad-vectors.json` gate both sides.
+
+See `backend/CLAUDE.md` for the backend layout, env vars, migrations, and how to run / test the API. Frontend code that touches sync should also read `src/services/sync/` and `src/services/crypto/`.
 
 ## Key design rules
 
@@ -183,13 +246,15 @@ vite-env.d.ts           Vite env type declarations
 - `exchangeRate` on a transaction = 1 unit of account currency = X units of main currency.
 - All balance mutations inside `db.transaction('rw', ...)` for atomicity.
 - `QuotaError` (from balance.service) is thrown when IndexedDB storage is full — callers should handle it.
-- DB is at schema version 1 (all development migrations collapsed for first release). Future schema changes add `db.version(2).stores({...})` in `src/db/database.ts`.
+- DB is at schema version 1 (all development migrations collapsed for first release). Future schema changes append `db.version(2).stores({...})` in `src/db/database.ts`.
+- **Server is zero-knowledge for financial data.** Encrypted records use AAD derived from stable IDs; plaintext fields (amount, note, names) never leave the device.
 
 ## State management
 
 - **Dexie + useLiveQuery** → all persistent domain data (reactive DB reads).
 - **Zustand ui-store** → ephemeral UI state (filters, selection, edit mode) — resets on app close.
 - **Zustand settings-store** → settings cache (reads DB on startup, writes back on change).
+- **Zustand sync-store / device-join-store** → live sync + device-handshake status (ephemeral).
 
 ## Routing
 
@@ -201,7 +266,10 @@ Full-screen views (no bottom nav):
 - `/transactions/:id/edit` — edit transaction (lazy)
 - `/accounts/trash` — trashed accounts list
 - `/settings` — settings
+- `/admin` — admin console (allowlist + audit) — backend-role-gated
 - `/onboarding` — first-run onboarding flow
+- `/devices/waiting` — pending-device join screen
+- `/dev/crypto-demo` — dev-only crypto sandbox
 
 Nested within tab layout (rendered as overlays/sheets):
 
@@ -212,9 +280,10 @@ Nested within tab layout (rendered as overlays/sheets):
 
 1. `checkDatabaseIntegrity()` — if it fails, show `IntegrityErrorScreen` (recovery: restore from backup)
 2. `useSettingsStore.load()` — hydrate settings from DB
-3. If `!hasCompletedOnboarding` → redirect to `/onboarding`
+3. If `!hasCompletedOnboarding` → redirect to `/onboarding` (starts with `SignInStep`)
 4. If configured `startupScreen` differs from cold-start path → redirect to configured tab
 5. `checkAndRunAutoBackup()` — run auto-backup if interval elapsed
+6. If signed in + family known → connect the sync engine (`services/sync/`)
 
 ## Path alias
 
@@ -231,6 +300,15 @@ npm run test:e2e   # Playwright e2e tests (auto-starts dev server)
 npm run lint       # ESLint
 npm run format     # Prettier (auto-fix)
 npm run screenshots # generate PWA screenshot assets
+```
+
+Backend (run from `backend/`):
+
+```bash
+go vet ./...
+go build ./...
+go test ./...
+go run ./cmd/api  # start the local API
 ```
 
 With [Task](https://taskfile.dev):
@@ -250,10 +328,12 @@ task docker:rebuild # rebuild from scratch + restart
 ## What NOT to do
 
 - Do not change pinned dependency versions.
-- Do not implement features marked as "future stubs" (recurring transactions, passcode, server sync, savings interest, debt auto-interest). Show them as greyed-out `ComingSoonStub` UI only.
+- Do not implement features marked as "future stubs" (recurring transactions, passcode, the FamilySettings "move data" path). Show them as greyed-out `ComingSoonStub` UI only.
 - Do not hard-delete accounts or categories — always soft-delete (`isTrashed = true`).
 - Do not implement light theme. Show humor dialog per spec (see `ThemeSetting.tsx`).
 - Do not use Spring physics for animations — mechanical timing only.
 - Do not use Recharts for the donut chart (Categories tab) — it must be a custom SVG (`DonutChart.tsx`).
 - Do not add unsolicited features, comments, or docstrings.
 - Do not use Tailwind utility classes in component JSX — use inline `style={{}}` with CSS token variables.
+- Do not send plaintext financial fields to the backend. All sync payloads go through `services/crypto/`.
+- Do not hand-write backend SQL — extend `backend/internal/db/queries.sql` and regenerate via sqlc.
