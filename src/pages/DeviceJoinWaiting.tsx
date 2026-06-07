@@ -42,11 +42,15 @@ export default function DeviceJoinWaiting() {
     setRecovering(true);
     setRecoveryError(null);
     try {
-      // 1. GET /api/v1/family/recovery-envelope → {recoveryWrap, salt, version, createdAt?}
+      // 1. GET /api/v1/family/recovery-envelope → {recoveryWrap, salt, version,
+      //    familyId, createdAt}. The backend includes familyId + createdAt so a
+      //    cold-recovery device can derive the AAD without an extra /v1/me
+      //    round-trip (B9).
       const envelope = await apiFetch<{
         recoveryWrap: string;
         salt: string;
         version: number;
+        familyId?: string;
         createdAt?: string;
       }>("/api/v1/family/recovery-envelope");
 
@@ -62,40 +66,21 @@ export default function DeviceJoinWaiting() {
       }
 
       const recoveryWrap = fromB64u(envelope.recoveryWrap);
-      // familyId for AAD is derived from the sync cursor table (populated after first pull).
-      // During recovery, we use the phrase to unwrap; the worker handles deriving familyId
-      // from context — we pass it explicitly.
-      // The familyId is needed for the AAD; obtain it from the server context.
-      // Since we don't have it locally yet (fresh device), use the createdAt from the envelope.
       const createdAt = envelope.createdAt ?? "";
 
       // Dynamic import keeps the crypto worker out of the initial chunk.
       const { cryptoWorker } = await import("@/services/crypto/worker-client");
 
-      // We need familyId to unwrap. GET /api/v1/family/recovery-envelope requires
-      // a session+family_member, meaning the backend set familyId in the context.
-      // The familyId must come from the backend response or we can derive it from
-      // GET /api/v1/me (but currently family is nil). Use a dedicated recovery endpoint
-      // that includes familyId, or fall back to reading from the server-side context.
-      //
-      // For the recovery unwrap, we call unwrapRecoveryEnvelopeAndPersist which internally
-      // calls deriveRecoveryKey (Argon2id) using phrase + familyId. The familyId is obtained
-      // from an additional GET /api/v1/me/family or similar.
-      //
-      // Short-term: GET /api/v1/family/recovery-envelope and extract familyId from the session.
-      // The backend auth middleware sets familyId on the context from the user's session,
-      // but the response JSON doesn't expose it. We need a way to get it.
-      //
-      // Pragmatic solution: POST to a recovery-initiate endpoint or use the family endpoint.
-      // Since the spec for this endpoint only returns {recoveryWrap, salt, version},
-      // we request familyId from the separate GET /api/v1/me endpoint through family info.
-      // For now we use the sync cursor table when available, otherwise the server returns it
-      // in the recovery-envelope response when the 6b backend adds it.
-      //
-      // Retrieve familyId: try sync cursors first, then use server response field.
-      const { db } = await import("@/db/database");
-      const cursor = await db.syncCursors.toCollection().first();
-      const familyId = cursor?.familyId ?? (envelope as { familyId?: string }).familyId ?? "";
+      // Prefer the familyId from the recovery-envelope response. On a fresh
+      // device the sync-cursor table is empty, so we'd otherwise need an extra
+      // round-trip to GET /v1/me. Fall back to the cursor for old clients that
+      // happen to have pulled before the recovery flow (defensive only).
+      let familyId = envelope.familyId ?? "";
+      if (!familyId) {
+        const { db } = await import("@/db/database");
+        const cursor = await db.syncCursors.toCollection().first();
+        familyId = cursor?.familyId ?? "";
+      }
 
       if (!familyId) {
         throw new Error("Could not determine family ID for recovery. Please try again.");

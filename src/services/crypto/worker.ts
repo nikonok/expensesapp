@@ -259,6 +259,7 @@ type Req =
       phrase: string;
       familyKey: Uint8Array;
       familyId: string;
+      createdAt: string;
     }
   | {
       id: number;
@@ -266,6 +267,7 @@ type Req =
       envelope: Uint8Array;
       familyKey: Uint8Array;
       familyId: string;
+      createdAt: string;
     }
   | {
       id: number;
@@ -300,6 +302,7 @@ type Req =
       type: "unwrapStoredPhraseForReveal";
       phraseCt: Uint8Array;
       familyId: string;
+      createdAt: string;
     }
   | {
       /** Reads the stored familyKey and wraps a new Envelope A + Envelope B for
@@ -414,7 +417,12 @@ self.onmessage = async (e: MessageEvent<Req>) => {
           req.familyId,
           req.createdAt,
         );
-        const phraseCt = await wrapPhraseForReveal(req.phrase, familyKey, req.familyId);
+        const phraseCt = await wrapPhraseForReveal(
+          req.phrase,
+          familyKey,
+          req.familyId,
+          req.createdAt,
+        );
         await putKey("familyKey", familyKey);
         post({
           id: req.id,
@@ -468,12 +476,22 @@ self.onmessage = async (e: MessageEvent<Req>) => {
         return;
       }
       case "wrapPhraseForReveal": {
-        const result = await wrapPhraseForReveal(req.phrase, req.familyKey, req.familyId);
+        const result = await wrapPhraseForReveal(
+          req.phrase,
+          req.familyKey,
+          req.familyId,
+          req.createdAt,
+        );
         post({ id: req.id, ok: true, result });
         return;
       }
       case "unwrapPhraseForReveal": {
-        const result = await unwrapPhraseForReveal(req.envelope, req.familyKey, req.familyId);
+        const result = await unwrapPhraseForReveal(
+          req.envelope,
+          req.familyKey,
+          req.familyId,
+          req.createdAt,
+        );
         post({ id: req.id, ok: true, result });
         return;
       }
@@ -573,7 +591,12 @@ self.onmessage = async (e: MessageEvent<Req>) => {
           });
           return;
         }
-        const phrase2 = await unwrapPhraseForReveal(req.phraseCt, storedFamilyKey2, req.familyId);
+        const phrase2 = await unwrapPhraseForReveal(
+          req.phraseCt,
+          storedFamilyKey2,
+          req.familyId,
+          req.createdAt,
+        );
         post({ id: req.id, ok: true, result: phrase2 });
         return;
       }
@@ -589,7 +612,7 @@ self.onmessage = async (e: MessageEvent<Req>) => {
         }
         const [wrapBytes3, phraseCt3] = await Promise.all([
           wrapRecoveryEnvelope(storedFamilyKey3, req.phrase, req.familyId, req.createdAt),
-          wrapPhraseForReveal(req.phrase, storedFamilyKey3, req.familyId),
+          wrapPhraseForReveal(req.phrase, storedFamilyKey3, req.familyId, req.createdAt),
         ]);
         post({ id: req.id, ok: true, result: { wrapBytes: wrapBytes3, phraseCt: phraseCt3 } });
         return;

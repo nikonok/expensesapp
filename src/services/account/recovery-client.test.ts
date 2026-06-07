@@ -32,7 +32,12 @@ describe("revealRecoveryPhrase", () => {
     const fakeCt = "fake-ct-bytes";
     const phraseCtB64u = toBase64Url(fakeCt);
 
-    mockFetch.mockResolvedValueOnce({ phraseCt: phraseCtB64u, saltB64: "salt" });
+    mockFetch.mockResolvedValueOnce({
+      phraseCt: phraseCtB64u,
+      saltB64: "salt",
+      familyId: "family-123",
+      createdAt: "2024-01-01T00:00:00.000Z",
+    });
     mockWorker.mockResolvedValueOnce("word1 word2 word3");
 
     const phrase = await revealRecoveryPhrase("grant-abc", "family-123");
@@ -42,13 +47,24 @@ describe("revealRecoveryPhrase", () => {
       headers: { "X-Reauth-Grant": "grant-abc" },
     });
 
-    // Worker should receive decoded Uint8Array and the familyId
+    // Worker should receive decoded Uint8Array, the familyId, and createdAt.
     expect(mockWorker).toHaveBeenCalledTimes(1);
-    const [phraseCt, familyId] = mockWorker.mock.calls[0];
+    const [phraseCt, familyId, createdAt] = mockWorker.mock.calls[0];
     expect(phraseCt).toBeInstanceOf(Uint8Array);
     expect(familyId).toBe("family-123");
+    expect(createdAt).toBe("2024-01-01T00:00:00.000Z");
 
     expect(phrase).toBe("word1 word2 word3");
+  });
+
+  it("passes empty createdAt to worker when server omits it (pre-B9 envelope)", async () => {
+    mockFetch.mockResolvedValueOnce({ phraseCt: toBase64Url("ct"), saltB64: "salt" });
+    mockWorker.mockResolvedValueOnce("word1 word2");
+
+    await revealRecoveryPhrase("grant-abc", "family-123");
+
+    const [, , createdAt] = mockWorker.mock.calls[0];
+    expect(createdAt).toBe("");
   });
 
   it("propagates network errors from the reveal endpoint", async () => {

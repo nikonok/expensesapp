@@ -42,8 +42,10 @@ const (
 
 // revealRecoveryResponse is returned by POST /v1/account/recovery/reveal.
 type revealRecoveryResponse struct {
-	PhraseCt string `json:"phraseCt"` // base64url AEAD ciphertext of the recovery phrase
-	SaltB64  string `json:"saltB64"`  // base64url 16-byte Argon2id salt
+	PhraseCt  string `json:"phraseCt"`  // base64url AEAD ciphertext of the recovery phrase
+	SaltB64   string `json:"saltB64"`   // base64url 16-byte Argon2id salt
+	FamilyID  string `json:"familyId"`  // UUID of the family (needed for Envelope B AAD)
+	CreatedAt string `json:"createdAt"` // families.created_at (needed for Envelope B v2 AAD; B9)
 }
 
 // regenerateRecoveryRequest is the JSON body for POST /v1/account/recovery/regenerate.
@@ -118,6 +120,19 @@ func (h *Handler) PostRecoveryReveal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 3b. Fetch the family to obtain createdAt — needed by the client to build
+	//     the AAD for Envelope B v2 (B9). The client also uses familyId.
+	family, err := q.GetFamilyByID(ctx, member.FamilyID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			httpx.WriteError(w, r, http.StatusNotFound, "not-found", "family not found")
+			return
+		}
+		slog.WarnContext(ctx, "recovery.reveal: get family error", "err", err)
+		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
+		return
+	}
+
 	// 4. Audit-log the reveal inside a transaction.
 	// Grant is already claimed (marked used) by step 1.
 	if err := internaldb.WithTx(ctx, h.db, func(tx *sql.Tx) error {
@@ -132,8 +147,10 @@ func (h *Handler) PostRecoveryReveal(w http.ResponseWriter, r *http.Request) {
 	_ = grant // grant already consumed; purpose was validated in claimReauthGrant
 
 	httpx.WriteJSON(w, http.StatusOK, revealRecoveryResponse{
-		PhraseCt: base64.RawURLEncoding.EncodeToString(envelope.PhraseCt),
-		SaltB64:  base64.RawURLEncoding.EncodeToString(envelope.Salt),
+		PhraseCt:  base64.RawURLEncoding.EncodeToString(envelope.PhraseCt),
+		SaltB64:   base64.RawURLEncoding.EncodeToString(envelope.Salt),
+		FamilyID:  family.ID,
+		CreatedAt: family.CreatedAt,
 	})
 }
 

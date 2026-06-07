@@ -6,7 +6,7 @@
 
 import { sodiumReady } from "./sodium-init";
 import { deriveRecoveryKey } from "./argon-init";
-import { RECOVERY_VERSION_V1 } from "./version";
+import { RECOVERY_VERSION_V1, RECOVERY_VERSION_V2 } from "./version";
 
 const TE = new TextEncoder();
 const TD = new TextDecoder();
@@ -26,21 +26,24 @@ function buildRecoveryAAD(label: string, familyId: string, extra?: string): Uint
   return out;
 }
 
-/** Pack: [RECOVERY_VERSION_V1(1) | nonce(24) | ct+tag(var)] */
-function packEnvelope(nonce: Uint8Array, ct: Uint8Array): Uint8Array {
+/** Pack: [version(1) | nonce(24) | ct+tag(var)]. Used by both Envelope A and B. */
+function packEnvelope(version: number, nonce: Uint8Array, ct: Uint8Array): Uint8Array {
   const out = new Uint8Array(1 + 24 + ct.length);
-  out[0] = RECOVERY_VERSION_V1;
+  out[0] = version;
   out.set(nonce, 1);
   out.set(ct, 25);
   return out;
 }
 
-function unpackEnvelope(blob: Uint8Array): { nonce: Uint8Array; ct: Uint8Array } {
+function unpackEnvelope(
+  blob: Uint8Array,
+  accept: number[],
+): { version: number; nonce: Uint8Array; ct: Uint8Array } {
   // Minimum: 1 (ver) + 24 (nonce) + 16 (Poly tag, empty plaintext)
   if (blob.length < 1 + 24 + 16) throw new Error("recovery envelope too short");
   const ver = blob[0];
-  if (ver !== RECOVERY_VERSION_V1) throw new Error("unsupported recovery envelope version");
-  return { nonce: blob.subarray(1, 25), ct: blob.subarray(25) };
+  if (!accept.includes(ver)) throw new Error("unsupported recovery envelope version");
+  return { version: ver, nonce: blob.subarray(1, 25), ct: blob.subarray(25) };
 }
 
 /**
@@ -64,7 +67,7 @@ export async function wrapRecoveryEnvelope(
     nonce,
     kRecovery,
   );
-  return packEnvelope(nonce, ct);
+  return packEnvelope(RECOVERY_VERSION_V1, nonce, ct);
 }
 
 export async function unwrapRecoveryEnvelope(
@@ -75,23 +78,30 @@ export async function unwrapRecoveryEnvelope(
 ): Promise<Uint8Array> {
   const sodium = await sodiumReady();
   const kRecovery = await deriveRecoveryKey(phrase, familyId);
-  const { nonce, ct } = unpackEnvelope(envelope);
+  const { nonce, ct } = unpackEnvelope(envelope, [RECOVERY_VERSION_V1]);
   const aad = buildRecoveryAAD("recovery-wrap-v1", familyId, createdAt);
   return sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(null, ct, aad, nonce, kRecovery);
 }
 
 /**
- * Envelope B (warm reveal): AEAD(familyKey, phrase, AAD="recovery-reveal-v1"||familyId).
+ * Envelope B (warm reveal): AEAD(familyKey, phrase, AAD=label||familyId[||createdAt]).
+ *
+ * Version 2 (RECOVERY_VERSION_V2 = 0x21) binds `createdAt` into the AAD so a
+ * malicious server cannot roll back to a prior Envelope B undetected (B9).
+ * Version 1 (RECOVERY_VERSION_V1 = 0x20) is still accepted on decrypt for
+ * pre-B9 stored envelopes; new envelopes are always written as v2.
+ *
  * Used in Settings → Security → "Show recovery code".
  */
 export async function wrapPhraseForReveal(
   phrase: string,
   familyKey: Uint8Array,
   familyId: string,
+  createdAt: string,
 ): Promise<Uint8Array> {
   const sodium = await sodiumReady();
   const nonce = sodium.randombytes_buf(24);
-  const aad = buildRecoveryAAD("recovery-reveal-v1", familyId);
+  const aad = buildRecoveryAAD("recovery-reveal-v2", familyId, createdAt);
   const ct = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
     TE.encode(phrase),
     aad,
@@ -99,17 +109,27 @@ export async function wrapPhraseForReveal(
     nonce,
     familyKey,
   );
-  return packEnvelope(nonce, ct);
+  return packEnvelope(RECOVERY_VERSION_V2, nonce, ct);
 }
 
 export async function unwrapPhraseForReveal(
   envelope: Uint8Array,
   familyKey: Uint8Array,
   familyId: string,
+  createdAt: string,
 ): Promise<string> {
   const sodium = await sodiumReady();
-  const { nonce, ct } = unpackEnvelope(envelope);
-  const aad = buildRecoveryAAD("recovery-reveal-v1", familyId);
+  const { version, nonce, ct } = unpackEnvelope(envelope, [
+    RECOVERY_VERSION_V1,
+    RECOVERY_VERSION_V2,
+  ]);
+  // v1 envelopes (pre-B9) don't bind createdAt — keep the original AAD shape so
+  // existing stored envelopes still decrypt. v2 binds createdAt to defeat
+  // rollback-to-prior-envelope attacks by a malicious server.
+  const aad =
+    version === RECOVERY_VERSION_V2
+      ? buildRecoveryAAD("recovery-reveal-v2", familyId, createdAt)
+      : buildRecoveryAAD("recovery-reveal-v1", familyId);
   const pt = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(null, ct, aad, nonce, familyKey);
   return TD.decode(pt);
 }

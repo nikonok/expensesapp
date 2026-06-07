@@ -2,6 +2,10 @@
 
 import { describe, it, expect } from "vitest";
 import { encryptRecord, decryptRecord, type RecordMeta } from "../record-cipher";
+import { commitTag } from "../commit";
+import { serializeAAD } from "../aad";
+import { sodiumReady } from "../sodium-init";
+import { SUITE_VERSION_V1 } from "../version";
 
 function randomKey(): Uint8Array {
   const k = new Uint8Array(32);
@@ -101,5 +105,77 @@ describe("encryptRecord / decryptRecord", () => {
     const { nonce, plaintextByteCount } = await encryptRecord(plaintext, familyKey, BASE_META);
     expect(nonce.length).toBe(24);
     expect(plaintextByteCount).toBe(plaintext.length);
+  });
+
+  it("emits SUITE_VERSION_V2 (0x02) for new blobs (B9 commit-tag KDF)", async () => {
+    const familyKey = randomKey();
+    const { blob } = await encryptRecord(new TextEncoder().encode("v"), familyKey, BASE_META);
+    expect(blob[0]).toBe(0x02);
+  });
+
+  it("backwards-compat: still decrypts a v1 blob (commit tag HMAC'd under familyKey)", async () => {
+    // Synthesize a legacy v1 blob: version byte 0x01, commit tag computed via
+    // the v1 path (HMAC under familyKey directly). The decrypt path must accept
+    // it so any blobs persisted before the B9 bump continue to verify.
+    const sodium = await sodiumReady();
+    const familyKey = randomKey();
+    const plaintext = new TextEncoder().encode("legacy v1 record");
+
+    const nonce = sodium.randombytes_buf(24);
+    const aad = await serializeAAD({
+      ...BASE_META,
+      nonce,
+      plaintextByteCount: plaintext.length,
+    });
+    const ct = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+      plaintext,
+      aad,
+      null,
+      nonce,
+      familyKey,
+    );
+    const commit = await commitTag(familyKey, nonce, SUITE_VERSION_V1);
+
+    const blob = new Uint8Array(1 + 24 + 32 + ct.length);
+    blob[0] = SUITE_VERSION_V1;
+    blob.set(nonce, 1);
+    blob.set(commit, 25);
+    blob.set(ct, 57);
+
+    const recovered = await decryptRecord({ blob, familyKey, meta: BASE_META });
+    expect(Array.from(recovered)).toEqual(Array.from(plaintext));
+  });
+
+  it("rejects a v2 blob whose commit tag was computed under v1 (cross-version mismatch)", async () => {
+    // Belt-and-suspenders: if an attacker (or a buggy older client) swaps just
+    // the version byte without recomputing the commit tag, decryption fails.
+    const sodium = await sodiumReady();
+    const familyKey = randomKey();
+    const plaintext = new TextEncoder().encode("mixed");
+
+    const nonce = sodium.randombytes_buf(24);
+    const aad = await serializeAAD({
+      ...BASE_META,
+      nonce,
+      plaintextByteCount: plaintext.length,
+    });
+    const ct = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+      plaintext,
+      aad,
+      null,
+      nonce,
+      familyKey,
+    );
+    // Commit tag intentionally derived under v1
+    const commitV1 = await commitTag(familyKey, nonce, SUITE_VERSION_V1);
+    const blob = new Uint8Array(1 + 24 + 32 + ct.length);
+    blob[0] = 0x02; // claim v2
+    blob.set(nonce, 1);
+    blob.set(commitV1, 25);
+    blob.set(ct, 57);
+
+    await expect(decryptRecord({ blob, familyKey, meta: BASE_META })).rejects.toThrow(
+      "commit tag mismatch",
+    );
   });
 });

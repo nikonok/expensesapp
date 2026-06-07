@@ -1,17 +1,32 @@
-import { describe, it, expect } from "vitest";
+// @vitest-environment node
+//
+// Worker-client smoke tests. We don't have a real Web Worker in Vitest's Node
+// environment, so we install an in-process Worker shim that loads the real
+// worker module via the same global hook used by the worker-client. The shim
+// gives us a postMessage/onmessage round-trip — the actual crypto code paths
+// run in-process, which is fine because they don't depend on any worker-only
+// API beyond `self.onmessage` and `self.postMessage` (both stubbed here).
+//
+// This used to be `describe.skipIf(!hasWorker)` so CI never exercised the
+// worker RPC plumbing. B9 turns that into a real PASS in every run.
 
-// Web Workers are not available in the Node.js test environment used by Vitest.
-// The real worker round-trip is exercised in the Phase 2 dev playground (2.demo).
-// These tests are skipped rather than failing so CI stays green.
-const hasWorker = typeof Worker !== "undefined";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { installWorkerShim, uninstallWorkerShim } from "./worker-shim";
+
+beforeEach(async () => {
+  await installWorkerShim();
+});
+afterEach(() => {
+  uninstallWorkerShim();
+});
 
 describe("cryptoWorker", () => {
-  it.skipIf(!hasWorker)("init resolves without error", async () => {
+  it("init resolves without error", async () => {
     const { cryptoWorker } = await import("../worker-client");
     await cryptoWorker.init();
   });
 
-  it.skipIf(!hasWorker)("ping echoes the payload", async () => {
+  it("ping echoes the payload", async () => {
     const { cryptoWorker } = await import("../worker-client");
     const res = await cryptoWorker.ping("hello");
     expect(res).toBe("hello");

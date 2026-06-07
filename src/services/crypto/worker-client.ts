@@ -104,11 +104,19 @@ export const cryptoWorker = {
     createdAt: string,
   ) => call<Uint8Array>({ type: "unwrapRecoveryEnvelope", envelope, phrase, familyId, createdAt }),
 
-  wrapPhraseForReveal: (phrase: string, familyKey: Uint8Array, familyId: string) =>
-    call<Uint8Array>({ type: "wrapPhraseForReveal", phrase, familyKey, familyId }),
+  wrapPhraseForReveal: (
+    phrase: string,
+    familyKey: Uint8Array,
+    familyId: string,
+    createdAt: string,
+  ) => call<Uint8Array>({ type: "wrapPhraseForReveal", phrase, familyKey, familyId, createdAt }),
 
-  unwrapPhraseForReveal: (envelope: Uint8Array, familyKey: Uint8Array, familyId: string) =>
-    call<string>({ type: "unwrapPhraseForReveal", envelope, familyKey, familyId }),
+  unwrapPhraseForReveal: (
+    envelope: Uint8Array,
+    familyKey: Uint8Array,
+    familyId: string,
+    createdAt: string,
+  ) => call<string>({ type: "unwrapPhraseForReveal", envelope, familyKey, familyId, createdAt }),
 
   /**
    * Encrypt a record using the familyKey stored in the worker's IndexedDB.
@@ -162,10 +170,13 @@ export const cryptoWorker = {
    * Reads the stored familyKey and decrypts the Envelope B (phrase ciphertext)
    * produced by wrapPhraseForReveal. Returns the plaintext 24-word phrase.
    * Used by Settings → Security → "Show recovery code".
+   * `createdAt` must match the family creation timestamp used at wrap time
+   * (only enforced for envelope version 2+; v1 envelopes ignore it). The
+   * server returns the value alongside the phraseCt in the reveal response.
    * Throws "NoStoredFamilyKey:" if no familyKey is stored.
    */
-  unwrapStoredPhraseForReveal: (phraseCt: Uint8Array, familyId: string) =>
-    call<string>({ type: "unwrapStoredPhraseForReveal", phraseCt, familyId }),
+  unwrapStoredPhraseForReveal: (phraseCt: Uint8Array, familyId: string, createdAt: string) =>
+    call<string>({ type: "unwrapStoredPhraseForReveal", phraseCt, familyId, createdAt }),
 
   /**
    * Derives a 32-byte kRecovery from the BIP39 phrase and familyId via Argon2id.

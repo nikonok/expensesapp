@@ -1,10 +1,21 @@
-import { describe, it, expect } from "vitest";
+// @vitest-environment node
+//
+// Crypto worker integration test — encrypt+decrypt round-trip through the RPC
+// surface. Runs against the in-process worker shim installed by `worker-shim.ts`
+// so that CI exercises the real `worker.ts` request/response wiring (the file
+// used to be skipped in Node).
 
-// Web Workers are not available in Vitest's Node environment.
-// The real worker round-trip is exercised in the Phase 2 dev playground (2.demo).
-const hasWorker = typeof Worker !== "undefined";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { installWorkerShim, uninstallWorkerShim } from "./worker-shim";
 
-describe.skipIf(!hasWorker)("cryptoWorker integration — encrypt+decrypt round-trip", () => {
+beforeEach(async () => {
+  await installWorkerShim();
+});
+afterEach(() => {
+  uninstallWorkerShim();
+});
+
+describe("cryptoWorker integration — encrypt+decrypt round-trip", () => {
   it("encrypt+decrypt round-trip through the worker", async () => {
     const { cryptoWorker } = await import("../worker-client");
 
