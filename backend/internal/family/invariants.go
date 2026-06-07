@@ -55,6 +55,12 @@ var ErrNotSameFamily = errors.New("caller and target are not in the same family"
 // member of the targetFamilyId supplied in the request body.
 var ErrNotInTargetFamily = errors.New("caller not in target family")
 
+// ErrSourceSameAsTarget is returned by MigrateSolo when the source family is
+// the same as the target family — there is nothing to migrate, and the
+// resulting MarkFamilyMemberLeft would silently kick the caller out of the
+// family they are trying to migrate into.
+var ErrSourceSameAsTarget = errors.New("source family is the same as target family")
+
 // ErrTieBreakDenied is returned by RemoveMember when the caller joined after
 // the target and the mutual-kick tie-break denies the removal.
 var ErrTieBreakDenied = errors.New("tie-break: caller joined after target; remove denied")
@@ -108,12 +114,15 @@ func checkCoolDown(lastRemovedAt sql.NullString, now time.Time) error {
 // resolveMutualKickTieBreak returns true when the kicker is allowed to
 // remove the target. The rule: the member who joined the family FIRST wins.
 // If kicker joined before or at the same time as target, the kick proceeds.
+//
+// If either timestamp fails to parse the function returns false (B4g): the
+// previous fail-open behavior could let a malformed joined_at silently grant
+// kick permission.
 func resolveMutualKickTieBreak(kickerJoinedAt, targetJoinedAt string) bool {
 	kicker, errK := time.Parse(time.RFC3339Nano, kickerJoinedAt)
 	target, errT := time.Parse(time.RFC3339Nano, targetJoinedAt)
 	if errK != nil || errT != nil {
-		// Fallback: allow if we can't parse
-		return true
+		return false
 	}
 	// Kicker wins if they joined earlier or at the same instant.
 	return !kicker.After(target)

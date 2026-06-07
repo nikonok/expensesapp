@@ -71,14 +71,16 @@ CREATE INDEX idx_devices_user ON devices(user_id);
 CREATE INDEX idx_devices_status ON devices(status);
 
 CREATE TABLE sessions (
-    id              TEXT PRIMARY KEY,         -- UUID v7
-    device_id       TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-    token_hash      BLOB NOT NULL UNIQUE,     -- SHA-256(opaque token); 32 bytes
-    created_at      TEXT NOT NULL,
-    last_used_at    TEXT NOT NULL,
-    revoked_at      TEXT
+    id                  TEXT PRIMARY KEY,         -- UUID v7
+    device_id           TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    token_hash          BLOB NOT NULL UNIQUE,     -- SHA-256(opaque token); 32 bytes
+    previous_token_hash BLOB,                     -- SHA-256(previous token); accepted for one rotation grace window (B4d)
+    created_at          TEXT NOT NULL,
+    last_used_at        TEXT NOT NULL,
+    revoked_at          TEXT
 );
 CREATE INDEX idx_sessions_token_hash ON sessions(token_hash) WHERE revoked_at IS NULL;
+CREATE INDEX idx_sessions_previous_token_hash ON sessions(previous_token_hash) WHERE previous_token_hash IS NOT NULL AND revoked_at IS NULL;
 
 CREATE TABLE reauth_challenges (
     nonce           TEXT PRIMARY KEY,

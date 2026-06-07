@@ -445,12 +445,15 @@ func (h *Handler) PostMigrateSolo(w http.ResponseWriter, r *http.Request) {
 		Records:        records,
 	})
 	if svcErr != nil {
-		if errors.Is(svcErr, ErrNotInTargetFamily) {
+		switch {
+		case errors.Is(svcErr, ErrNotInTargetFamily):
 			httpx.WriteError(w, r, http.StatusForbidden, "not-in-target-family", "caller is not a member of the target family")
-			return
+		case errors.Is(svcErr, ErrSourceSameAsTarget):
+			httpx.WriteError(w, r, http.StatusConflict, "source-same-as-target", "source family is the same as target family")
+		default:
+			slog.WarnContext(ctx, "family.migrate-solo: migrate", "err", svcErr)
+			httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
 		}
-		slog.WarnContext(ctx, "family.migrate-solo: migrate", "err", svcErr)
-		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
 		return
 	}
 

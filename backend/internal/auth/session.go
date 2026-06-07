@@ -60,6 +60,16 @@ var sessionCache sync.Map // map[[32]byte]cacheEntry
 // Mint creates a new session for the device. Returns the cookie value the caller
 // must send to the client (HttpOnly cookie). The raw token is NEVER persisted.
 func Mint(ctx context.Context, db *sql.DB, deviceID string, now time.Time) (cookieValue string, sessionID string, err error) {
+	return MintWithQueries(ctx, gen.New(db), deviceID, now)
+}
+
+// MintWithQueries is the tx-aware variant of Mint. Pass a *gen.Queries bound to
+// a transaction so the session row is inserted in the same atomic unit as the
+// caller's other writes (e.g. user + device upsert in the sign-in handler).
+//
+// This avoids the previous "stranded device row, no session" failure mode
+// (B4c): if the outer tx rolls back, the session insert is rolled back too.
+func MintWithQueries(ctx context.Context, q *gen.Queries, deviceID string, now time.Time) (cookieValue string, sessionID string, err error) {
 	rawToken, hash, err := generateToken()
 	if err != nil {
 		return "", "", err
@@ -70,7 +80,6 @@ func Mint(ctx context.Context, db *sql.DB, deviceID string, now time.Time) (cook
 		return "", "", err
 	}
 
-	q := gen.New(db)
 	nowStr := httpx.FormatTime(now)
 	if err := q.InsertSession(ctx, gen.InsertSessionParams{
 		ID:         sessionID,
@@ -125,6 +134,12 @@ func Validate(ctx context.Context, db *sql.DB, cookieValue string, now time.Time
 		return nil, ErrInvalidSession
 	}
 
+	// Revoked devices are flatly invalid. 'pending' devices keep a usable
+	// session because they need it to subscribe to /v1/sync/live and receive
+	// the device.activated SSE event from their family peer; family-scoped
+	// mutating endpoints are still blocked by other guards.
+	// (The original B4j proposal would block 'pending' here, but that breaks
+	// the second-device-join SSE flow — see family/devices.go.)
 	if row.DeviceStatus == "revoked" {
 		return nil, ErrInvalidSession
 	}
@@ -154,60 +169,84 @@ func Validate(ctx context.Context, db *sql.DB, cookieValue string, now time.Time
 	return info, nil
 }
 
-// TouchAndMaybeRotate updates last_used_at; if > 24h elapsed, mints a new token
-// and rotates token_hash. Returns (newCookieValue, rotated). When rotated=false,
-// newCookieValue is empty and caller does NOT need to reset the cookie.
-func TouchAndMaybeRotate(ctx context.Context, db *sql.DB, info *SessionInfo, now time.Time) (newCookieValue string, rotated bool, err error) {
+// PendingRotation is what TouchAndMaybeRotate returns when a token rotation
+// has been prepared but not yet committed. The middleware calls Commit only
+// after next.ServeHTTP returns successfully, so a panic before the response
+// is fully written means the rotation row is never written and the client
+// keeps using its existing cookie (B4d).
+//
+// When Rotated is false, NewCookieValue is empty and Commit is a no-op.
+type PendingRotation struct {
+	Rotated        bool
+	NewCookieValue string
+
+	// commit applies the rotation against the DB; nil when Rotated is false.
+	commit func(context.Context) error
+}
+
+// Commit persists the rotation. Safe to call exactly once. If err is non-nil
+// the rotation was NOT applied and the caller MUST NOT have set the new cookie
+// on the response.
+func (p *PendingRotation) Commit(ctx context.Context) error {
+	if !p.Rotated || p.commit == nil {
+		return nil
+	}
+	return p.commit(ctx)
+}
+
+// TouchAndMaybeRotate updates last_used_at synchronously; if > 24h elapsed it
+// PREPARES a token rotation but does not commit it yet. The middleware commits
+// the rotation only after next.ServeHTTP returns without panic — this avoids
+// the failure mode where rotation succeeded, the cookie was set, but the
+// request handler panicked before writing a response, leaving the client with
+// a new token bound to a half-finished request (B4d).
+func TouchAndMaybeRotate(ctx context.Context, db *sql.DB, info *SessionInfo, now time.Time) (PendingRotation, error) {
 	q := gen.New(db)
 	nowStr := httpx.FormatTime(now)
 
 	if now.Sub(info.LastUsedAt) > rotateThreshold {
-		// Generate new token and rotate.
+		// Generate the new token now so the cookie can be queued for the
+		// response, but defer the DB write until after the handler returns.
 		rawToken, hash, err := generateToken()
 		if err != nil {
-			return "", false, err
+			return PendingRotation{}, err
 		}
 
-		if err := q.RotateSessionToken(ctx, gen.RotateSessionTokenParams{
-			TokenHash:  hash[:],
-			LastUsedAt: nowStr,
-			ID:         info.SessionID,
-		}); err != nil {
-			return "", false, err
+		newCookie := buildCookieValue(info.SessionID, rawToken)
+		sessionID := info.SessionID
+		snapshot := *info // capture for cache write after commit
+		snapshot.LastUsedAt = now
+
+		commit := func(commitCtx context.Context) error {
+			if err := q.RotateSessionToken(commitCtx, gen.RotateSessionTokenParams{
+				TokenHash:  hash[:],
+				LastUsedAt: nowStr,
+				ID:         sessionID,
+			}); err != nil {
+				return err
+			}
+			// Cache the rotated token so the next request hits the fast path.
+			// The old hash entry expires naturally within cacheTTL.
+			sessionCache.Store(hash, cacheEntry{
+				info:      &snapshot,
+				expiresAt: now.Add(cacheTTL),
+			})
+			return nil
 		}
 
-		// Evict the old hash from cache — but we don't have the old hash here.
-		// The cache entry for the old token will expire naturally within cacheTTL.
-		// Store the new token in cache immediately.
-		newInfo := &SessionInfo{
-			SessionID:   info.SessionID,
-			UserID:      info.UserID,
-			DeviceID:    info.DeviceID,
-			Email:       info.Email,
-			DisplayName: info.DisplayName,
-			IsAdmin:     info.IsAdmin,
-			IsRoot:      info.IsRoot,
-			LastUsedAt:  now,
-			Suspended:   info.Suspended,
-		}
-		sessionCache.Store(hash, cacheEntry{
-			info:      newInfo,
-			expiresAt: now.Add(cacheTTL),
-		})
-
-		newCookieValue = buildCookieValue(info.SessionID, rawToken)
-		return newCookieValue, true, nil
+		return PendingRotation{Rotated: true, NewCookieValue: newCookie, commit: commit}, nil
 	}
 
-	// Just touch.
+	// Just touch. last_used_at maintenance is safe before the handler runs
+	// because it does not change session validity, only metadata.
 	if err := q.TouchSession(ctx, gen.TouchSessionParams{
 		LastUsedAt: nowStr,
 		ID:         info.SessionID,
 	}); err != nil {
-		return "", false, err
+		return PendingRotation{}, err
 	}
 
-	return "", false, nil
+	return PendingRotation{}, nil
 }
 
 // Revoke marks the session as revoked in the database. The in-memory cache

@@ -94,6 +94,11 @@ func (s *Service) Upsert(ctx context.Context, qt *gen.Queries, p UpsertParams) (
 			return nil, nil, ErrInvalidParentVersion
 		}
 
+		// Validate incoming updatedAtMap timestamps before persisting (B4i).
+		if _, _, mergeErr := MergeUpdatedAtMap(map[string]string{}, p.UpdatedAtMap); mergeErr != nil {
+			return nil, nil, mergeErr
+		}
+
 		// Insert blob.
 		blobID, err := uuid.NewV7()
 		if err != nil {
@@ -159,6 +164,17 @@ func (s *Service) Upsert(ctx context.Context, qt *gen.Queries, p UpsertParams) (
 			CurrentVersion:  existing.Version,
 			CurrentUpdAtMap: curMap,
 		}, nil
+	}
+
+	// Per-field LWW merge of the existing updatedAtMap with the incoming one.
+	// Unparseable timestamps on either side surface as ErrBadTimestamp, which the
+	// HTTP layer maps to 400 bad-timestamp (see B4i).
+	curMap, parseErr := unmarshalMap(existing.UpdatedAtMap)
+	if parseErr != nil {
+		curMap = map[string]string{}
+	}
+	if _, _, mergeErr := MergeUpdatedAtMap(curMap, p.UpdatedAtMap); mergeErr != nil {
+		return nil, nil, mergeErr
 	}
 
 	// Apply update.

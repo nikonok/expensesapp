@@ -408,6 +408,13 @@ func (s *Service) MigrateSolo(ctx context.Context, p MigrateSoloParams) (Migrate
 
 	var result MigrateSoloResult
 
+	// Reject self-migration: source and target must be different families.
+	// Otherwise MarkFamilyMemberLeft at the end would soft-kick the caller
+	// out of the family they were trying to migrate INTO.
+	if p.SourceFamilyID == p.TargetFamilyID {
+		return result, ErrSourceSameAsTarget
+	}
+
 	err := internaldb.WithTx(ctx, s.db, func(tx *sql.Tx) error {
 		qt := gen.New(tx)
 
@@ -583,7 +590,10 @@ type LeaveParams struct {
 	CallerEmail    string
 }
 
-// Leave soft-leaves the caller from their family.
+// Leave soft-leaves the caller from their family. If the caller was the last
+// active member, the family row and ALL its dependent data (members, invites,
+// device envelopes, recovery envelope, family_seq, blobs, record_meta,
+// snapshots) are cascade-deleted in the same transaction (B4f).
 func (s *Service) Leave(ctx context.Context, p LeaveParams) error {
 	now := nowUTC()
 	nowStr := httpx.FormatTime(now)
@@ -597,6 +607,18 @@ func (s *Service) Leave(ctx context.Context, p LeaveParams) error {
 			UserID:   p.CallerUserID,
 		}); err != nil {
 			return fmt.Errorf("mark member left: %w", err)
+		}
+
+		// If no active members remain, hard-delete the family. FK ON DELETE
+		// CASCADE drops everything family-scoped.
+		remaining, err := qt.CountActiveFamilyMembers(ctx, p.CallerFamilyID)
+		if err != nil {
+			return fmt.Errorf("count remaining members: %w", err)
+		}
+		if remaining == 0 {
+			if err := qt.DeleteFamilyCascade(ctx, p.CallerFamilyID); err != nil {
+				return fmt.Errorf("cascade-delete empty family: %w", err)
+			}
 		}
 
 		auditID, err := uuid.NewV7()

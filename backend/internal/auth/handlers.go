@@ -171,12 +171,12 @@ func (h *Handler) PostGoogle(w http.ResponseWriter, r *http.Request) {
 	newUserID := mustNewUUID()
 	deviceID := mustNewUUID()
 
-	// ---- Option B: upsert user + device inside a tx, then Mint outside. ----
-	// Slight atomicity trade-off: if Mint fails after the tx commits, we have a
-	// stranded device row but no session. Next sign-in will insert a new device
-	// and session — acceptable at our scale.
+	// Per B4c: upsert user, insert device, AND mint the session inside the
+	// same transaction. If session insert fails, the device row rolls back too
+	// — so we never leave a stranded device with no usable session.
 	var returnedUser gen.User
 	var awaitingEnvelope bool
+	var cookieVal string
 
 	txErr := internaldb.WithTx(ctx, h.db, func(tx *sql.Tx) error {
 		qt := gen.New(tx)
@@ -248,6 +248,13 @@ func (h *Handler) PostGoogle(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 
+		// Mint the session inside the same tx so device + session are atomic.
+		cv, _, err := MintWithQueries(ctx, qt, deviceID, now)
+		if err != nil {
+			return err
+		}
+		cookieVal = cv
+
 		return nil
 	})
 
@@ -258,14 +265,6 @@ func (h *Handler) PostGoogle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		slog.WarnContext(ctx, "sign-in tx error", "err", txErr)
-		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
-		return
-	}
-
-	// Mint the session outside the tx (see Option B comment above).
-	cookieVal, _, err := Mint(ctx, h.db, deviceID, now)
-	if err != nil {
-		slog.WarnContext(ctx, "mint session error", "err", err)
 		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
 		return
 	}

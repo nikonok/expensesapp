@@ -157,6 +157,7 @@ func (h *Handler) PostPush(w http.ResponseWriter, r *http.Request) {
 	accepted := make([]pushResponseAccepted, 0, len(validated))
 	conflicts := make([]pushResponseConflict, 0)
 	var totalAcceptedBytes int64
+	var quotaRejected int
 
 	// acceptedResults and acceptedTypes track the UpsertResult + record type
 	// for each accepted record so we can publish SSE events after the tx.
@@ -171,7 +172,28 @@ func (h *Handler) PostPush(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 
+		// Once we hit the quota, every subsequent record would also fail; mark
+		// quotaExhausted and short-circuit the rest of the batch as conflicts.
+		quotaExhausted := false
+
 		for _, v := range validated {
+			incomingBytes := int64(len(v.ciphertext))
+
+			// Per-record quota check BEFORE writing the blob. We compare against
+			// usage_bytes + bytes accepted so far, so the limit is respected
+			// even when the batch as a whole would cross the cap mid-iteration.
+			if quotaExhausted || records.CheckQuota(family.UsageBytes+totalAcceptedBytes, incomingBytes) != nil {
+				quotaExhausted = true
+				conflicts = append(conflicts, pushResponseConflict{
+					RecordID:            v.raw.RecordID,
+					CurrentBlob:         "",
+					CurrentVersion:      0,
+					CurrentUpdatedAtMap: nil,
+				})
+				quotaRejected++
+				continue
+			}
+
 			result, conflict, err := h.svc.Upsert(ctx, qt, records.UpsertParams{
 				RecordID:           v.raw.RecordID,
 				FamilyID:           familyID,
@@ -215,13 +237,7 @@ func (h *Handler) PostPush(w http.ResponseWriter, r *http.Request) {
 			})
 			acceptedResults = append(acceptedResults, *result)
 			acceptedTypes = append(acceptedTypes, v.raw.RecordType)
-			totalAcceptedBytes += int64(len(v.ciphertext))
-		}
-
-		// Quota check: only bytes that would actually be stored count.
-		// Conflicts and ErrInvalidParentVersion records are excluded.
-		if err := records.CheckQuota(family.UsageBytes, totalAcceptedBytes); err != nil {
-			return err
+			totalAcceptedBytes += incomingBytes
 		}
 
 		// Increment usage by the sum of all accepted blobs.
@@ -233,12 +249,24 @@ func (h *Handler) PostPush(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if txErr != nil {
+		if errors.Is(txErr, records.ErrBadTimestamp) {
+			httpx.WriteError(w, r, http.StatusBadRequest, "bad-timestamp", "record contained an unparseable timestamp")
+			return
+		}
 		if _, ok := txErr.(records.ErrQuotaExceeded); ok {
 			httpx.WriteError(w, r, http.StatusRequestEntityTooLarge, "quota-exceeded", "family storage quota exceeded")
 			return
 		}
 		slog.WarnContext(ctx, "sync.push: transaction error", "err", txErr)
 		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
+		return
+	}
+
+	// Per spec B4a: if NO records were accepted AND the batch hit the quota
+	// limit, return 413 so the client knows to stop retrying. If some records
+	// were accepted, fall through with 200 so partial progress is visible.
+	if len(accepted) == 0 && quotaRejected > 0 {
+		httpx.WriteError(w, r, http.StatusRequestEntityTooLarge, "quota-exceeded", "family storage quota exceeded")
 		return
 	}
 

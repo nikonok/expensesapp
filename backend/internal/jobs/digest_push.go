@@ -68,12 +68,10 @@ func digestPushRun(db *sql.DB, digestSvc *push.DigestService, qhSvc *push.QuietH
 				toNotify = append(toNotify, sr)
 			}
 		}
-		if closeErr := rows.Close(); closeErr != nil {
-			slog.WarnContext(ctx, "digest-push: rows close failed", "err", closeErr)
-		}
 		if rowsErr := rows.Err(); rowsErr != nil {
 			slog.WarnContext(ctx, "digest-push: rows error", "err", rowsErr)
 		}
+		// Closing happens via defer; do not double-close (B4j).
 
 		for _, sr := range toNotify {
 			if ctx.Err() != nil {

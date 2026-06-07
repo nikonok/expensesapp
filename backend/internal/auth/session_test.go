@@ -183,10 +183,10 @@ func TestTouchAndMaybeRotate_BelowThreshold(t *testing.T) {
 
 	// Advance 1 hour — below the 24h rotation threshold.
 	laterNow := now.Add(time.Hour)
-	newCookie, rotated, err := TouchAndMaybeRotate(ctx, db, info, laterNow)
+	pending, err := TouchAndMaybeRotate(ctx, db, info, laterNow)
 	require.NoError(t, err)
-	assert.False(t, rotated)
-	assert.Empty(t, newCookie)
+	assert.False(t, pending.Rotated)
+	assert.Empty(t, pending.NewCookieValue)
 }
 
 func TestTouchAndMaybeRotate_AboveThreshold(t *testing.T) {
@@ -204,19 +204,32 @@ func TestTouchAndMaybeRotate_AboveThreshold(t *testing.T) {
 
 	// Advance 25 hours — above the 24h rotation threshold.
 	laterNow := now.Add(25 * time.Hour)
-	newCookie, rotated, err := TouchAndMaybeRotate(ctx, db, info, laterNow)
+	pending, err := TouchAndMaybeRotate(ctx, db, info, laterNow)
 	require.NoError(t, err)
-	assert.True(t, rotated)
-	assert.NotEmpty(t, newCookie)
-	assert.NotEqual(t, cookie, newCookie)
+	require.True(t, pending.Rotated)
+	require.NotEmpty(t, pending.NewCookieValue)
+	require.NotEqual(t, cookie, pending.NewCookieValue)
+	newCookie := pending.NewCookieValue
 
-	// Old cookie must now be invalid (hash no longer in DB).
+	// Commit the rotation. Until Commit runs, the DB still has the OLD token
+	// only — this is the deferred-commit guarantee that backstops a panic in
+	// the wrapped handler (B4d).
+	clearCache()
+	oldStillValid, err := Validate(ctx, db, cookie, laterNow)
+	require.NoError(t, err)
+	require.NotNil(t, oldStillValid, "old cookie must still be valid before Commit")
+
+	require.NoError(t, pending.Commit(ctx))
+
+	// After commit, the old token continues to be tolerated for one extra
+	// request via previous_token_hash, so the in-flight client doesn't 401.
 	clearCache()
 	oldInfo, err := Validate(ctx, db, cookie, laterNow)
-	assert.Nil(t, oldInfo)
-	assert.ErrorIs(t, err, ErrInvalidSession)
+	require.NoError(t, err)
+	require.NotNil(t, oldInfo, "old cookie must be tolerated for one rotation grace window")
 
-	// New cookie must be valid.
+	// New cookie must also be valid.
+	clearCache()
 	newInfo, err := Validate(ctx, db, newCookie, laterNow)
 	require.NoError(t, err)
 	require.NotNil(t, newInfo)

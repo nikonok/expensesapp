@@ -75,13 +75,21 @@ func newStore(r rate.Limit, burst int) *store {
 }
 
 // allow returns true if the request is permitted, false if it should be rejected.
+//
+// Hot path optimization (B4j): Load first to avoid allocating a fresh
+// rate.Limiter on every request. Only construct the entry if the key is
+// truly absent, then LoadOrStore to settle the race with concurrent allow()
+// calls on the same key.
 func (s *store) allow(key string) bool {
 	now := time.Now()
-	entry := &limiterEntry{
-		limiter:  rate.NewLimiter(s.r, s.b),
-		lastSeen: now,
+	v, ok := s.m.Load(key)
+	if !ok {
+		entry := &limiterEntry{
+			limiter:  rate.NewLimiter(s.r, s.b),
+			lastSeen: now,
+		}
+		v, _ = s.m.LoadOrStore(key, entry)
 	}
-	v, _ := s.m.LoadOrStore(key, entry)
 	e := v.(*limiterEntry)
 	e.touch(now)
 	return e.limiter.Allow()

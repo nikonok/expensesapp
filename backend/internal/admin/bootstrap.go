@@ -80,6 +80,16 @@ func handoff(ctx context.Context, q *gen.Queries, prevEmail, newEmail string) er
 
 	var targetID sql.NullString
 
+	// Downgrade the prior root unconditionally (B4b): even if the new user
+	// has not signed in yet, the old root must lose is_root=1 immediately so
+	// we never have two roots simultaneously. The new user's promotion is
+	// deferred to first sign-in (Phase 1.g) when they exist as a row.
+	if priorUser != nil && (!newUserExists || priorUser.ID != newUser.ID) {
+		if err := q.DowngradeFromRoot(ctx, priorUser.ID); err != nil {
+			return fmt.Errorf("downgrade prior root: %w", err)
+		}
+	}
+
 	if newUserExists {
 		// Promote the new user to root.
 		if err := q.SetUserAsRoot(ctx, newUser.ID); err != nil {
@@ -87,12 +97,8 @@ func handoff(ctx context.Context, q *gen.Queries, prevEmail, newEmail string) er
 		}
 		targetID = sql.NullString{String: newUser.ID, Valid: true}
 
-		// Downgrade the prior root (if different from the new one).
+		// Re-parent promotion children of the prior root to the new root.
 		if priorUser != nil && priorUser.ID != newUser.ID {
-			if err := q.DowngradeFromRoot(ctx, priorUser.ID); err != nil {
-				return fmt.Errorf("downgrade prior root: %w", err)
-			}
-			// Re-parent promotion children of the prior root to the new root.
 			if err := q.ReparentPromoter(ctx, gen.ReparentPromoterParams{
 				PromoterID:   sql.NullString{String: newUser.ID, Valid: true},
 				PromoterID_2: sql.NullString{String: priorUser.ID, Valid: true},
@@ -104,7 +110,9 @@ func handoff(ctx context.Context, q *gen.Queries, prevEmail, newEmail string) er
 	// If newUserExists is false: bootstrap_state is updated and the audit entry is
 	// written so the change is tracked. The actual role promotion happens lazily on
 	// the new user's first sign-in (Phase 1.g), which reads bootstrap_state.email
-	// and grants is_root=1 on insert.
+	// and grants is_root=1 on insert. Re-parenting of the prior root's promotees
+	// also happens lazily (when the new root signs in) because the new root row
+	// does not exist yet.
 
 	// Update the singleton.
 	if err := q.UpsertBootstrapState(ctx, gen.UpsertBootstrapStateParams{

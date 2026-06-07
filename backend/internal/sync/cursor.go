@@ -32,5 +32,12 @@ func DecodeCursor(s string) (int64, error) {
 	if len(b) != 8 {
 		return 0, errors.New("cursor: unexpected length")
 	}
-	return int64(binary.BigEndian.Uint64(b)), nil
+	v := int64(binary.BigEndian.Uint64(b))
+	if v < 0 {
+		// A negative cursor either came from someone fuzzing the API or from
+		// a uint64 value > MaxInt64 cast through the BE decoder. Either way
+		// it has no valid meaning in our schema — reject (B4j).
+		return 0, errors.New("cursor: negative cursor not allowed")
+	}
+	return v, nil
 }

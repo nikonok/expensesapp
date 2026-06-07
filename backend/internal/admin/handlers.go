@@ -141,7 +141,11 @@ func (h *Handler) GetUsers(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	limit := parseIntParam(r, "limit", defaultPageSize, maxPageSize)
-	offset := parseIntParam(r, "offset", 0, 1<<62)
+	// Clamp offset to 1e6 instead of 1<<62 (B4j): the legacy cap was effectively
+	// unbounded and let a single request request an arbitrary OFFSET, forcing
+	// SQLite to scan millions of rows before returning. 1 000 000 already
+	// dwarfs anything we can realistically reach at our scale.
+	offset := parseIntParam(r, "offset", 0, 1_000_000)
 
 	q := gen.New(h.db)
 	rows, err := q.ListAdminUsers(ctx, gen.ListAdminUsersParams{

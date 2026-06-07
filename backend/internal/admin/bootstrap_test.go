@@ -158,6 +158,39 @@ func TestEnsureBootstrap_Handoff_WithExistingUsers(t *testing.T) {
 	assert.Equal(t, userB.ID, cRow.PromoterID.String)
 }
 
+// TestEnsureBootstrap_Handoff_PriorRootDowngradedEvenWhenNewUserAbsent
+// regression-guards B4b: when handing off to an email that has no user row,
+// the prior root must STILL lose is_root immediately so we never run with
+// two simultaneous roots.
+func TestEnsureBootstrap_Handoff_PriorRootDowngradedEvenWhenNewUserAbsent(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	q := gen.New(db)
+
+	// Seed user A and promote them to root.
+	userA := seedUser(t, ctx, db, "a@example.com")
+	require.NoError(t, q.SetUserAsRoot(ctx, userA.ID))
+	require.NoError(t, q.UpsertBootstrapState(ctx, gen.UpsertBootstrapStateParams{
+		BootstrapEmail: "a@example.com",
+		AppliedAt:      time.Now().UTC().Format(time.RFC3339),
+	}))
+
+	// Handoff to b@example.com, who has no user row yet.
+	require.NoError(t, EnsureBootstrap(ctx, db, "b@example.com"))
+
+	// Prior root A must have been downgraded even though the new user does
+	// not yet exist (B4b).
+	aRow, err := q.GetUserByEmail(ctx, "a@example.com")
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), aRow.IsRoot, "prior root must be downgraded immediately")
+	assert.Equal(t, int64(0), aRow.IsAdmin, "prior root must also lose is_admin")
+
+	// And there must be no current root in the DB (the new user hasn't signed
+	// in yet so cannot be promoted).
+	_, err = q.GetCurrentRoot(ctx)
+	assert.ErrorIs(t, err, sql.ErrNoRows, "no user should hold is_root after handoff to absent user")
+}
+
 func TestEnsureBootstrap_Handoff_NewUserNotOnAllowlist(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)

@@ -17,8 +17,11 @@ import (
 // success populates user/device IDs into the request context. On failure, it
 // writes a 401 ProblemDetails and returns.
 //
-// Touch strategy: TouchAndMaybeRotate is called synchronously BEFORE
-// next.ServeHTTP so that Set-Cookie is written while headers are still mutable.
+// Touch strategy: TouchAndMaybeRotate is called BEFORE next.ServeHTTP so that
+// Set-Cookie can be queued while headers are still mutable, but the actual
+// DB rotation is committed AFTER the handler returns successfully (B4d).
+// A panic in the handler skips Commit, so the client keeps using its existing
+// cookie and the previous-token-hash grace window is never burned.
 // Trade-off: every authenticated request incurs a DB write. Acceptable at <50
 // users; revisit when scaling.
 func SessionMiddleware(db *sql.DB) func(http.Handler) http.Handler {
@@ -45,17 +48,29 @@ func SessionMiddleware(db *sql.DB) func(http.Handler) http.Handler {
 				return
 			}
 
-			// Touch / rotate before calling next so the Set-Cookie header is
-			// written while the response headers are still mutable.
-			newCookie, rotated, err := TouchAndMaybeRotate(r.Context(), db, info, now)
-			if err == nil && rotated {
-				SetCookie(w, newCookie)
+			// Prepare rotation (mints new token + queues a DB commit). The cookie
+			// is set on the response so it ships back to the client, but Commit
+			// is deferred until after next.ServeHTTP returns without panic.
+			pending, rotErr := TouchAndMaybeRotate(r.Context(), db, info, now)
+			if rotErr == nil && pending.Rotated {
+				SetCookie(w, pending.NewCookieValue)
+			} else if rotErr != nil {
+				slog.WarnContext(r.Context(), "session touch/rotate error", "err", rotErr)
 			}
 
 			ctx := httpx.WithUserID(r.Context(), info.UserID)
 			ctx = httpx.WithDeviceID(ctx, info.DeviceID)
 			ctx = httpx.WithSessionID(ctx, info.SessionID)
 			next.ServeHTTP(w, r.WithContext(ctx))
+
+			// Commit the rotation only after the handler returns. A panic above
+			// short-circuits this — the new cookie that went out is now bound to
+			// the OLD token_hash (still valid in DB), so the client keeps working.
+			if pending.Rotated {
+				if commitErr := pending.Commit(r.Context()); commitErr != nil {
+					slog.WarnContext(r.Context(), "session rotation commit error", "err", commitErr)
+				}
+			}
 		})
 	}
 }

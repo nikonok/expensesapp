@@ -82,16 +82,20 @@ UPDATE devices SET last_seen_at = ? WHERE id = ?;
 -- ----- sessions -----
 
 -- name: InsertSession :exec
-INSERT INTO sessions (id, device_id, token_hash, created_at, last_used_at, revoked_at)
-VALUES (?, ?, ?, ?, ?, NULL);
+INSERT INTO sessions (id, device_id, token_hash, previous_token_hash, created_at, last_used_at, revoked_at)
+VALUES (?, ?, ?, NULL, ?, ?, NULL);
 
 -- name: GetSessionByTokenHash :one
 -- Joins through device -> user so the middleware gets everything in one round trip.
+-- Accepts both the current token_hash and the previous_token_hash so a rotated
+-- session tolerates one in-flight request still presenting the old token (B4d).
 SELECT
     s.id AS session_id,
     s.device_id,
     s.created_at AS session_created_at,
     s.last_used_at,
+    s.token_hash,
+    s.previous_token_hash,
     d.user_id,
     d.status AS device_status,
     u.email,
@@ -102,14 +106,25 @@ SELECT
 FROM sessions s
 JOIN devices d ON d.id = s.device_id
 JOIN users u   ON u.id = d.user_id
-WHERE s.token_hash = ? AND s.revoked_at IS NULL
+WHERE (s.token_hash = sqlc.arg(token_hash) OR s.previous_token_hash = sqlc.arg(token_hash))
+  AND s.revoked_at IS NULL
 LIMIT 1;
 
 -- name: TouchSession :exec
 UPDATE sessions SET last_used_at = ? WHERE id = ? AND revoked_at IS NULL;
 
 -- name: RotateSessionToken :exec
-UPDATE sessions SET token_hash = ?, last_used_at = ? WHERE id = ? AND revoked_at IS NULL;
+-- Sets the new token_hash, demotes the existing token to previous_token_hash so
+-- one in-flight request can still complete with the old cookie (B4d).
+UPDATE sessions
+SET previous_token_hash = token_hash,
+    token_hash          = sqlc.arg(token_hash),
+    last_used_at        = sqlc.arg(last_used_at)
+WHERE id = sqlc.arg(id) AND revoked_at IS NULL;
+
+-- name: ClearPreviousSessionToken :exec
+-- Drops the previous_token_hash once the new token has been observed in use.
+UPDATE sessions SET previous_token_hash = NULL WHERE id = ? AND revoked_at IS NULL;
 
 -- name: RevokeSession :exec
 UPDATE sessions SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL;
@@ -162,6 +177,13 @@ SELECT * FROM family_members WHERE user_id = ? AND left_at IS NULL LIMIT 1;
 
 -- name: GetFamilyByID :one
 SELECT * FROM families WHERE id = ? LIMIT 1;
+
+-- name: DeleteFamilyCascade :exec
+-- Hard-delete a family row. FK ON DELETE CASCADE removes its members, invites,
+-- device envelopes, recovery envelope, family_seq, blobs, record_meta, and
+-- snapshots in one shot. Used by family.Leave when the last active member
+-- leaves (B4f).
+DELETE FROM families WHERE id = ?;
 
 -- ----- blobs -----
 

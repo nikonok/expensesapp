@@ -30,11 +30,17 @@ type syncBarrierPayload struct {
 
 // RestoreSnapshot restores familyID to the state recorded in snapshotID.
 //
-// Per §8.6:
+// Per §8.6 (revised B4h):
 //   - For each record in snapshot_entries: upsert record_meta to snapshot state.
 //   - For each record_meta NOT in the snapshot (and belonging to this family):
-//     soft-delete it (deleted_at = now, version++, new family_seq).
-//   - Emit sync.barrier{cursor} to the "family:<familyID>" SSE scope.
+//     soft-delete it (deleted_at = now, version++).
+//   - Per-row writes still consume distinct family_seq values because the
+//     idx_record_meta_seq UNIQUE(family_id, family_seq) index forbids reuse.
+//   - Emit ONE sync.barrier{cursor: highest seq used} to the "family:<familyID>"
+//     SSE scope. The frontend treats the barrier as a "drop your cache and
+//     re-pull from this cursor" signal rather than processing per-row
+//     record.changed events one at a time (B4h). Per-row record.changed events
+//     are NOT emitted from restore.
 //   - Write audit_log('snapshot.restore').
 func (s *Service) RestoreSnapshot(ctx context.Context, familyID, snapshotID, callerUserID string, hub *live.Hub) (*RestoreResult, error) {
 	now := timeNow()
@@ -71,7 +77,6 @@ func (s *Service) RestoreSnapshot(ctx context.Context, familyID, snapshotID, cal
 			}
 
 			if isNew {
-				// Re-insert the record_meta row.
 				if insertErr := qt.InsertRecordMeta(ctx, gen.InsertRecordMetaParams{
 					RecordID:       entry.RecordID,
 					FamilyID:       familyID,
@@ -89,14 +94,13 @@ func (s *Service) RestoreSnapshot(ctx context.Context, familyID, snapshotID, cal
 					return insertErr
 				}
 			} else {
-				// Update existing record_meta to snapshot state.
 				if updateErr := qt.UpdateRecordMeta(ctx, gen.UpdateRecordMetaParams{
 					RecordID:       entry.RecordID,
 					BlobID:         entry.BlobID,
 					Version:        existing.Version + 1,
 					EditedByUser:   callerUserID,
 					UpdatedAtMap:   entry.UpdatedAtMap,
-					DeletedAt:      sql.NullString{}, // restore clears deleted_at
+					DeletedAt:      sql.NullString{},
 					FamilySeq:      seq,
 					LastModifiedAt: nowStr,
 				}); updateErr != nil {
@@ -115,7 +119,6 @@ func (s *Service) RestoreSnapshot(ctx context.Context, familyID, snapshotID, cal
 			if _, inSnapshot := snapshotIDs[rec.RecordID]; inSnapshot {
 				continue
 			}
-			// Already soft-deleted — skip (nothing to change).
 			if rec.DeletedAt.Valid {
 				continue
 			}
@@ -151,7 +154,9 @@ func (s *Service) RestoreSnapshot(ctx context.Context, familyID, snapshotID, cal
 		return nil, err
 	}
 
-	// Emit sync.barrier SSE event to family scope (best-effort, outside tx).
+	// Emit exactly ONE sync.barrier SSE event (B4h). Peer clients adopt the
+	// new cursor as their pull baseline and re-pull all rows up to it as a
+	// single batch — much cheaper than processing N record.changed events.
 	if hub != nil {
 		payload := syncBarrierPayload{Cursor: syncp.EncodeCursor(finalCursor)}
 		data, marshalErr := json.Marshal(payload)

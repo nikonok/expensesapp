@@ -198,6 +198,19 @@ func (q *Queries) GetFamilyByID(ctx context.Context, id string) (Family, error) 
 	return i, err
 }
 
+const deleteFamilyCascade = `-- name: DeleteFamilyCascade :exec
+DELETE FROM families WHERE id = ?
+`
+
+// Hard-delete a family row. FK ON DELETE CASCADE removes its members, invites,
+// device envelopes, recovery envelope, family_seq, blobs, record_meta, and
+// snapshots in one shot. Used by family.Leave when the last active member
+// leaves (B4f).
+func (q *Queries) DeleteFamilyCascade(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteFamilyCascade, id)
+	return err
+}
+
 const getFamilyRecoveryEnvelope = `-- name: GetFamilyRecoveryEnvelope :one
 SELECT family_id, recovery_wrap, phrase_ct, version, salt, created_at FROM family_recovery_envelopes
 WHERE family_id = ? LIMIT 1
@@ -250,6 +263,8 @@ SELECT
     s.device_id,
     s.created_at AS session_created_at,
     s.last_used_at,
+    s.token_hash,
+    s.previous_token_hash,
     d.user_id,
     d.status AS device_status,
     u.email,
@@ -260,33 +275,40 @@ SELECT
 FROM sessions s
 JOIN devices d ON d.id = s.device_id
 JOIN users u   ON u.id = d.user_id
-WHERE s.token_hash = ? AND s.revoked_at IS NULL
+WHERE (s.token_hash = ? OR s.previous_token_hash = ?)
+  AND s.revoked_at IS NULL
 LIMIT 1
 `
 
 type GetSessionByTokenHashRow struct {
-	SessionID        string
-	DeviceID         string
-	SessionCreatedAt string
-	LastUsedAt       string
-	UserID           string
-	DeviceStatus     string
-	Email            string
-	DisplayName      string
-	IsAdmin          int64
-	IsRoot           int64
-	SuspendedAt      sql.NullString
+	SessionID         string
+	DeviceID          string
+	SessionCreatedAt  string
+	LastUsedAt        string
+	TokenHash         []byte
+	PreviousTokenHash []byte
+	UserID            string
+	DeviceStatus      string
+	Email             string
+	DisplayName       string
+	IsAdmin           int64
+	IsRoot            int64
+	SuspendedAt       sql.NullString
 }
 
 // Joins through device -> user so the middleware gets everything in one round trip.
+// Accepts both the current token_hash and the previous_token_hash so a rotated
+// session tolerates one in-flight request still presenting the old token (B4d).
 func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (GetSessionByTokenHashRow, error) {
-	row := q.db.QueryRowContext(ctx, getSessionByTokenHash, tokenHash)
+	row := q.db.QueryRowContext(ctx, getSessionByTokenHash, tokenHash, tokenHash)
 	var i GetSessionByTokenHashRow
 	err := row.Scan(
 		&i.SessionID,
 		&i.DeviceID,
 		&i.SessionCreatedAt,
 		&i.LastUsedAt,
+		&i.TokenHash,
+		&i.PreviousTokenHash,
 		&i.UserID,
 		&i.DeviceStatus,
 		&i.Email,
@@ -681,8 +703,8 @@ func (q *Queries) InsertRecordMeta(ctx context.Context, arg InsertRecordMetaPara
 
 const insertSession = `-- name: InsertSession :exec
 
-INSERT INTO sessions (id, device_id, token_hash, created_at, last_used_at, revoked_at)
-VALUES (?, ?, ?, ?, ?, NULL)
+INSERT INTO sessions (id, device_id, token_hash, previous_token_hash, created_at, last_used_at, revoked_at)
+VALUES (?, ?, ?, NULL, ?, ?, NULL)
 `
 
 type InsertSessionParams struct {
@@ -1035,7 +1057,11 @@ func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) er
 }
 
 const rotateSessionToken = `-- name: RotateSessionToken :exec
-UPDATE sessions SET token_hash = ?, last_used_at = ? WHERE id = ? AND revoked_at IS NULL
+UPDATE sessions
+SET previous_token_hash = token_hash,
+    token_hash          = ?,
+    last_used_at        = ?
+WHERE id = ? AND revoked_at IS NULL
 `
 
 type RotateSessionTokenParams struct {
@@ -1044,8 +1070,20 @@ type RotateSessionTokenParams struct {
 	ID         string
 }
 
+// Sets the new token_hash, demotes the existing token to previous_token_hash so
+// one in-flight request can still complete with the old cookie (B4d).
 func (q *Queries) RotateSessionToken(ctx context.Context, arg RotateSessionTokenParams) error {
 	_, err := q.db.ExecContext(ctx, rotateSessionToken, arg.TokenHash, arg.LastUsedAt, arg.ID)
+	return err
+}
+
+const clearPreviousSessionToken = `-- name: ClearPreviousSessionToken :exec
+UPDATE sessions SET previous_token_hash = NULL WHERE id = ? AND revoked_at IS NULL
+`
+
+// Drops the previous_token_hash once the new token has been observed in use (B4d).
+func (q *Queries) ClearPreviousSessionToken(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, clearPreviousSessionToken, id)
 	return err
 }
 

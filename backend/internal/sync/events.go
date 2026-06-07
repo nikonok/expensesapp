@@ -19,8 +19,8 @@ type pushDeliverer interface {
 // EventBus translates accepted record upserts into SSE events published to the
 // live.Hub. Attach it to the sync.Handler by calling Handler.SetEventBus.
 type EventBus struct {
-	hub      *live.Hub
-	pusher   pushDeliverer // optional; nil disables Web Push delivery
+	hub    *live.Hub
+	pusher pushDeliverer // optional; nil disables Web Push delivery
 }
 
 // NewEventBus constructs an EventBus backed by hub.
@@ -42,13 +42,35 @@ type recordChangedPayload struct {
 	Version    int64  `json:"version"`
 }
 
-// PublishRecordChanged emits a "record.changed" SSE event to the
-// "family:<familyId>" scope for each accepted result, then fires a Web Push
-// to other family members in a fire-and-forget goroutine (if a pusher is
-// configured). Errors are logged but never returned — publishing is
-// best-effort and must not affect the HTTP response.
+// pushFanoutWorkers caps the number of goroutines that may concurrently call
+// the Web Push deliverer for a single (familyID, actorUserID) batch.
+const pushFanoutWorkers = 4
+
+// pushJob is one Web Push delivery scheduled by PublishRecordChanged.
+// We notify per (familyID, actorUserID, recordType) and report a representative
+// recordID + version + seq for the digest deliverer.
+type pushJob struct {
+	familyID    string
+	actorUserID string
+	recordType  string
+	recordID    string
+	version     int64
+	seq         int64
+}
+
+// PublishRecordChanged emits a "record.changed" SSE event per accepted record
+// to the "family:<familyId>" scope. Web Push delivery is fanned out per
+// (familyID, actorUserID, recordType) — NOT per record — through a small
+// bounded worker pool, so a large push batch can't spawn N goroutines.
+// Errors are logged but never returned (B4e).
 func (eb *EventBus) PublishRecordChanged(familyID string, actorUserID string, results []records.UpsertResult, types []string) {
 	scope := "family:" + familyID
+
+	// Track the latest (highest-seq) push job per recordType so we send at
+	// most one Web Push per type per batch. Map order is irrelevant — we just
+	// need uniqueness.
+	jobsByType := make(map[string]pushJob, 8)
+
 	for i, r := range results {
 		recordType := ""
 		if i < len(types) {
@@ -73,18 +95,47 @@ func (eb *EventBus) PublishRecordChanged(familyID string, actorUserID string, re
 			Data: data,
 		})
 
-		// Web Push: fire-and-forget to other family members.
+		// Accumulate one push job per (recordType); prefer the latest one so
+		// the deliverer sees the most recent version/seq for that bucket.
 		if eb.pusher != nil {
-			p := eb.pusher
-			rID := r.RecordID
-			rType := recordType
-			rVer := r.Version
-			rSeq := r.FamilySeq
-			go func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				defer cancel()
-				p.NotifyFamilyRecordChanged(ctx, familyID, actorUserID, rID, rType, rVer, rSeq)
-			}()
+			existing, ok := jobsByType[recordType]
+			if !ok || r.FamilySeq > existing.seq {
+				jobsByType[recordType] = pushJob{
+					familyID:    familyID,
+					actorUserID: actorUserID,
+					recordType:  recordType,
+					recordID:    r.RecordID,
+					version:     r.Version,
+					seq:         r.FamilySeq,
+				}
+			}
 		}
+	}
+
+	if eb.pusher == nil || len(jobsByType) == 0 {
+		return
+	}
+
+	// Drain the dedup map through a single worker pool. A buffered channel
+	// sized to the number of jobs ensures we never block the producer.
+	jobs := make(chan pushJob, len(jobsByType))
+	for _, j := range jobsByType {
+		jobs <- j
+	}
+	close(jobs)
+
+	p := eb.pusher
+	workers := pushFanoutWorkers
+	if workers > len(jobsByType) {
+		workers = len(jobsByType)
+	}
+	for w := 0; w < workers; w++ {
+		go func() {
+			for j := range jobs {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				p.NotifyFamilyRecordChanged(ctx, j.familyID, j.actorUserID, j.recordID, j.recordType, j.version, j.seq)
+				cancel()
+			}
+		}()
 	}
 }

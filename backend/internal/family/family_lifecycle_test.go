@@ -610,12 +610,13 @@ func TestLeave(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(ev.Data), &payload))
 	assert.Equal(t, "left", payload["reason"])
 
-	// Verify DB: left_at must be set.
+	// Verify DB (B4f): Alice was the last active member, so leaving cascades
+	// the whole family away — the family_members row is gone, not soft-leaved.
 	aliceID := getUserIDByEmail(t, env.DB, "alice@example.com")
 	var leftAt sql.NullString
-	require.NoError(t, env.DB.QueryRowContext(context.Background(),
-		`SELECT left_at FROM family_members WHERE user_id = ?`, aliceID).Scan(&leftAt))
-	assert.True(t, leftAt.Valid, "left_at must be set after leaving")
+	err := env.DB.QueryRowContext(context.Background(),
+		`SELECT left_at FROM family_members WHERE user_id = ?`, aliceID).Scan(&leftAt)
+	require.ErrorIs(t, err, sql.ErrNoRows, "last-member leave must cascade-delete the family (B4f)")
 }
 
 // --------------------------------------------------------------------------
@@ -779,6 +780,55 @@ func TestMigrateSolo_NotInTargetFamily(t *testing.T) {
 	var errBody map[string]any
 	_ = json.Unmarshal(body, &errBody)
 	assert.Contains(t, errBody["title"], "not-in-target-family")
+}
+
+// --------------------------------------------------------------------------
+// TestMigrateSolo_SourceSameAsTarget
+// --------------------------------------------------------------------------
+
+// TestMigrateSolo_SourceSameAsTarget verifies that supplying the caller's own
+// active family as both source and target returns 409 source-same-as-target
+// — preventing the otherwise-silent self-kick.
+func TestMigrateSolo_SourceSameAsTarget(t *testing.T) {
+	authpkg.ClearSessionCache()
+	env := testenv.New(t)
+	defer env.Close()
+
+	const aliceEmail = "alice-sst@example.com"
+	addToAllowlist(t, env.DB, aliceEmail)
+
+	// Alice: init her own family — this is BOTH source and target.
+	clientA := env.Client
+	aliceFamilyID := initFamilyForUser(t, env, clientA, aliceEmail, "sub-alice-sst")
+
+	// Re-auth so the session cookie is current.
+	authpkg.ClearSessionCache()
+	env.Verifier.Claims = &authpkg.Claims{
+		Email: aliceEmail, EmailVerified: true, Sub: "sub-alice-sst",
+	}
+	_ = signInUser(t, env, clientA)
+
+	// Alice tries to migrate INTO her own active family — must be rejected.
+	migrateBody := map[string]any{
+		"migrationId":    newUUIDStr(t),
+		"targetFamilyId": aliceFamilyID,
+		"records":        []any{},
+	}
+	resp := postJSON(t, clientA, env.Server.URL+"/v1/family/migrate-solo", migrateBody)
+	body := readBody(t, resp)
+	assert.Equal(t, http.StatusConflict, resp.StatusCode, "expected 409 source-same-as-target: %s", body)
+
+	var errBody map[string]any
+	_ = json.Unmarshal(body, &errBody)
+	assert.Contains(t, errBody["title"], "source-same-as-target")
+
+	// Alice must STILL have an active family membership — the self-migration
+	// must not have soft-kicked her.
+	aliceID := getUserIDByEmail(t, env.DB, aliceEmail)
+	q := gen.New(env.DB)
+	member, err := q.GetActiveFamilyMember(context.Background(), aliceID)
+	require.NoError(t, err, "Alice must retain her active membership after rejected self-migration")
+	assert.False(t, member.LeftAt.Valid, "left_at must remain NULL")
 }
 
 // --------------------------------------------------------------------------
