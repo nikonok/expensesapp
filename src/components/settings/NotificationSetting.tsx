@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "../../stores/settings-store";
+import { useAuthStore } from "../../services/auth/session";
 import { useToast } from "../shared/Toast";
 import { ensurePushSubscription, disablePush } from "../../services/push/subscribe";
 import {
@@ -155,6 +156,7 @@ export function NotificationSetting() {
     pushSubscriptionId: storedPushSubscriptionId,
     update,
   } = useSettingsStore();
+  const isSignedIn = useAuthStore((s) => s.isSignedIn);
   const { show } = useToast();
 
   // Push / server-side notification settings.
@@ -169,7 +171,13 @@ export function NotificationSetting() {
   const [quietEnabled, setQuietEnabled] = useState(false);
 
   // Fetch remote settings once on mount (best-effort; ignore errors gracefully).
+  // Backend-dependent — skip entirely when signed out so we don't fire a
+  // doomed request against a protected endpoint.
   useEffect(() => {
+    if (!isSignedIn) {
+      setLoadedRemote(false);
+      return;
+    }
     let cancelled = false;
     getNotificationSettings()
       .then((s) => {
@@ -185,7 +193,7 @@ export function NotificationSetting() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isSignedIn]);
 
   // Determine whether the device already has an active push subscription so
   // the toggle reflects reality after reload, install, or browser restart.
@@ -389,7 +397,7 @@ export function NotificationSetting() {
       )}
 
       {/* ── Push notifications (server-side) ── */}
-      {loadedRemote && (
+      {isSignedIn && loadedRemote && (
         <>
           <ToggleRow
             label={t("settings.notification.push.enableToggle")}

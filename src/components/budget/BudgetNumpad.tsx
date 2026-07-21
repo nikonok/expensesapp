@@ -35,16 +35,6 @@ export function BudgetNumpad({
   const { show } = useToast();
 
   const handleSave = async (result: number) => {
-    const parseResult = budgetSchema.safeParse({
-      categoryId: categoryId ?? null,
-      accountId: accountId ?? null,
-      month: currentMonth,
-      plannedAmount: result,
-    });
-    if (!parseResult.success) {
-      return;
-    }
-
     try {
       const now = getUTCISOString();
 
@@ -60,6 +50,25 @@ export function BudgetNumpad({
           .where("[accountId+month]")
           .equals([accountId, currentMonth])
           .first();
+      }
+
+      if (result === 0) {
+        // 0 clears the budget rather than failing validation silently.
+        if (existing?.id !== undefined) {
+          await db.budgets.delete(existing.id);
+        }
+        onClose();
+        return;
+      }
+
+      const parseResult = budgetSchema.safeParse({
+        categoryId: categoryId ?? null,
+        accountId: accountId ?? null,
+        month: currentMonth,
+        plannedAmount: result,
+      });
+      if (!parseResult.success) {
+        return;
       }
 
       if (existing) {

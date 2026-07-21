@@ -38,6 +38,19 @@ describe("evaluateExpression", () => {
     expect(evaluateExpression("200-75")).toBe(12500);
   });
 
+  /**
+   * The Numpad's subtract key emits U+2212 (minus sign), not ASCII hyphen —
+   * evaluateRaw must normalize it the same way it normalizes × and ÷,
+   * otherwise every subtraction typed via the numpad silently fails to save.
+   */
+  it("evaluates subtraction using U+2212 (Numpad's minus sign)", () => {
+    expect(evaluateExpression("200−75")).toBe(12500);
+  });
+
+  it("strips a trailing U+2212 operator", () => {
+    expect(evaluateExpression("100−")).toBe(10000);
+  });
+
   it("respects PEMDAS: multiply before add", () => {
     expect(evaluateExpression("2+3×4")).toBe(1400);
   });

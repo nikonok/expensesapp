@@ -18,6 +18,7 @@ function makeQuery(results: typeof mockExchangeRates) {
   return {
     first: () => Promise.resolve(results[0] ?? undefined),
     last: () => Promise.resolve(results[results.length - 1] ?? undefined),
+    toArray: () => Promise.resolve([...results]),
     delete: () => {
       for (const r of results) {
         const idx = mockExchangeRates.indexOf(r);
@@ -51,25 +52,21 @@ vi.mock("../db/database", () => {
             }
             return makeQuery([]);
           },
-          between: (_lower: unknown, upper: unknown, _incLower: boolean, _incUpper: boolean) => {
+          between: (lower: unknown, upper: unknown, incLower: boolean, incUpper: boolean) => {
             if (field === "[baseCurrency+date]") {
-              const [base, maxDate] = upper as [string, string];
+              const [base, minDate] = lower as [string, string];
+              const [, maxDate] = upper as [string, string];
               const found = mockExchangeRates
-                .filter((e) => e.baseCurrency === base && e.date <= maxDate)
+                .filter((e) => {
+                  if (e.baseCurrency !== base) return false;
+                  const geMin = incLower ? e.date >= minDate : e.date > minDate;
+                  const leMax = incUpper ? e.date <= maxDate : e.date < maxDate;
+                  return geMin && leMax;
+                })
                 .sort((a, b) => a.date.localeCompare(b.date));
               return makeQuery(found);
             }
             return makeQuery([]);
-          },
-          below: (cutoff: string) => {
-            const found = mockExchangeRates.filter((e) => e.date < cutoff);
-            return makeQuery(found);
-          },
-          last: () => {
-            if (field === "baseCurrency") {
-              return Promise.resolve(mockExchangeRates[mockExchangeRates.length - 1] ?? undefined);
-            }
-            return Promise.resolve(undefined);
           },
         };
       },
@@ -82,6 +79,10 @@ vi.mock("../db/database", () => {
         const entry = mockExchangeRates.find((e) => e.id === id);
         if (entry) Object.assign(entry, changes);
         return Promise.resolve(1);
+      },
+      filter: (predicate: (e: (typeof mockExchangeRates)[number]) => boolean) => {
+        const found = mockExchangeRates.filter(predicate);
+        return makeQuery(found);
       },
     },
     transactions: {
@@ -263,6 +264,21 @@ describe("getRate — null when no cache and fetch fails", () => {
 
     expect(rate).toBeCloseTo(3.9 / 0.88, 5);
   });
+
+  it("picks the entry with the most recent date, not insertion order, for the stale fallback", async () => {
+    // Insert the newer-dated entry FIRST so primary-key order would pick the
+    // wrong (older) one if the fallback didn't sort by date.
+    addCacheEntry("USD", "2024-02-01", { EUR: 0.9, PLN: 4.0 }, STALE);
+    addCacheEntry("USD", "2024-01-01", { EUR: 0.8, PLN: 3.0 }, STALE);
+
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Network error")));
+
+    const rate = await exchangeRateService.getRate("EUR", "PLN");
+
+    // Should use the 2024-02-01 entry (most recent by date), not the last
+    // element in insertion/primary-key order (2024-01-01).
+    expect(rate).toBeCloseTo(4.0 / 0.9, 5);
+  });
 });
 
 // ── getHistoricalRate ─────────────────────────────────────────────────────────
@@ -278,9 +294,16 @@ describe("getHistoricalRate", () => {
     expect(rate).toBeCloseTo(1 / 0.92, 5);
   });
 
-  it("returns null when no entry exists at or before the date", async () => {
+  it("falls back to the earliest cached entry when none exists at or before the date", async () => {
     addCacheEntry("USD", "2024-06-01", { EUR: 0.92 }, FRESH);
+    addCacheEntry("USD", "2024-09-01", { EUR: 0.95 }, FRESH);
 
+    const rate = await exchangeRateService.getHistoricalRate("EUR", "USD", "2024-01-01");
+    // No entry on/before 2024-01-01 → fall back to the earliest available (2024-06-01)
+    expect(rate).toBeCloseTo(1 / 0.92, 5);
+  });
+
+  it("returns null when no cached entries exist for the base at all", async () => {
     const rate = await exchangeRateService.getHistoricalRate("EUR", "USD", "2024-01-01");
     expect(rate).toBeNull();
   });
@@ -288,6 +311,16 @@ describe("getHistoricalRate", () => {
   it("returns 1 when from === to", async () => {
     const rate = await exchangeRateService.getHistoricalRate("USD", "USD", TODAY);
     expect(rate).toBe(1);
+  });
+
+  it("uses the explicit baseOverride instead of the settings mainCurrency", async () => {
+    mockSettings.set("mainCurrency", "USD");
+    addCacheEntry("EUR", "2024-06-01", { GBP: 0.85 }, FRESH);
+
+    const rate = await exchangeRateService.getHistoricalRate("GBP", "EUR", "2024-08-01", "EUR");
+    // base=EUR override, GBP is not base or target's counterpart... to=EUR=base
+    // 1 GBP = 1/rates[GBP] EUR = 1/0.85
+    expect(rate).toBeCloseTo(1 / 0.85, 5);
   });
 });
 
@@ -447,6 +480,19 @@ describe("recalculateAllMainCurrencyAmounts", () => {
       [55, 55],
     ]);
   });
+
+  it("looks up historical rates against the new main currency as the base, not the old settings value", async () => {
+    // Settings still say the OLD main currency (mirrors real app: the setting
+    // is only updated by the caller AFTER recalc succeeds).
+    mockSettings.set("mainCurrency", "GBP");
+    mockTransactions = [{ id: 1, currency: "EUR", amount: 1000, date: "2024-03-01" }];
+
+    const spy = vi.spyOn(exchangeRateService, "getHistoricalRate").mockResolvedValue(1.08);
+
+    await exchangeRateService.recalculateAllMainCurrencyAmounts("USD");
+
+    expect(spy).toHaveBeenCalledWith("EUR", "USD", "2024-03-01", "USD");
+  });
 });
 
 // ── fetchAndCacheRates ────────────────────────────────────────────────────────
@@ -496,5 +542,26 @@ describe("fetchAndCacheRates", () => {
     // Should still be 1 entry, updated
     expect(mockExchangeRates.length).toBe(1);
     expect(mockExchangeRates[0].rates).toEqual({ EUR: 0.9 });
+  });
+
+  it("prunes entries older than 90 days using a local-date filter (no standalone date index)", async () => {
+    const oldDate = new Date();
+    oldDate.setDate(oldDate.getDate() - 91);
+    const oldDateStr = `${oldDate.getFullYear()}-${String(oldDate.getMonth() + 1).padStart(2, "0")}-${String(oldDate.getDate()).padStart(2, "0")}`;
+    addCacheEntry("USD", oldDateStr, { EUR: 0.8 }, STALE);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ rates: { EUR: 0.9 } }),
+      }),
+    );
+
+    await exchangeRateService.fetchAndCacheRates("USD");
+
+    // The 91-day-old entry should be pruned; only today's fresh entry remains.
+    expect(mockExchangeRates.length).toBe(1);
+    expect(mockExchangeRates[0].date).toBe(TODAY);
   });
 });

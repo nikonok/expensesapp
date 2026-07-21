@@ -146,7 +146,9 @@ func (h *Handler) PostDeviceEnvelope(w http.ResponseWriter, r *http.Request) {
 		if rows == 0 {
 			return errDeviceNotPending
 		}
-		return nil
+
+		// Audit log — inside the same transaction as the mutation it records.
+		return insertAuditTx(ctx, qt, uploaderUserID, "", "device.join", "device", targetDeviceID, nowStr)
 	})
 	if txErr != nil {
 		if errors.Is(txErr, errDeviceNotPending) {
@@ -157,9 +159,6 @@ func (h *Handler) PostDeviceEnvelope(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
 		return
 	}
-
-	// Audit log.
-	_ = insertAudit(ctx, h.db, uploaderUserID, "", "device.join", "device", targetDeviceID, nowStr)
 
 	// Publish device.activated SSE event to the target device's scope.
 	if h.hub != nil {

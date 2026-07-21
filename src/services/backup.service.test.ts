@@ -120,6 +120,9 @@ beforeEach(async () => {
   await db.exchangeRates.clear();
   await db.settings.clear();
   await db.backups.clear();
+  await db.pendingUploads.clear();
+  await db.syncCursors.clear();
+  await db.recordMappings.clear();
 });
 
 describe("createBackup", () => {
@@ -137,22 +140,35 @@ describe("createBackup", () => {
     expect(all[0].isAutomatic).toBe(true);
   });
 
-  it("after two calls, exactly 1 backup remains (pruning works)", async () => {
-    await createBackup();
-    await createBackup();
+  it("after MAX_BACKUPS_PER_KIND + 1 manual calls, only the 3 most recent remain", async () => {
+    for (let i = 0; i < 4; i++) {
+      await createBackup();
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
     const all = await db.backups.toArray();
-    expect(all).toHaveLength(1);
+    expect(all).toHaveLength(3);
+    expect(all.every((b) => b.isAutomatic === false)).toBe(true);
   });
 
-  it("the remaining backup after pruning is the most recent one", async () => {
-    await createBackup();
-    // small delay to ensure distinct createdAt values
-    await new Promise((resolve) => setTimeout(resolve, 5));
-    await createBackup(true);
+  it("after MAX_BACKUPS_PER_KIND + 1 automatic calls, only the 3 most recent remain", async () => {
+    for (let i = 0; i < 4; i++) {
+      await createBackup(true);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
     const all = await db.backups.toArray();
-    expect(all).toHaveLength(1);
-    // the second backup was automatic
-    expect(all[0].isAutomatic).toBe(true);
+    expect(all).toHaveLength(3);
+    expect(all.every((b) => b.isAutomatic === true)).toBe(true);
+  });
+
+  it("creating an automatic backup never deletes a manual backup, and vice versa", async () => {
+    await createBackup(); // manual
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await createBackup(true); // automatic
+
+    const all = await db.backups.toArray();
+    expect(all).toHaveLength(2);
+    expect(all.some((b) => b.isAutomatic === false)).toBe(true);
+    expect(all.some((b) => b.isAutomatic === true)).toBe(true);
   });
 
   it("the backup JSON contains the correct tables structure", async () => {
@@ -185,7 +201,7 @@ describe("listBackups", () => {
     await createBackup();
     await new Promise((resolve) => setTimeout(resolve, 5));
     await createBackup(true);
-    // After two calls, only 1 remains due to pruning — re-insert two manually
+    // Clear and re-insert two backups with fixed timestamps for a deterministic order check
     await db.backups.clear();
     const older = "2026-01-01T00:00:00.000Z";
     const newer = "2026-06-01T00:00:00.000Z";
@@ -296,6 +312,14 @@ describe("checkAndRunAutoBackup", () => {
   it("creates a backup if lastAutoBackupAt has never been set (treats as epoch)", async () => {
     await db.settings.put({ key: "autoBackupIntervalHours", value: 24 });
     // No lastAutoBackupAt set at all
+
+    await checkAndRunAutoBackup();
+    expect(await db.backups.count()).toBe(1);
+  });
+
+  it("creates a backup if lastAutoBackupAt is an unparsable string (NaN treated as epoch)", async () => {
+    await db.settings.put({ key: "autoBackupIntervalHours", value: 24 });
+    await db.settings.put({ key: "lastAutoBackupAt", value: "not-a-real-date" });
 
     await checkAndRunAutoBackup();
     expect(await db.backups.count()).toBe(1);
@@ -446,7 +470,7 @@ describe("_restoreData — full shape round-trip", () => {
         categoryId: null,
         amount: 0,
         amountMainCurrency: 0,
-        transferGroupId: "test-group-uuid",
+        transferGroupId: "550e8400-e29b-41d4-a716-446655440000",
         transferDirection: "OUT",
       }) as Transaction,
     );
@@ -463,8 +487,8 @@ describe("_restoreData — full shape round-trip", () => {
     expect(restoredTx.amountMainCurrency).toBe(0);
   });
 
-  it("budget with null categoryId and null accountId survives restore", async () => {
-    await db.budgets.add(makeBudget({ categoryId: null, accountId: null }) as Budget);
+  it("budget targeting an account (categoryId null) survives restore", async () => {
+    await db.budgets.add(makeBudget({ categoryId: null, accountId: 3 }) as Budget);
 
     await createBackup();
     const [backup] = await db.backups.toArray();
@@ -475,7 +499,27 @@ describe("_restoreData — full shape round-trip", () => {
 
     const [restoredBudget] = await db.budgets.toArray();
     expect(restoredBudget.categoryId).toBeNull();
-    expect(restoredBudget.accountId).toBeNull();
+    expect(restoredBudget.accountId).toBe(3);
+  });
+
+  it("rejects a budget with both categoryId and accountId null (violates XOR invariant)", async () => {
+    const backupData = makeValidBackupJSON({
+      tables: {
+        accounts: [],
+        categories: [],
+        transactions: [],
+        budgets: [makeBudget({ categoryId: null, accountId: null })],
+        exchangeRates: [],
+        settings: [],
+      },
+    });
+    const backupId = await db.backups.add({
+      createdAt: new Date().toISOString(),
+      data: JSON.stringify(backupData),
+      isAutomatic: false,
+    });
+
+    await expect(restoreFromBackup(backupId as number)).rejects.toThrow(/budgets/i);
   });
 
   it("Dexie error inside transaction propagates as a real error", async () => {
@@ -520,5 +564,78 @@ describe("_restoreData — full shape round-trip", () => {
 
     const setting = await db.settings.get("mainCurrency");
     expect(setting?.value).toBe("EUR");
+  });
+
+  it("rejects a backup with a version newer than this app supports", async () => {
+    const backupData = makeValidBackupJSON({ version: 2 });
+    const backupId = await db.backups.add({
+      createdAt: new Date().toISOString(),
+      data: JSON.stringify(backupData),
+      isAutomatic: false,
+    });
+
+    await expect(restoreFromBackup(backupId as number)).rejects.toThrow(/newer version/i);
+  });
+
+  it("unknown fields on a table row survive a restore round-trip (passthrough)", async () => {
+    const backupData = makeValidBackupJSON({
+      tables: {
+        accounts: [{ ...makeAccount({ name: "Future Field" }), futureField: "keep-me" }],
+        categories: [],
+        transactions: [],
+        budgets: [],
+        exchangeRates: [],
+        settings: [],
+      },
+    });
+    const backupId = await db.backups.add({
+      createdAt: new Date().toISOString(),
+      data: JSON.stringify(backupData),
+      isAutomatic: false,
+    });
+
+    await restoreFromBackup(backupId as number);
+
+    const [account] = await db.accounts.toArray();
+    expect((account as unknown as { futureField: string }).futureField).toBe("keep-me");
+  });
+
+  it("clears pendingUploads, syncCursors, and recordMappings so sync re-bootstraps cleanly", async () => {
+    await db.pendingUploads.add({
+      recordId: "abc",
+      recordType: "transaction",
+      blob: "ciphertext",
+      updatedAtMap: { _all: new Date().toISOString() },
+      parentVersion: 0,
+      plaintextByteCount: 10,
+      attempts: 0,
+      lastFailedAt: null,
+      familyId: "fam-1",
+    });
+    await db.syncCursors.add({
+      familyId: "fam-1",
+      cursor: "some-cursor",
+      updatedAt: new Date().toISOString(),
+    });
+    // A stale mapping whose lastServerVersion is newer than the restored
+    // content — if left in place, a post-restore edit to this record would
+    // push with a matching parentVersion and silently overwrite newer
+    // server state.
+    await db.recordMappings.add({
+      recordType: "transaction",
+      localId: "1",
+      uuid: "stale-uuid",
+      lastServerVersion: 42,
+      creatorUserId: "user-1",
+    });
+
+    await createBackup();
+    const [backup] = await db.backups.toArray();
+
+    await restoreFromBackup(backup.id!);
+
+    expect(await db.pendingUploads.count()).toBe(0);
+    expect(await db.syncCursors.count()).toBe(0);
+    expect(await db.recordMappings.count()).toBe(0);
   });
 });

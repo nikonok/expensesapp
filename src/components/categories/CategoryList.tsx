@@ -74,6 +74,14 @@ export default function CategoryList() {
     useLiveQuery(() => db.budgets.where("month").equals(budgetMonth).toArray(), [budgetMonth]) ??
     [];
 
+  // Active (non-trashed) category ids across BOTH types, used to exclude
+  // trashed-category spend from the donut center total so it matches the
+  // sum of the rendered slices (which only include active categories).
+  const activeCategoryIds = useLiveQuery(async () => {
+    const cats = await db.categories.filter((c) => !c.isTrashed).toArray();
+    return new Set(cats.map((c) => c.id!));
+  }, []);
+
   // Compute spent per category and debt account payments in period
   const { expenseById, incomeById, debtAccountTotals } = useMemo(() => {
     const expenseById = new Map<number, number>();
@@ -111,21 +119,34 @@ export default function CategoryList() {
       .sort((a, b) => (debtAccountTotals.get(b.id!) ?? 0) - (debtAccountTotals.get(a.id!) ?? 0));
   }, [allAccounts, debtAccountTotals, categoriesViewType]);
 
-  // Totals for donut center — include debt payments so center matches ring area
+  // Totals for donut center — include debt payments so center matches ring
+  // area. Trashed-category spend is excluded so this total matches the sum
+  // of the rendered slices, which only include active categories.
   const totalExpense = useMemo(
     () =>
       allTransactions
-        .filter((t) => (t.type === "EXPENSE" && t.categoryId !== null) || isDebtPayment(t))
+        .filter(
+          (t) =>
+            (t.type === "EXPENSE" &&
+              t.categoryId !== null &&
+              (activeCategoryIds?.has(t.categoryId) ?? false)) ||
+            isDebtPayment(t),
+        )
         .reduce((sum, t) => sum + t.amountMainCurrency, 0),
-    [allTransactions],
+    [allTransactions, activeCategoryIds],
   );
 
   const totalIncome = useMemo(
     () =>
       allTransactions
-        .filter((t) => t.type === "INCOME" && t.categoryId !== null)
+        .filter(
+          (t) =>
+            t.type === "INCOME" &&
+            t.categoryId !== null &&
+            (activeCategoryIds?.has(t.categoryId) ?? false),
+        )
         .reduce((sum, t) => sum + t.amountMainCurrency, 0),
-    [allTransactions],
+    [allTransactions, activeCategoryIds],
   );
 
   // Donut slices — current view type categories + debt account payments, nonzero only

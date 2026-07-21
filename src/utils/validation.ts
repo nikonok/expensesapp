@@ -34,6 +34,8 @@ export const categorySchema = z.object({
 export const transactionSchema = z.object({
   type: z.enum(["EXPENSE", "INCOME", "TRANSFER"]),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  timestamp: z.string(),
+  displayOrder: z.number().int().finite(),
   accountId: z.number().int().positive(),
   categoryId: z.number().int().positive().nullable(),
   currency: z.string().length(3),
@@ -47,9 +49,11 @@ export const transactionSchema = z.object({
   transferGroupId: z.string().uuid().nullable().optional(),
   transferDirection: z.enum(["OUT", "IN"]).nullable().optional(),
   toAccountId: z.number().int().positive().nullable().optional(),
-  interestAmount: z.number().int().finite().nullable().optional(),
-  principalAmount: z.number().int().finite().nullable().optional(),
+  interestAmount: z.number().int().nonnegative().finite().nullable().optional(),
+  principalAmount: z.number().int().nonnegative().finite().nullable().optional(),
   isOverpayment: z.boolean().nullable().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
 });
 
 export const budgetSchema = z

@@ -29,7 +29,6 @@ func SetBypass(b bool) {
 	bypass.Store(b)
 }
 
-
 const (
 	// cleanupInterval is how often the background goroutine purges stale limiters.
 	cleanupInterval = 5 * time.Minute

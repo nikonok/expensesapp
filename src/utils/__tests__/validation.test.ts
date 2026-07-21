@@ -221,6 +221,8 @@ describe("categorySchema — invalid", () => {
 const baseExpense = {
   type: "EXPENSE" as const,
   date: "2026-04-13",
+  timestamp: "2026-04-13T12:00:00.000Z",
+  displayOrder: 0,
   accountId: 1,
   categoryId: 2,
   currency: "USD",
@@ -230,6 +232,8 @@ const baseExpense = {
   note: "",
   transferGroupId: null,
   transferDirection: null,
+  createdAt: "2026-04-13T12:00:00.000Z",
+  updatedAt: "2026-04-13T12:00:00.000Z",
 };
 
 describe("transactionSchema — valid", () => {
@@ -326,6 +330,46 @@ describe("transactionSchema — invalid", () => {
     const result = transactionSchema.safeParse({
       ...baseExpense,
       amountMainCurrency: -500,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("fails when timestamp is missing", () => {
+    const { timestamp: _, ...withoutTimestamp } = baseExpense;
+    const result = transactionSchema.safeParse(withoutTimestamp);
+    expect(result.success).toBe(false);
+  });
+
+  it("fails when displayOrder is missing", () => {
+    const { displayOrder: _, ...withoutDisplayOrder } = baseExpense;
+    const result = transactionSchema.safeParse(withoutDisplayOrder);
+    expect(result.success).toBe(false);
+  });
+
+  it("fails when createdAt is missing", () => {
+    const { createdAt: _, ...withoutCreatedAt } = baseExpense;
+    const result = transactionSchema.safeParse(withoutCreatedAt);
+    expect(result.success).toBe(false);
+  });
+
+  it("fails when updatedAt is missing", () => {
+    const { updatedAt: _, ...withoutUpdatedAt } = baseExpense;
+    const result = transactionSchema.safeParse(withoutUpdatedAt);
+    expect(result.success).toBe(false);
+  });
+
+  it("fails when interestAmount is negative", () => {
+    const result = transactionSchema.safeParse({
+      ...baseExpense,
+      interestAmount: -100,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("fails when principalAmount is negative", () => {
+    const result = transactionSchema.safeParse({
+      ...baseExpense,
+      principalAmount: -100,
     });
     expect(result.success).toBe(false);
   });

@@ -416,7 +416,8 @@ func TestSync_BadBlobLength(t *testing.T) {
 	assert.Equal(t, "bad-request", problemTitle(t, body))
 }
 
-// TestSync_BadVersionByte pushes a blob whose first byte is not 0x01 → 400.
+// TestSync_BadVersionByte pushes a blob whose first byte is not a supported
+// cipher-suite version (0x01 or 0x02) → 400.
 func TestSync_BadVersionByte(t *testing.T) {
 	authpkg.ClearSessionCache()
 	env := testenv.New(t)
@@ -428,9 +429,9 @@ func TestSync_BadVersionByte(t *testing.T) {
 	signIn(t, env, email)
 	initFamily(t, env)
 
-	// 73-byte blob with wrong version byte (0x02).
+	// 73-byte blob with an unsupported version byte (0x03).
 	badBlob := make([]byte, 73)
-	badBlob[0] = 0x02
+	badBlob[0] = 0x03
 	rec := map[string]any{
 		"recordId":           newUUIDStr(t),
 		"recordType":         "transaction",
@@ -446,6 +447,37 @@ func TestSync_BadVersionByte(t *testing.T) {
 	body := readBody(t, resp)
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "body: %s", body)
 	assert.Equal(t, "bad-request", problemTitle(t, body))
+}
+
+// TestSync_AcceptsSuiteV2Blob pushes a blob whose first byte is 0x02 (the
+// current client cipher-suite version) and expects it to be accepted.
+func TestSync_AcceptsSuiteV2Blob(t *testing.T) {
+	authpkg.ClearSessionCache()
+	env := testenv.New(t)
+	defer env.Close()
+
+	email := "frank-v2@example.com"
+	env.Verifier.Claims = &authpkg.Claims{Email: email, EmailVerified: true, Sub: "sub-frank-v2", Name: "Frank V2"}
+	addToAllowlist(t, env, email)
+	signIn(t, env, email)
+	initFamily(t, env)
+
+	blob := make([]byte, 73+10)
+	blob[0] = 0x02
+	rec := map[string]any{
+		"recordId":           newUUIDStr(t),
+		"recordType":         "transaction",
+		"blob":               base64.RawURLEncoding.EncodeToString(blob),
+		"updatedAtMap":       map[string]string{"amount": "2024-01-01T00:00:00.000Z"},
+		"parentVersion":      0,
+		"plaintextByteCount": int64(10),
+	}
+
+	pushResult := pushRecords(t, env, []any{rec})
+	accepted, _ := pushResult["accepted"].([]any)
+	require.Len(t, accepted, 1, "0x02 suite blob must be accepted")
+	conflicts, _ := pushResult["conflicts"].([]any)
+	assert.Len(t, conflicts, 0)
 }
 
 // TestSync_QuotaExceeded bumps usage_bytes to just below the 200 MiB cap then
@@ -538,6 +570,129 @@ func TestSync_NewRecordWithBadParentVersion(t *testing.T) {
 	assert.Equal(t, float64(0), conflict["currentVersion"], "currentVersion must be 0 (no existing row)")
 }
 
+// signInAs signs in the given client as email and returns the parsed body.
+func signInAs(t *testing.T, client *http.Client, base, email string) map[string]any {
+	t.Helper()
+	resp := postJSON(t, client, base+"/v1/auth/google", map[string]any{
+		"idToken":     "fake-token",
+		"deviceLabel": "Test Device",
+		"userAgent":   "TestAgent/1.0",
+	})
+	body := readBody(t, resp)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "sign-in: %s", body)
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(body, &result))
+	return result
+}
+
+// initFamilyAs calls POST /v1/family/init using the given client.
+func initFamilyAs(t *testing.T, client *http.Client, base string) string {
+	t.Helper()
+	familyID := newUUIDStr(t)
+	body := map[string]any{
+		"familyId":       familyID,
+		"deviceEnvelope": base64.RawURLEncoding.EncodeToString(make([]byte, 80)),
+		"recovery": map[string]any{
+			"wrap":     base64.RawURLEncoding.EncodeToString(make([]byte, 49)),
+			"phraseCt": base64.RawURLEncoding.EncodeToString(make([]byte, 49)),
+			"salt":     base64.RawURLEncoding.EncodeToString(make([]byte, 16)),
+		},
+	}
+	resp := postJSON(t, client, base+"/v1/family/init", body)
+	respBody := readBody(t, resp)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "family/init: %s", respBody)
+	return familyID
+}
+
+// pushRecordsAs sends POST /v1/sync/push using the given client.
+func pushRecordsAs(t *testing.T, client *http.Client, base string, records []any) map[string]any {
+	t.Helper()
+	resp := postJSON(t, client, base+"/v1/sync/push", map[string]any{
+		"records": records,
+	})
+	body := readBody(t, resp)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "push: %s", body)
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(body, &result))
+	return result
+}
+
+// pullRecordsAs calls GET /v1/sync/pull using the given client.
+func pullRecordsAs(t *testing.T, client *http.Client, base string) map[string]any {
+	t.Helper()
+	resp := getReq(t, client, base+"/v1/sync/pull")
+	body := readBody(t, resp)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "pull: %s", body)
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(body, &result))
+	return result
+}
+
+// TestSync_CrossFamilyRecordIDConflict proves family B cannot read or modify
+// family A's record by pushing with A's recordId. Both families live in the
+// SAME server/DB (env) but are unrelated: family A pushes a record; family B
+// then pushes a "new" record using the SAME recordId. This must be rejected
+// as a clean conflict — with no echo of family A's data — rather than either
+// succeeding (data corruption/takeover) or leaking family A's currentBlob
+// (data exfiltration).
+func TestSync_CrossFamilyRecordIDConflict(t *testing.T) {
+	authpkg.ClearSessionCache()
+	env := testenv.New(t)
+	defer env.Close()
+	base := env.Server.URL
+
+	// Family A.
+	clientA := env.Client
+	emailA := "family-a@example.com"
+	env.Verifier.Claims = &authpkg.Claims{Email: emailA, EmailVerified: true, Sub: "sub-family-a", Name: "Family A"}
+	addToAllowlist(t, env, emailA)
+	signInAs(t, clientA, base, emailA)
+	initFamilyAs(t, clientA, base)
+
+	// Family A pushes a record and remembers its recordId.
+	recA := validRecord(t, 16)
+	recordID := recA["recordId"].(string)
+	pushA := pushRecordsAs(t, clientA, base, []any{recA})
+	acceptedA, _ := pushA["accepted"].([]any)
+	require.Len(t, acceptedA, 1)
+
+	// Family B: a completely separate family/user in the SAME server/DB.
+	clientB := env.NewClient()
+	emailB := "family-b@example.com"
+	env.Verifier.Claims = &authpkg.Claims{Email: emailB, EmailVerified: true, Sub: "sub-family-b", Name: "Family B"}
+	addToAllowlist(t, env, emailB)
+	signInAs(t, clientB, base, emailB)
+	initFamilyAs(t, clientB, base)
+
+	// Family B pushes a "new" record reusing family A's recordId.
+	blobB := validBlob(20)
+	hostileRec := map[string]any{
+		"recordId":           recordID,
+		"recordType":         "transaction",
+		"blob":               base64.RawURLEncoding.EncodeToString(blobB),
+		"updatedAtMap":       map[string]string{"amount": "2024-05-01T00:00:00.000Z"},
+		"parentVersion":      0,
+		"plaintextByteCount": int64(20),
+	}
+	pushB := pushRecordsAs(t, clientB, base, []any{hostileRec})
+
+	acceptedB, _ := pushB["accepted"].([]any)
+	assert.Len(t, acceptedB, 0, "family B must never be able to claim family A's recordId")
+	conflictsB, _ := pushB["conflicts"].([]any)
+	require.Len(t, conflictsB, 1)
+
+	conflict := conflictsB[0].(map[string]any)
+	assert.Equal(t, recordID, conflict["recordId"])
+	assert.Equal(t, float64(0), conflict["currentVersion"], "must not echo family A's real version")
+	assert.Empty(t, conflict["currentBlob"], "must NEVER echo family A's ciphertext to family B")
+
+	// Confirm family A's record is untouched: family A can still pull it at version 1.
+	pullA := pullRecordsAs(t, clientA, base)
+	pulledRecords, _ := pullA["records"].([]any)
+	require.Len(t, pulledRecords, 1, "family A's record must be unaffected")
+	assert.Equal(t, float64(1), pulledRecords[0].(map[string]any)["version"], "family A's record version must be unchanged")
+}
+
 // TestSync_NoFamily tries to push without calling /v1/family/init → 403.
 func TestSync_NoFamily(t *testing.T) {
 	authpkg.ClearSessionCache()
@@ -557,4 +712,60 @@ func TestSync_NoFamily(t *testing.T) {
 	body := readBody(t, resp)
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "body: %s", body)
 	assert.Equal(t, "family-required", problemTitle(t, body))
+}
+
+// TestSync_PendingDeviceCannotPushOrPull signs in a second device for a user
+// who already has an active family — the new device is created 'pending'
+// (awaiting an existing device to upload the family-key envelope) — and
+// verifies both push and pull are rejected with 403, while the device's
+// session itself remains otherwise valid.
+func TestSync_PendingDeviceCannotPushOrPull(t *testing.T) {
+	authpkg.ClearSessionCache()
+	env := testenv.New(t)
+	defer env.Close()
+
+	email := "pending-device@example.com"
+	env.Verifier.Claims = &authpkg.Claims{Email: email, EmailVerified: true, Sub: "sub-pending-device", Name: "Pending Device"}
+	addToAllowlist(t, env, email)
+
+	// First device: active, initializes the family.
+	signIn(t, env, email)
+	initFamily(t, env)
+
+	// Second device for the SAME user: created 'pending' because the user
+	// already has an active family (see auth.PostGoogle).
+	secondClient := env.NewClient()
+	resp := postJSON(t, secondClient, env.Server.URL+"/v1/auth/google", map[string]any{
+		"idToken":     "fake-token",
+		"deviceLabel": "Second Device",
+		"userAgent":   "TestAgent/2.0",
+	})
+	body := readBody(t, resp)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "second sign-in: %s", body)
+	var signInResult map[string]any
+	require.NoError(t, json.Unmarshal(body, &signInResult))
+	assert.Equal(t, true, signInResult["awaitingEnvelope"], "second device must be pending, awaiting envelope")
+
+	// Pending device: push must be rejected.
+	rec := validRecord(t, 8)
+	pushResp := postJSON(t, secondClient, env.Server.URL+"/v1/sync/push", map[string]any{
+		"records": []any{rec},
+	})
+	pushBody := readBody(t, pushResp)
+	assert.Equal(t, http.StatusForbidden, pushResp.StatusCode, "push body: %s", pushBody)
+	assert.Equal(t, "device-not-active", problemTitle(t, pushBody))
+
+	// Pending device: pull must be rejected.
+	pullResp := getReq(t, secondClient, env.Server.URL+"/v1/sync/pull")
+	pullBody := readBody(t, pullResp)
+	assert.Equal(t, http.StatusForbidden, pullResp.StatusCode, "pull body: %s", pullBody)
+	assert.Equal(t, "device-not-active", problemTitle(t, pullBody))
+
+	// Pending device: snapshot restore must also be rejected — a device
+	// still awaiting its family-key envelope must not be able to trigger a
+	// restore that rolls back the whole family's live record state.
+	restoreResp := postJSON(t, secondClient, env.Server.URL+"/v1/snapshots/2024-01-01/restore?confirm=true", nil)
+	restoreBody := readBody(t, restoreResp)
+	assert.Equal(t, http.StatusForbidden, restoreResp.StatusCode, "restore body: %s", restoreBody)
+	assert.Equal(t, "device-not-active", problemTitle(t, restoreBody))
 }

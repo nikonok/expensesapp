@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { db } from "@/db/database";
 import { listSnapshots, restoreSnapshot, type SnapshotEntry } from "@/services/snapshots/client";
 import { pullSince } from "@/services/sync/engine";
 import { getLocalFamilyId } from "@/services/family/active-family";
-import { setCursor } from "@/services/sync/cursor";
+import { logger } from "@/services/log.service";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 import { useToast } from "../shared/Toast";
 
@@ -29,8 +30,11 @@ export function SnapshotRestore() {
       const list = await listSnapshots();
       setSnapshots(list);
     } catch (err) {
-      console.error("[SnapshotRestore] listSnapshots failed:", err);
-      show(err instanceof Error ? err.message : t("errors.generic"), "error");
+      logger.warn(
+        "snapshotRestore.list.failed",
+        err instanceof Error ? err : new Error(String(err)),
+      );
+      show(t("settings.backup.snapshotListFailed"), "error");
       setExpanded(false);
     } finally {
       setLoading(false);
@@ -44,18 +48,31 @@ export function SnapshotRestore() {
     setRestoring(true);
     try {
       const { newCursor } = await restoreSnapshot(date, true);
+      logger.info("snapshotRestore.restore.newCursor", { newCursor });
       const familyId = await getLocalFamilyId();
       if (familyId) {
-        // Replace the local cursor with the one returned by the snapshot restore,
-        // then trigger a full pull from scratch (cursor=undefined) so the local
-        // DB is rebuilt from the restored state.
-        await setCursor(familyId, newCursor);
+        // Stale outbox rows point at parentVersions that mean nothing once
+        // the server state has been wholesale replaced by the snapshot —
+        // pushing them would just churn/conflict forever.
+        await db.pendingUploads.clear();
+        // Full pull from scratch (cursor omitted) rebuilds the local DB to
+        // match the restored server state, with pullSince's own bookkeeping
+        // advancing the cursor record-by-record as each one is applied. Do
+        // NOT pre-adopt `newCursor` here: if this pull throws before
+        // applying anything (e.g. the very first network request fails), a
+        // pre-set cursor would be left sitting AT the final post-restore
+        // position with zero records actually applied locally — a later
+        // retry would then pull `since=newCursor` and get nothing,
+        // permanently orphaning the rebuild.
         await pullSince(familyId, undefined);
       }
       show(t("settings.backup.snapshotRestored"), "success");
     } catch (err) {
-      console.error("[SnapshotRestore] restore failed:", err);
-      show(err instanceof Error ? err.message : t("errors.generic"), "error");
+      logger.warn(
+        "snapshotRestore.restore.failed",
+        err instanceof Error ? err : new Error(String(err)),
+      );
+      show(t("errors.restoreFailed"), "error");
     } finally {
       setRestoring(false);
     }

@@ -45,12 +45,22 @@ type meDeviceResponse struct {
 	Label string `json:"label"`
 }
 
+// meFamilyResponse is the family sub-object returned by GET /v1/me when the
+// caller is an active family member. The backend has no per-member role
+// concept today (family_members carries no role column) — Role is always
+// "member"; it is included so the client's bootstrap-after-reload logic has
+// a stable shape to read even if roles are introduced later.
+type meFamilyResponse struct {
+	ID   string `json:"id"`
+	Role string `json:"role"`
+}
+
 // meResponse is the JSON body returned by GET /v1/me.
 type meResponse struct {
-	User                 meUserResponse   `json:"user"`
-	Device               meDeviceResponse `json:"device"`
-	Family               interface{}      `json:"family"`               // null in Phase 1
-	NotificationSettings interface{}      `json:"notificationSettings"` // null in Phase 1
+	User                 meUserResponse    `json:"user"`
+	Device               meDeviceResponse  `json:"device"`
+	Family               *meFamilyResponse `json:"family"`               // null when not in an active family
+	NotificationSettings interface{}       `json:"notificationSettings"` // null in Phase 1
 	// AwaitingEnvelope mirrors the sign-in flag — true when this device is in
 	// `pending` status, awaiting an existing device to POST a familyKey envelope.
 	// Surfaced on /v1/me so a page reload preserves the routing decision.
@@ -110,13 +120,25 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 		userResp.DeleteAfter = &s
 	}
 
+	// Populate family so the client can bootstrap sync after a reload without
+	// a second round trip. nil (omitted->null) when not an active member.
+	var familyResp *meFamilyResponse
+	member, memberErr := q.GetActiveFamilyMember(ctx, userID)
+	if memberErr == nil {
+		familyResp = &meFamilyResponse{ID: member.FamilyID, Role: "member"}
+	} else if !errors.Is(memberErr, sql.ErrNoRows) {
+		slog.WarnContext(ctx, "get active family member error", "err", memberErr)
+		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
+		return
+	}
+
 	httpx.WriteJSON(w, http.StatusOK, meResponse{
 		User: userResp,
 		Device: meDeviceResponse{
 			ID:    d.ID,
 			Label: d.Label,
 		},
-		Family:               nil,
+		Family:               familyResp,
 		NotificationSettings: nil,
 		// A device in 'pending' status is waiting for an existing active device
 		// to upload its wrapped family-key envelope — see auth.PostGoogle.
@@ -188,7 +210,7 @@ func (h *Handler) RevokeMyDevice(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	nowStr := httpx.FormatTime(now)
 
-	// Revoke the device and all its sessions atomically.
+	// Revoke the device and all its sessions, and audit, atomically.
 	if err := internaldb.WithTx(ctx, h.db, func(tx *sql.Tx) error {
 		qt := gen.New(tx)
 		if err := qt.RevokeDevice(ctx, gen.RevokeDeviceParams{
@@ -198,18 +220,18 @@ func (h *Handler) RevokeMyDevice(w http.ResponseWriter, r *http.Request) {
 		}); err != nil {
 			return err
 		}
-		return qt.RevokeAllDeviceSessions(ctx, gen.RevokeAllDeviceSessionsParams{
+		if err := qt.RevokeAllDeviceSessions(ctx, gen.RevokeAllDeviceSessionsParams{
 			RevokedAt: sql.NullString{String: nowStr, Valid: true},
 			DeviceID:  targetID,
-		})
+		}); err != nil {
+			return err
+		}
+		return recoveryAudit(ctx, qt, userID, "device.revoke.user", "device", targetID, nowStr)
 	}); err != nil {
 		slog.WarnContext(ctx, "revoke device error", "err", err)
 		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
 		return
 	}
-
-	// Audit: device.revoke.user
-	_ = insertAudit(ctx, h.db, userID, "", "device.revoke.user", "device", targetID, nowStr)
 
 	w.WriteHeader(http.StatusNoContent)
 }

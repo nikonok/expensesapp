@@ -4,9 +4,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router";
 import AccountDetail from "./AccountDetail";
 import type { Account } from "../../db/models";
+import { adjustBalance } from "../../services/balance.service";
+import { db } from "../../db/database";
 
 // ── Dependency mocks ────────────────────────────────────────────────────────
-vi.mock("../../db/database", () => ({ db: {} }));
+vi.mock("../../db/database", () => ({
+  db: { accounts: { update: vi.fn().mockResolvedValue(1) } },
+}));
+vi.mock("../../services/sync/push-helpers", () => ({
+  pushAccount: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("../../services/balance.service", () => ({
   adjustBalance: vi.fn().mockResolvedValue(undefined),
 }));
@@ -14,21 +21,40 @@ vi.mock("../../stores/ui-store", () => ({
   useUIStore: (sel: (s: { setTransactionAccountFilter: () => void }) => unknown) =>
     sel({ setTransactionAccountFilter: vi.fn() }),
 }));
+const showToastMock = vi.fn();
 vi.mock("../shared/Toast", () => ({
-  useToast: () => ({ show: vi.fn() }),
+  useToast: () => ({ show: showToastMock }),
 }));
-vi.mock("../shared/ConfirmDialog", () => ({ ConfirmDialog: () => null }));
+vi.mock("../shared/ConfirmDialog", () => ({
+  ConfirmDialog: ({
+    isOpen,
+    onConfirm,
+  }: {
+    isOpen: boolean;
+    onConfirm: () => void;
+    onCancel: () => void;
+  }) => (isOpen ? <button onClick={onConfirm}>confirm-archive</button> : null),
+}));
 vi.mock("../shared/IconPicker", () => ({ getLucideIcon: () => null }));
-// Numpad mock: renders the value prop so we can assert what it was seeded with
+// Numpad mock: renders the value prop so we can assert what it was seeded
+// with, and exposes a "save-unchanged" button that calls onSave with the
+// currently displayed magnitude (in minor units) — simulating tapping SAVE
+// without editing the value.
 vi.mock("../shared/Numpad", () => ({
   Numpad: ({
     value,
+    onSave,
   }: {
     value: string;
     onChange: (v: string) => void;
     onSave: (v: number) => void;
     variant: string;
-  }) => <span data-testid="numpad-value">{value}</span>,
+  }) => (
+    <>
+      <span data-testid="numpad-value">{value}</span>
+      <button onClick={() => onSave(Math.round(Number(value) * 100))}>save-unchanged</button>
+    </>
+  ),
 }));
 
 // ── History mocks for BottomSheet ───────────────────────────────────────────
@@ -98,6 +124,114 @@ describe("AccountDetail — adjust balance numpad seeding", () => {
       fireEvent.click(screen.getByText("Adjust Balance"));
     });
     expect(screen.getByTestId("numpad-value").textContent).toBe("0");
+  });
+});
+
+describe("AccountDetail — adjust balance sign preservation", () => {
+  let onClose: () => void;
+
+  beforeEach(() => {
+    onClose = vi.fn();
+    vi.mocked(adjustBalance).mockClear();
+  });
+
+  function renderDetail(account: Account) {
+    return render(
+      <MemoryRouter>
+        <AccountDetail account={account} isOpen onClose={onClose} onEdit={vi.fn()} />
+      </MemoryRouter>,
+    );
+  }
+
+  it("re-applies the original negative sign for a non-DEBT account when saving unchanged", async () => {
+    renderDetail(makeAccount({ type: "REGULAR", balance: -50000 }));
+    act(() => {
+      fireEvent.click(screen.getByText("Adjust Balance"));
+    });
+    // Numpad seeded with the magnitude only ("500")
+    expect(screen.getByTestId("numpad-value").textContent).toBe("500");
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("save-unchanged"));
+    });
+
+    // Tapping SAVE without editing must be a no-op: -50000, not +50000.
+    expect(adjustBalance).toHaveBeenCalledWith(1, -50000);
+  });
+
+  it("keeps a positive balance positive for a non-DEBT account when saving unchanged", async () => {
+    renderDetail(makeAccount({ type: "REGULAR", balance: 50000 }));
+    act(() => {
+      fireEvent.click(screen.getByText("Adjust Balance"));
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("save-unchanged"));
+    });
+
+    expect(adjustBalance).toHaveBeenCalledWith(1, 50000);
+  });
+
+  it("keeps DEBT accounts on the existing non-negative magnitude semantics", async () => {
+    renderDetail(makeAccount({ type: "DEBT", balance: -300000 }));
+    act(() => {
+      fireEvent.click(screen.getByText("Adjust Balance"));
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("save-unchanged"));
+    });
+
+    // DEBT accounts are unaffected by the sign fix — magnitude is saved as-is.
+    expect(adjustBalance).toHaveBeenCalledWith(1, 300000);
+  });
+});
+
+describe("AccountDetail — archive error handling", () => {
+  let onClose: () => void;
+
+  beforeEach(() => {
+    onClose = vi.fn();
+    showToastMock.mockClear();
+    vi.mocked(db.accounts.update).mockReset();
+  });
+
+  function renderDetail(account: Account) {
+    return render(
+      <MemoryRouter>
+        <AccountDetail account={account} isOpen onClose={onClose} onEdit={vi.fn()} />
+      </MemoryRouter>,
+    );
+  }
+
+  it("shows an error toast instead of throwing when archiving fails", async () => {
+    vi.mocked(db.accounts.update).mockRejectedValue(new Error("db write failed"));
+    renderDetail(makeAccount());
+
+    act(() => {
+      fireEvent.click(screen.getByText("Archive Account"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("confirm-archive"));
+    });
+
+    expect(showToastMock).toHaveBeenCalledWith("Failed to archive account", "error");
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("closes the sheet on successful archive", async () => {
+    vi.mocked(db.accounts.update).mockResolvedValue(1);
+    renderDetail(makeAccount());
+
+    act(() => {
+      fireEvent.click(screen.getByText("Archive Account"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("confirm-archive"));
+    });
+
+    expect(onClose).toHaveBeenCalled();
+    expect(showToastMock).not.toHaveBeenCalled();
   });
 });
 

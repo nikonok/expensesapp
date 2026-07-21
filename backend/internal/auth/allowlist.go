@@ -31,18 +31,3 @@ func CheckEmailAllowed(ctx context.Context, db *sql.DB, email string) error {
 	}
 	return nil
 }
-
-// CheckUserNotSuspended returns nil if the user (by id) is not suspended.
-// If the user does not exist, returns sql.ErrNoRows (caller decides — this
-// helper is only meaningful AFTER a successful user upsert in the sign-in flow).
-func CheckUserNotSuspended(ctx context.Context, db *sql.DB, userID string) error {
-	q := gen.New(db)
-	u, err := q.GetUserByID(ctx, userID)
-	if err != nil {
-		return err
-	}
-	if u.SuspendedAt.Valid && u.SuspendedAt.String != "" {
-		return ErrUserSuspended
-	}
-	return nil
-}

@@ -3,11 +3,14 @@
 // Phase 12 (architecture §1.1, §9.3).
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useSyncStore } from "@/stores/sync-store";
 import { isPeriodicsyncSupported, isCatchUpSyncRegistered } from "@/services/sync/background-sync";
+import { retryTerminalUploads } from "@/services/sync/engine";
 import { useAuthStore } from "@/services/auth/session";
 
 export function SyncSettings() {
+  const { t } = useTranslation();
   const isSignedIn = useAuthStore((s) => s.isSignedIn);
   const lastSyncAt = useSyncStore((s) => s.lastSyncAt);
   const isSyncing = useSyncStore((s) => s.isSyncing);
@@ -15,6 +18,16 @@ export function SyncSettings() {
 
   const [pbsSupported, setPbsSupported] = useState<boolean | null>(null);
   const [pbsRegistered, setPbsRegistered] = useState<boolean | null>(null);
+  const [retrying, setRetrying] = useState(false);
+
+  async function handleRetryTerminal() {
+    setRetrying(true);
+    try {
+      await retryTerminalUploads();
+    } finally {
+      setRetrying(false);
+    }
+  }
 
   useEffect(() => {
     if (!isSignedIn) return;
@@ -29,7 +42,7 @@ export function SyncSettings() {
   if (!isSignedIn) return null;
 
   function formatSyncTime(iso: string | null): string {
-    if (!iso) return "Never";
+    if (!iso) return t("sync.never");
     const d = new Date(iso);
     return d.toLocaleTimeString([], {
       hour: "2-digit",
@@ -40,16 +53,20 @@ export function SyncSettings() {
   }
 
   const pbsSupportLabel =
-    pbsSupported === null ? "Checking…" : pbsSupported ? "Supported" : "Not available";
+    pbsSupported === null
+      ? t("sync.checking")
+      : pbsSupported
+        ? t("sync.supported")
+        : t("sync.notAvailable");
 
   const pbsRegisteredLabel =
     pbsSupported === false
       ? "—"
       : pbsRegistered === null
-        ? "Checking…"
+        ? t("sync.checking")
         : pbsRegistered
-          ? "Active"
-          : "Inactive";
+          ? t("sync.active")
+          : t("sync.inactive");
 
   return (
     <div>
@@ -59,6 +76,10 @@ export function SyncSettings() {
         <div
           role="alert"
           style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "var(--space-3)",
             padding: "var(--space-3) var(--space-4)",
             background: "var(--color-expense-dim, oklch(62% 0.28 18 / 12%))",
             borderBottom: "1px solid var(--color-expense)",
@@ -68,8 +89,28 @@ export function SyncSettings() {
             lineHeight: 1.4,
           }}
         >
-          Sync paused — family storage quota exceeded. Free up space (delete old data or contact the
-          admin) and the queued changes will retry automatically next sign-in.
+          <span>{t("sync.quotaBanner")}</span>
+          <button
+            onClick={handleRetryTerminal}
+            disabled={retrying}
+            style={{
+              flexShrink: 0,
+              minHeight: "32px",
+              minWidth: "44px",
+              padding: "0 var(--space-3)",
+              background: "none",
+              border: "1px solid var(--color-expense)",
+              borderRadius: "var(--radius-btn)",
+              color: "var(--color-expense)",
+              fontFamily: '"DM Sans", sans-serif',
+              fontWeight: 500,
+              fontSize: "var(--text-caption)",
+              cursor: retrying ? "not-allowed" : "pointer",
+              opacity: retrying ? 0.5 : 1,
+            }}
+          >
+            {retrying ? t("sync.retrying") : t("sync.retry")}
+          </button>
         </div>
       )}
 
@@ -92,7 +133,7 @@ export function SyncSettings() {
             color: "var(--color-text)",
           }}
         >
-          Last sync
+          {t("sync.lastSync")}
         </span>
         <span
           style={{
@@ -101,7 +142,7 @@ export function SyncSettings() {
             color: isSyncing ? "var(--color-primary)" : "var(--color-text-secondary)",
           }}
         >
-          {isSyncing ? "Syncing…" : formatSyncTime(lastSyncAt)}
+          {isSyncing ? t("sync.syncing") : formatSyncTime(lastSyncAt)}
         </span>
       </div>
 
@@ -124,7 +165,7 @@ export function SyncSettings() {
             color: "var(--color-text)",
           }}
         >
-          Background sync
+          {t("sync.backgroundSync")}
         </span>
         <span
           style={{
@@ -157,7 +198,7 @@ export function SyncSettings() {
               color: "var(--color-text)",
             }}
           >
-            4-hour sync
+            {t("sync.fourHourSync")}
           </span>
           <span
             style={{

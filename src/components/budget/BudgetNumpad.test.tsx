@@ -11,6 +11,7 @@ vi.mock("../../db/database", () => ({
       where: vi.fn(),
       update: vi.fn().mockResolvedValue(1),
       add: vi.fn().mockResolvedValue(1),
+      delete: vi.fn().mockResolvedValue(undefined),
       get: vi.fn().mockResolvedValue({ id: 42, plannedAmount: 50000 }),
     },
   },
@@ -47,6 +48,7 @@ vi.mock("../shared/Numpad", () => ({
     <div>
       <span data-testid="numpad-display">{value}</span>
       <button onClick={() => onSave(50000)}>save</button>
+      <button onClick={() => onSave(0)}>clear</button>
     </div>
   ),
 }));
@@ -146,5 +148,33 @@ describe("BudgetNumpad", () => {
     fireEvent.click(screen.getByRole("button", { name: "save" }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(vi.mocked(db.budgets.where)).toHaveBeenCalledWith("[categoryId+month]");
+  });
+
+  it("deletes the existing budget and closes when saving 0 (clear budget)", async () => {
+    vi.mocked(db.budgets.where).mockReturnValue({
+      equals: vi.fn().mockReturnValue({
+        first: vi.fn().mockResolvedValue({ id: 42, plannedAmount: 1000 }),
+      }),
+    } as any);
+    const onClose = vi.fn();
+    render(
+      <BudgetNumpad categoryId={1} currentMonth="2026-04" itemName="Food" onClose={onClose} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "clear" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(vi.mocked(db.budgets.delete)).toHaveBeenCalledWith(42);
+    expect(vi.mocked(db.budgets.update)).not.toHaveBeenCalled();
+    expect(vi.mocked(db.budgets.add)).not.toHaveBeenCalled();
+  });
+
+  it("saving 0 with no existing budget just closes without deleting or creating", async () => {
+    const onClose = vi.fn();
+    render(
+      <BudgetNumpad categoryId={1} currentMonth="2026-04" itemName="Food" onClose={onClose} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "clear" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(vi.mocked(db.budgets.delete)).not.toHaveBeenCalled();
+    expect(vi.mocked(db.budgets.add)).not.toHaveBeenCalled();
   });
 });

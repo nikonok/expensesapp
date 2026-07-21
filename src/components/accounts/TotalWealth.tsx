@@ -1,14 +1,4 @@
-import { useLiveQuery } from "dexie-react-hooks";
-import { useEffect, useMemo, useState } from "react";
-import { db } from "../../db/database";
-import { exchangeRateService } from "../../services/exchange-rate.service";
-import { useSettingsStore } from "../../stores/settings-store";
-
-interface CurrencyGroup {
-  currency: string;
-  assets: number;
-  debts: number;
-}
+import { useTotalBalance } from "../../hooks/use-total-balance";
 
 export function cellFontSize(str: string): string {
   if (str.length > 13) return "var(--text-caption)";
@@ -17,77 +7,8 @@ export function cellFontSize(str: string): string {
 }
 
 export default function TotalWealth() {
-  const mainCurrency = useSettingsStore((s) => s.mainCurrency);
-
-  const accounts = useLiveQuery(() => db.accounts.filter((a) => !a.isTrashed).toArray(), []) ?? [];
-
-  const [grandAssets, setGrandAssets] = useState<number | null>(null);
-  const [grandDebts, setGrandDebts] = useState<number | null>(null);
-  const [ratesAvailable, setRatesAvailable] = useState(true);
-
-  // Group active accounts by currency
-  const groups = useMemo(() => {
-    const result: CurrencyGroup[] = [];
-    const grouped: Record<string, CurrencyGroup> = {};
-    for (const acc of accounts) {
-      if (!acc.includeInTotal) continue;
-      if (!grouped[acc.currency]) {
-        grouped[acc.currency] = { currency: acc.currency, assets: 0, debts: 0 };
-        result.push(grouped[acc.currency]);
-      }
-      if (acc.type === "DEBT") {
-        grouped[acc.currency].debts += Math.abs(acc.balance);
-      } else {
-        grouped[acc.currency].assets += acc.balance;
-      }
-    }
-    return result;
-  }, [accounts]);
-
-  // Convert to main currency for grand total
-  useEffect(() => {
-    let cancelled = false;
-    async function calc() {
-      // Reset unavailability at the start of each recalculation so a subsequent
-      // successful load clears any previously flagged missing rate.
-      if (!cancelled) setRatesAvailable(true);
-      const currencies = [...new Set(groups.map((g) => g.currency))];
-      const rates = await Promise.all(
-        currencies.map((c) => exchangeRateService.getRate(c, mainCurrency)),
-      );
-      const rateMap = Object.fromEntries(currencies.map((c, i) => [c, rates[i]]));
-
-      let totalAssets = 0;
-      let totalDebts = 0;
-      for (const g of groups) {
-        if (g.currency === mainCurrency) {
-          totalAssets += g.assets;
-          totalDebts += g.debts;
-        } else {
-          const r = rateMap[g.currency];
-          // null means the rate service had no data — leave grand total hidden rather than show a wrong number
-          if (r == null) {
-            if (!cancelled) {
-              setRatesAvailable(false);
-              setGrandAssets(null);
-              setGrandDebts(null);
-            }
-            return;
-          }
-          totalAssets += g.assets * r;
-          totalDebts += g.debts * r;
-        }
-      }
-      if (!cancelled) {
-        setGrandAssets(totalAssets);
-        setGrandDebts(totalDebts);
-      }
-    }
-    calc();
-    return () => {
-      cancelled = true;
-    };
-  }, [groups, mainCurrency]);
+  const { mainCurrency, ratesAvailable, groups, grandAssets, grandDebts, netWorth } =
+    useTotalBalance();
 
   if (groups.length === 0) return null;
 
@@ -98,8 +19,6 @@ export default function TotalWealth() {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(Math.abs(amount) / 100);
-
-  const netWorth = grandAssets != null && grandDebts != null ? grandAssets - grandDebts : null;
 
   return (
     <div

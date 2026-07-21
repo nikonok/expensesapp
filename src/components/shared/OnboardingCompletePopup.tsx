@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { MouseEvent } from "react";
 import { Sparkles, X as XIcon } from "lucide-react";
 import { useUIStore } from "@/stores/ui-store";
-import { useSettingsStore } from "@/stores/settings-store";
+import { DEFAULTS, useSettingsStore } from "@/stores/settings-store";
 import { db } from "@/db/database";
 
 export function OnboardingCompletePopup() {
@@ -42,18 +42,11 @@ export function OnboardingCompletePopup() {
           await db.settings.clear();
         },
       );
-      useSettingsStore.setState({
-        mainCurrency: "USD",
-        language: "en",
-        startupScreen: "transactions",
-        notificationEnabled: false,
-        notificationTime: "20:00",
-        lastUsedAccountId: null,
-        autoBackupIntervalHours: null,
-        lastAutoBackupAt: null,
-        hasCompletedOnboarding: false,
-        logLevel: "errors",
-      });
+      // Reset from the store's single DEFAULTS source so no key is missed
+      // (previously this hand-rolled a subset and silently kept stale state
+      // for any key added to DEFAULTS afterward — e.g. hapticFeedbackEnabled,
+      // pushSubscriptionId).
+      useSettingsStore.setState({ ...DEFAULTS });
     } catch (err) {
       console.error("Onboarding cancel failed:", err);
       setCancelling(false);

@@ -4,10 +4,13 @@
 // Responsibilities:
 //   * Look up the active `familyId` (returns early if the device isn't signed
 //     in to a family yet — local-only mode).
-//   * Resolve the current `userId` from the auth store as the editor (and the
-//     creator, on insert).
-//   * Build a `RawRecord` with stable `recordId = String(local DB id)` and a
-//     coarse `updatedAtMap = { _all: <now> }`.
+//   * Resolve the current `userId` from the auth store as the editor.
+//   * Resolve the record's stable server UUID + `parentVersion` +
+//     `creatorUserId` via the canonical `recordMappings` table (see
+//     `record-mapping.ts`) — minting a fresh UUID mapping on first push.
+//   * Build a `RawRecord` with `addedByUserId` = the record's ORIGINAL
+//     creator (never the current editor, unless they're the same) and a
+//     coarse `updatedAtMap = { _all: <now> }` (whole-record LWW).
 //   * Swallow errors so the local DB write that happened first is not undone
 //     when the sync layer is offline / unavailable; the engine's outbox is the
 //     real durability boundary, and a failure here just means no row was added
@@ -17,11 +20,12 @@ import { logger } from "@/services/log.service";
 import { useAuthStore } from "@/services/auth/session";
 import { getLocalFamilyId } from "@/services/family/active-family";
 import { enqueuePush } from "./engine";
+import { getOrCreateMappingForPush } from "./record-mapping";
 import type { Account, Budget, Category, Transaction } from "@/db/models";
 import type { RawRecord, RecordType } from "./types";
 
 /** Settings keys that should sync to the server (cosmetic / per-device ones do not). */
-export const SYNCED_SETTING_KEYS = new Set<string>(["mainCurrency", "monthStartDay"]);
+export const SYNCED_SETTING_KEYS = new Set<string>(["mainCurrency"]);
 
 interface PushContext {
   familyId: string;
@@ -55,21 +59,41 @@ async function safeEnqueue(record: RawRecord): Promise<void> {
   }
 }
 
+/**
+ * Resolves the wire identity for a local record about to be pushed:
+ * `{ recordId, addedByUserId, parentVersion }`, minting a mapping on first
+ * push. `addedByUserId` is the record's ORIGINAL creator (the mapping's
+ * `creatorUserId`), never overwritten by later edits from other users.
+ */
+async function resolvePushIdentity(
+  recordType: RecordType,
+  localId: string,
+  currentUserId: string,
+): Promise<{ recordId: string; addedByUserId: string; parentVersion: number }> {
+  const mapping = await getOrCreateMappingForPush(recordType, localId, currentUserId);
+  return {
+    recordId: mapping.uuid,
+    addedByUserId: mapping.creatorUserId,
+    parentVersion: mapping.lastServerVersion,
+  };
+}
+
 // ── Transactions ─────────────────────────────────────────────────────────────
 
 export async function pushTransaction(tx: Transaction): Promise<void> {
   if (tx.id === undefined) return;
   const ctx = await pushContext();
   if (!ctx) return;
+  const identity = await resolvePushIdentity("transaction", String(tx.id), ctx.userId);
   const now = nowIso();
   await safeEnqueue({
-    recordId: String(tx.id),
+    recordId: identity.recordId,
     recordType: "transaction",
     familyId: ctx.familyId,
-    addedByUserId: ctx.userId,
+    addedByUserId: identity.addedByUserId,
     editedByUserId: ctx.userId,
     updatedAtMap: { _all: now },
-    parentVersion: 0,
+    parentVersion: identity.parentVersion,
     payload: tx,
   });
 }
@@ -78,16 +102,17 @@ export async function pushTransactionTombstone(tx: Transaction): Promise<void> {
   if (tx.id === undefined) return;
   const ctx = await pushContext();
   if (!ctx) return;
+  const identity = await resolvePushIdentity("transaction", String(tx.id), ctx.userId);
   const now = nowIso();
   await safeEnqueue({
-    recordId: String(tx.id),
+    recordId: identity.recordId,
     recordType: "transaction",
     familyId: ctx.familyId,
-    addedByUserId: ctx.userId,
+    addedByUserId: identity.addedByUserId,
     editedByUserId: ctx.userId,
     updatedAtMap: { _all: now },
     deletedAt: now,
-    parentVersion: 0,
+    parentVersion: identity.parentVersion,
     payload: { ...tx, isTrashed: true },
   });
 }
@@ -98,16 +123,17 @@ export async function pushAccount(account: Account): Promise<void> {
   if (account.id === undefined) return;
   const ctx = await pushContext();
   if (!ctx) return;
+  const identity = await resolvePushIdentity("account", String(account.id), ctx.userId);
   const now = nowIso();
   await safeEnqueue({
-    recordId: String(account.id),
+    recordId: identity.recordId,
     recordType: "account",
     familyId: ctx.familyId,
-    addedByUserId: ctx.userId,
+    addedByUserId: identity.addedByUserId,
     editedByUserId: ctx.userId,
     updatedAtMap: { _all: now },
     deletedAt: account.isTrashed ? now : undefined,
-    parentVersion: 0,
+    parentVersion: identity.parentVersion,
     payload: account,
   });
 }
@@ -116,16 +142,17 @@ export async function pushCategory(category: Category): Promise<void> {
   if (category.id === undefined) return;
   const ctx = await pushContext();
   if (!ctx) return;
+  const identity = await resolvePushIdentity("category", String(category.id), ctx.userId);
   const now = nowIso();
   await safeEnqueue({
-    recordId: String(category.id),
+    recordId: identity.recordId,
     recordType: "category",
     familyId: ctx.familyId,
-    addedByUserId: ctx.userId,
+    addedByUserId: identity.addedByUserId,
     editedByUserId: ctx.userId,
     updatedAtMap: { _all: now },
     deletedAt: category.isTrashed ? now : undefined,
-    parentVersion: 0,
+    parentVersion: identity.parentVersion,
     payload: category,
   });
 }
@@ -134,15 +161,16 @@ export async function pushBudget(budget: Budget): Promise<void> {
   if (budget.id === undefined) return;
   const ctx = await pushContext();
   if (!ctx) return;
+  const identity = await resolvePushIdentity("budget", String(budget.id), ctx.userId);
   const now = nowIso();
   await safeEnqueue({
-    recordId: String(budget.id),
+    recordId: identity.recordId,
     recordType: "budget",
     familyId: ctx.familyId,
-    addedByUserId: ctx.userId,
+    addedByUserId: identity.addedByUserId,
     editedByUserId: ctx.userId,
     updatedAtMap: { _all: now },
-    parentVersion: 0,
+    parentVersion: identity.parentVersion,
     payload: budget,
   });
 }
@@ -153,15 +181,16 @@ export async function pushSetting(key: string, value: unknown): Promise<void> {
   if (!SYNCED_SETTING_KEYS.has(key)) return;
   const ctx = await pushContext();
   if (!ctx) return;
+  const identity = await resolvePushIdentity("settings" as RecordType, key, ctx.userId);
   const now = nowIso();
   await safeEnqueue({
-    recordId: "setting:" + key,
+    recordId: identity.recordId,
     recordType: "settings" as RecordType,
     familyId: ctx.familyId,
-    addedByUserId: ctx.userId,
+    addedByUserId: identity.addedByUserId,
     editedByUserId: ctx.userId,
     updatedAtMap: { _all: now },
-    parentVersion: 0,
+    parentVersion: identity.parentVersion,
     payload: { key, value },
   });
 }

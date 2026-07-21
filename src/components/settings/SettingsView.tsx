@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
-import { ArrowLeft, Shield } from "lucide-react";
+import { ArrowLeft, LogIn, Shield } from "lucide-react";
 import { useAuthStore } from "../../services/auth/session";
 import { useSettingsStore } from "../../stores/settings-store";
 import { LanguageSetting } from "./LanguageSetting";
@@ -44,11 +44,56 @@ function SectionHeader({ label }: { label: string }) {
   );
 }
 
+function SignInRow({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        minHeight: "52px",
+        width: "100%",
+        padding: "0 var(--space-4)",
+        background: "none",
+        border: "none",
+        borderBottom: "1px solid var(--color-border)",
+        cursor: "pointer",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+        <LogIn size={16} strokeWidth={1.5} color="var(--color-primary)" />
+        <span
+          style={{
+            fontFamily: '"DM Sans", sans-serif',
+            fontWeight: 500,
+            fontSize: "var(--text-body)",
+            color: "var(--color-text)",
+          }}
+        >
+          {t("settings.signIn.label")}
+        </span>
+      </div>
+      <span
+        style={{
+          fontFamily: '"DM Sans", sans-serif',
+          fontSize: "var(--text-caption)",
+          color: "var(--color-primary)",
+        }}
+      >
+        {t("settings.signIn.action")}
+      </span>
+    </button>
+  );
+}
+
 export function SettingsView() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const startupScreen = useSettingsStore((s) => s.startupScreen);
   const isAdmin = useAuthStore((s) => s.user?.isAdmin ?? false);
+  const isSignedIn = useAuthStore((s) => s.isSignedIn);
 
   return (
     <div
@@ -122,16 +167,32 @@ export function SettingsView() {
       <div style={{ overflowY: "auto", flex: 1 }}>
         {/* Account section */}
         <SectionHeader label={t("settings.sections.account")} />
-        <SupportLogs />
-        <AccountDeletion />
+        {isSignedIn ? (
+          <>
+            <SupportLogs />
+            <AccountDeletion />
+          </>
+        ) : (
+          <SignInRow onClick={() => navigate("/signin")} />
+        )}
 
-        {/* Security section */}
-        <SectionHeader label={t("settings.sections.security")} />
-        <SecuritySettings />
+        {/* Security section — backend-dependent (devices, recovery code), so
+            only shown once signed in. Solo/offline users have no account-level
+            security to manage. */}
+        {isSignedIn && (
+          <>
+            <SectionHeader label={t("settings.sections.security")} />
+            <SecuritySettings />
+          </>
+        )}
 
-        {/* Family section */}
-        <SectionHeader label={t("settings.sections.family")} />
-        <FamilySettings />
+        {/* Family section — backend-dependent; nothing to show for solo users. */}
+        {isSignedIn && (
+          <>
+            <SectionHeader label={t("settings.sections.family")} />
+            <FamilySettings />
+          </>
+        )}
 
         {/* General section */}
         <SectionHeader label={t("settings.sections.general")} />

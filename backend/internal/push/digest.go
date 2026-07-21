@@ -65,7 +65,10 @@ func (d *DigestService) SendDigestForUser(ctx context.Context, userID string) {
 
 	// Count changes in the past 24h.
 	since := time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339)
-	count, err := q.CountRecentChangesForFamily(ctx, member.FamilyID, since)
+	count, err := q.CountRecentChangesForFamily(ctx, gen.CountRecentChangesForFamilyParams{
+		FamilyID:       member.FamilyID,
+		LastModifiedAt: since,
+	})
 	if err != nil {
 		slog.WarnContext(ctx, "push.Digest: count changes failed",
 			"family_id", member.FamilyID, "err", err)
@@ -151,6 +154,21 @@ func (d *DigestService) NotifyFamilyRecordChanged(ctx context.Context, familyID,
 	for _, uid := range members {
 		if uid == actorUserID {
 			continue // do not push to the actor
+		}
+		// Apply the same per-user family_digest opt-out the digest job
+		// applies in SendDigestForUser — a record.changed push is exactly
+		// the kind of family-activity notification that setting gates.
+		ns, err := q.GetNotificationSettings(ctx, uid)
+		if err != nil {
+			if err != sql.ErrNoRows {
+				slog.WarnContext(ctx, "push.Digest: load settings failed",
+					"user_id", uid, "err", err)
+			}
+			// No settings row → defaults to off; skip.
+			continue
+		}
+		if ns.FamilyDigest == 0 {
+			continue
 		}
 		d.deliverer.Deliver(ctx, uid, payload, false)
 	}

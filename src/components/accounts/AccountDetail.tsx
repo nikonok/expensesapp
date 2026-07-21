@@ -110,6 +110,9 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
       });
       await pushAccount({ ...account, isTrashed: true, updatedAt: now });
       onClose();
+    } catch (err) {
+      console.error("Failed to archive account:", err);
+      showToast("Failed to archive account", "error");
     } finally {
       setIsArchiving(false);
       setShowArchiveConfirm(false);
@@ -467,7 +470,14 @@ export default function AccountDetail({ account, isOpen, onClose, onEdit }: Acco
                 onChange={setAdjustValue}
                 onSave={async (v) => {
                   try {
-                    await adjustBalance(account.id!, v);
+                    // The numpad always outputs a non-negative magnitude. For
+                    // non-DEBT accounts, re-apply the account's original sign
+                    // so that saving without editing (v === |balance|) is a
+                    // no-op instead of flipping a negative balance positive.
+                    // DEBT accounts keep their existing (always non-negative
+                    // magnitude) semantics.
+                    const newBalance = isDebt ? v : account.balance < 0 ? -v : v;
+                    await adjustBalance(account.id!, newBalance);
                     setAdjustValue("");
                     setShowAdjust(false);
                   } catch (err) {

@@ -285,6 +285,106 @@ describe("DEBT account exceptions", () => {
     expect(debt!.balance).toBe(300); // 500 - 200 (debt reduced by payment)
   });
 
+  it("regular debt payment with a principal/interest split reduces balance by PRINCIPAL only", async () => {
+    const srcId = await db.accounts.add(makeAccount({ balance: 1000, name: "Source" }));
+    const debtId = await db.accounts.add(makeAccount({ type: "DEBT", balance: 500, name: "Debt" }));
+
+    const groupId = "debt-payment-split-uuid";
+    const outTx = makeTx(srcId as number, {
+      type: "TRANSFER",
+      amount: 200,
+      transferGroupId: groupId,
+      transferDirection: "OUT",
+      categoryId: null,
+      toAccountId: debtId as number,
+      interestAmount: 50,
+      principalAmount: 150,
+    });
+    // getBalanceDelta reads principalAmount off the IN leg (the DEBT side) —
+    // the IN leg must carry its own split, not just the OUT leg.
+    const inTx = makeTx(debtId as number, {
+      type: "TRANSFER",
+      amount: 200,
+      transferGroupId: groupId,
+      transferDirection: "IN",
+      categoryId: null,
+      interestAmount: 50,
+      principalAmount: 150,
+    });
+
+    await applyTransfer(outTx, inTx);
+
+    const debt = await db.accounts.get(debtId as number);
+    // Only the 150 principal portion reduces the debt; the 50 interest
+    // portion left the source account (as an expense) but does not shrink
+    // the debt balance.
+    expect(debt!.balance).toBe(350); // 500 - 150
+  });
+
+  it("overpayment with no split (principalAmount null) reduces balance by the FULL amount", async () => {
+    const srcId = await db.accounts.add(makeAccount({ balance: 1000, name: "Source" }));
+    const debtId = await db.accounts.add(makeAccount({ type: "DEBT", balance: 500, name: "Debt" }));
+
+    const groupId = "debt-overpayment-uuid";
+    const outTx = makeTx(srcId as number, {
+      type: "TRANSFER",
+      amount: 200,
+      transferGroupId: groupId,
+      transferDirection: "OUT",
+      categoryId: null,
+      toAccountId: debtId as number,
+      isOverpayment: true,
+    });
+    const inTx = makeTx(debtId as number, {
+      type: "TRANSFER",
+      amount: 200,
+      transferGroupId: groupId,
+      transferDirection: "IN",
+      categoryId: null,
+      principalAmount: null,
+      interestAmount: null,
+    });
+
+    await applyTransfer(outTx, inTx);
+
+    const debt = await db.accounts.get(debtId as number);
+    expect(debt!.balance).toBe(300); // 500 - 200, all of it principal
+  });
+
+  it("revertTransfer on a split debt payment restores the balance by the same principal amount (symmetry)", async () => {
+    const srcId = await db.accounts.add(makeAccount({ balance: 1000, name: "Source" }));
+    const debtId = await db.accounts.add(makeAccount({ type: "DEBT", balance: 500, name: "Debt" }));
+
+    const groupId = "debt-payment-revert-uuid";
+    const outTx = makeTx(srcId as number, {
+      type: "TRANSFER",
+      amount: 200,
+      transferGroupId: groupId,
+      transferDirection: "OUT",
+      categoryId: null,
+      toAccountId: debtId as number,
+      interestAmount: 50,
+      principalAmount: 150,
+    });
+    const inTx = makeTx(debtId as number, {
+      type: "TRANSFER",
+      amount: 200,
+      transferGroupId: groupId,
+      transferDirection: "IN",
+      categoryId: null,
+      interestAmount: 50,
+      principalAmount: 150,
+    });
+
+    await applyTransfer(outTx, inTx);
+    let debt = await db.accounts.get(debtId as number);
+    expect(debt!.balance).toBe(350);
+
+    await revertTransfer(groupId);
+    debt = await db.accounts.get(debtId as number);
+    expect(debt!.balance).toBe(500); // fully restored — apply/revert stay symmetric
+  });
+
   it("TRANSFER OUT from DEBT account increases balance (borrowing more)", async () => {
     const debtId = await db.accounts.add(makeAccount({ type: "DEBT", balance: 500, name: "Debt" }));
     const dstId = await db.accounts.add(makeAccount({ balance: 0, name: "Dest" }));
@@ -452,7 +552,9 @@ describe("replaceTransaction changing accountId", () => {
 describe("replaceTransaction — account change AND type change crossing DEBT boundary", () => {
   it("correctly reverts source account and applies new type to DEBT destination", async () => {
     const idA = await db.accounts.add(makeAccount({ type: "REGULAR", balance: 10000, name: "A" }));
-    const idB = await db.accounts.add(makeAccount({ type: "DEBT", balance: 50000, name: "B Debt" }));
+    const idB = await db.accounts.add(
+      makeAccount({ type: "DEBT", balance: 50000, name: "B Debt" }),
+    );
 
     // Apply EXPENSE 2000 to Account A (REGULAR)
     const tx = makeTx(idA as number, { type: "EXPENSE", amount: 2000 });
@@ -624,14 +726,73 @@ describe("replaceTransfer", () => {
     expect(accountB!.balance).toBe(5000);
     expect(accountC!.balance).toBe(2500);
   });
+
+  it("preserves the original legs' createdAt while refreshing updatedAt", async () => {
+    // applyTransaction/applyTransfer always stamp createdAt with "now" at
+    // insert time (by design — createdAt reflects the original transfer's
+    // creation moment). To set up a transfer with an old createdAt, insert
+    // the legs directly (as if `applyTransfer` had run long ago) rather than
+    // going through `applyTransfer`, whose createdAt would just be "now" too.
+    const idA = await db.accounts.add(makeAccount({ balance: 8000, name: "A" }));
+    const idB = await db.accounts.add(makeAccount({ balance: 7000, name: "B" }));
+
+    const groupId = "replace-transfer-createdat-uuid";
+    const originalCreatedAt = "2020-01-01T00:00:00.000Z";
+    await db.transactions.add(
+      makeTx(idA as number, {
+        type: "TRANSFER",
+        amount: 2000,
+        transferGroupId: groupId,
+        transferDirection: "OUT",
+        categoryId: null,
+        createdAt: originalCreatedAt,
+        updatedAt: originalCreatedAt,
+      }),
+    );
+    await db.transactions.add(
+      makeTx(idB as number, {
+        type: "TRANSFER",
+        amount: 2000,
+        transferGroupId: groupId,
+        transferDirection: "IN",
+        categoryId: null,
+        createdAt: originalCreatedAt,
+        updatedAt: originalCreatedAt,
+      }),
+    );
+
+    const newOutTx = makeTx(idA as number, {
+      type: "TRANSFER",
+      amount: 3000,
+      transferGroupId: groupId,
+      transferDirection: "OUT",
+      categoryId: null,
+    });
+    const newInTx = makeTx(idB as number, {
+      type: "TRANSFER",
+      amount: 3000,
+      transferGroupId: groupId,
+      transferDirection: "IN",
+      categoryId: null,
+    });
+
+    await replaceTransfer(groupId, newOutTx, newInTx);
+
+    const records = await db.transactions.where("transferGroupId").equals(groupId).toArray();
+    expect(records).toHaveLength(2);
+    for (const r of records) {
+      expect(r.createdAt).toBe(originalCreatedAt);
+      expect(r.updatedAt).not.toBe(originalCreatedAt);
+    }
+  });
 });
 
 describe("revertTransfer error handling", () => {
-  it("throws when groupId has only 1 matching record", async () => {
+  it("reverts the single remaining leg instead of throwing when only 1 of 2 records exists", async () => {
     const idA = await db.accounts.add(makeAccount({ balance: 1000, name: "A" }));
     const groupId = "incomplete-transfer-uuid";
-    // Manually insert only one transfer record (simulate corrupt/partial state)
-    await db.transactions.add(
+    // Manually insert only one transfer record (simulate a half-deleted pair)
+    const txId = await db.transactions.add(
       makeTx(idA as number, {
         type: "TRANSFER",
         amount: 100,
@@ -641,14 +802,19 @@ describe("revertTransfer error handling", () => {
         displayOrder: 0,
       }),
     );
-    await expect(revertTransfer(groupId)).rejects.toThrow(
-      "Expected 2 transfer records for group incomplete-transfer-uuid, found 1",
-    );
+
+    await revertTransfer(groupId);
+
+    const accountA = await db.accounts.get(idA as number);
+    // OUT leg on a REGULAR account subtracts on apply → revert adds it back.
+    expect(accountA!.balance).toBe(1100);
+    const remaining = await db.transactions.get(txId as number);
+    expect(remaining).toBeUndefined();
   });
 
   it("throws when groupId has 0 matching records", async () => {
     await expect(revertTransfer("nonexistent-group-uuid")).rejects.toThrow(
-      "Expected 2 transfer records for group nonexistent-group-uuid, found 0",
+      "Expected 1 or 2 transfer records for group nonexistent-group-uuid, found 0",
     );
   });
 });

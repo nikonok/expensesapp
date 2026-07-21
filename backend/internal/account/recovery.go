@@ -54,6 +54,27 @@ type regenerateRecoveryRequest struct {
 	PhraseCt     string `json:"phraseCt"`     // base64url — new AEAD(familyKey, phrase)
 	Salt         string `json:"salt"`         // base64url — new 16-byte salt
 	Version      int64  `json:"version"`      // envelope-suite version byte
+	// CreatedAt is an optional, opaque string bound into the new recovery
+	// envelope's AAD. When present, it replaces families.recovery_created_at.
+	CreatedAt string `json:"createdAt,omitempty"`
+}
+
+// maxRecoveryCreatedAtLen bounds the opaque createdAt string (it is never
+// parsed, only stored and echoed back verbatim).
+const maxRecoveryCreatedAtLen = 64
+
+// isPrintableASCII reports whether s is empty or consists solely of
+// printable ASCII characters (0x20-0x7E) within maxLen.
+func isPrintableASCII(s string, maxLen int) bool {
+	if len(s) > maxLen {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < 0x20 || s[i] > 0x7E {
+			return false
+		}
+	}
+	return true
 }
 
 // ---- handlers ---------------------------------------------------------------
@@ -150,7 +171,7 @@ func (h *Handler) PostRecoveryReveal(w http.ResponseWriter, r *http.Request) {
 		PhraseCt:  base64.RawURLEncoding.EncodeToString(envelope.PhraseCt),
 		SaltB64:   base64.RawURLEncoding.EncodeToString(envelope.Salt),
 		FamilyID:  family.ID,
-		CreatedAt: family.CreatedAt,
+		CreatedAt: internaldb.RecoveryCreatedAtOrFallback(family),
 	})
 }
 
@@ -216,6 +237,11 @@ func (h *Handler) PostRecoveryRegenerate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if !isPrintableASCII(req.CreatedAt, maxRecoveryCreatedAtLen) {
+		httpx.WriteError(w, r, http.StatusBadRequest, "bad-request", "createdAt must be a printable ASCII string of at most 64 characters")
+		return
+	}
+
 	now := time.Now().UTC()
 	nowStr := httpx.FormatTime(now)
 
@@ -256,6 +282,16 @@ func (h *Handler) PostRecoveryRegenerate(w http.ResponseWriter, r *http.Request)
 			FamilyID:     member.FamilyID,
 		}); err != nil {
 			return err
+		}
+		// The regenerated envelope's AAD may bind a new opaque createdAt;
+		// keep families.recovery_created_at in sync when the client supplies one.
+		if req.CreatedAt != "" {
+			if err := qt.SetFamilyRecoveryCreatedAt(ctx, gen.SetFamilyRecoveryCreatedAtParams{
+				RecoveryCreatedAt: sql.NullString{String: req.CreatedAt, Valid: true},
+				ID:                member.FamilyID,
+			}); err != nil {
+				return err
+			}
 		}
 		return recoveryAudit(ctx, qt, userID, "recovery.code.regenerate", "family", member.FamilyID, nowStr)
 	}); err != nil {

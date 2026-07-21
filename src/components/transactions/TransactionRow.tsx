@@ -222,7 +222,7 @@ export default function TransactionRow({
         <div style={{ flexShrink: 0, minWidth: "72px", textAlign: "right" }}>
           <AmountDisplay
             amount={transaction.amount}
-            currency={account.currency}
+            currency={transaction.currency}
             type={amountType}
             size="md"
           />

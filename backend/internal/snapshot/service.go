@@ -57,7 +57,10 @@ func (s *Service) CreateSnapshot(ctx context.Context, familyID, date string) (sn
 		qt := gen.New(tx)
 
 		// Check for existing snapshot on the same date.
-		existing, lookupErr := qt.GetSnapshotByDate(ctx, familyID, date)
+		existing, lookupErr := qt.GetSnapshotByDate(ctx, gen.GetSnapshotByDateParams{
+			FamilyID:     familyID,
+			SnapshotDate: date,
+		})
 		if lookupErr == nil {
 			// Already exists — return the existing ID via the outer err variable.
 			snapshotID = existing.ID
@@ -85,6 +88,10 @@ func (s *Service) CreateSnapshot(ctx context.Context, familyID, date string) (sn
 		}
 
 		for _, rec := range records {
+			// Capture added_by_user/edited_by_user verbatim so restore can
+			// reapply them — they are bound into the blob's AAD and rewriting
+			// them to the restoring caller would make the ciphertext
+			// undecryptable.
 			if entryErr := qt.InsertSnapshotEntry(ctx, gen.InsertSnapshotEntryParams{
 				SnapshotID:   id.String(),
 				RecordID:     rec.RecordID,
@@ -92,6 +99,8 @@ func (s *Service) CreateSnapshot(ctx context.Context, familyID, date string) (sn
 				RecordType:   rec.RecordType,
 				Version:      rec.Version,
 				UpdatedAtMap: rec.UpdatedAtMap,
+				AddedByUser:  nullString(rec.AddedByUser),
+				EditedByUser: nullString(rec.EditedByUser),
 			}); entryErr != nil {
 				return entryErr
 			}
@@ -107,4 +116,9 @@ func (s *Service) CreateSnapshot(ctx context.Context, familyID, date string) (sn
 		return "", err
 	}
 	return snapshotID, nil
+}
+
+// nullString returns a NullString that is Valid only when s is non-empty.
+func nullString(s string) sql.NullString {
+	return sql.NullString{String: s, Valid: s != ""}
 }

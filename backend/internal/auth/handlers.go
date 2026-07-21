@@ -294,6 +294,7 @@ func (h *Handler) PostGoogle(w http.ResponseWriter, r *http.Request) {
 			Label     string `json:"label"`
 			CreatedAt string `json:"createdAt"`
 			PubKey    string `json:"pubKey,omitempty"`
+			UserAgent string `json:"userAgent,omitempty"`
 		}
 		pubKeyB64u := base64.RawURLEncoding.EncodeToString(pubKeyBytes)
 		if data, err := json.Marshal(deviceJoinedPayload{
@@ -301,6 +302,7 @@ func (h *Handler) PostGoogle(w http.ResponseWriter, r *http.Request) {
 			Label:     req.DeviceLabel,
 			CreatedAt: nowStr,
 			PubKey:    pubKeyB64u,
+			UserAgent: req.UserAgent,
 		}); err == nil {
 			h.hub.Publish("user:"+returnedUser.ID, live.Event{
 				Type: "device.joined",
@@ -407,4 +409,3 @@ func mustNewUUID() string {
 func nullString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: s != ""}
 }
-

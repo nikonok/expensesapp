@@ -3,6 +3,7 @@
 // Shows the sign-up allowlist: add email + optional note, list with delete.
 
 import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useToast } from "@/components/shared/Toast";
 import {
@@ -13,6 +14,7 @@ import {
 } from "@/services/admin/client";
 
 export function AllowlistEditor() {
+  const { t } = useTranslation();
   const { show: showToast } = useToast();
 
   const [entries, setEntries] = useState<AllowlistEntry[]>([]);
@@ -30,11 +32,11 @@ export function AllowlistEditor() {
       const list = await listAllowlist();
       setEntries(list);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to load allowlist", "error");
+      showToast(err instanceof Error ? err.message : t("admin.allowlist.loadFailed"), "error");
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, t]);
 
   useEffect(() => {
     loadEntries();
@@ -46,12 +48,12 @@ export function AllowlistEditor() {
     setAdding(true);
     try {
       await addAllowlist(email, newNote.trim() || undefined);
-      showToast("Added to allowlist", "success");
+      showToast(t("admin.allowlist.addSuccess"), "success");
       setNewEmail("");
       setNewNote("");
       await loadEntries();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to add", "error");
+      showToast(err instanceof Error ? err.message : t("admin.allowlist.addFailed"), "error");
     } finally {
       setAdding(false);
     }
@@ -63,13 +65,13 @@ export function AllowlistEditor() {
     setRemovingEmail(email);
     try {
       await removeAllowlist(email);
-      showToast("Removed from allowlist", "success");
+      showToast(t("admin.allowlist.removeSuccess"), "success");
       setEntries((prev) => prev.filter((e) => e.email !== email));
       // Close the dialog only on success so a cancel (or error) doesn't
       // prematurely dismiss it while the network call is in flight.
       setConfirmRemove(null);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to remove", "error");
+      showToast(err instanceof Error ? err.message : t("admin.allowlist.removeFailed"), "error");
     } finally {
       setRemovingEmail(null);
     }
@@ -90,7 +92,7 @@ export function AllowlistEditor() {
         <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
           <input
             type="email"
-            placeholder="Email address"
+            placeholder={t("admin.allowlist.emailPlaceholder")}
             value={newEmail}
             onChange={(e) => setNewEmail(e.target.value)}
             onKeyDown={(e) => {
@@ -112,7 +114,7 @@ export function AllowlistEditor() {
           />
           <input
             type="text"
-            placeholder="Note (optional)"
+            placeholder={t("admin.allowlist.notePlaceholder")}
             value={newNote}
             onChange={(e) => setNewNote(e.target.value)}
             disabled={adding}
@@ -147,7 +149,7 @@ export function AllowlistEditor() {
               flexShrink: 0,
             }}
           >
-            {adding ? "Adding…" : "Add"}
+            {adding ? t("admin.allowlist.adding") : t("common.add")}
           </button>
         </div>
       </div>
@@ -164,8 +166,8 @@ export function AllowlistEditor() {
           }}
         >
           {entries.length === 0
-            ? "Allowlist is empty"
-            : `${entries.length} entr${entries.length !== 1 ? "ies" : "y"}`}
+            ? t("admin.allowlist.empty")
+            : t("admin.allowlist.count", { count: entries.length })}
         </div>
       )}
 
@@ -178,7 +180,7 @@ export function AllowlistEditor() {
             color: "var(--color-text-secondary)",
           }}
         >
-          Loading…
+          {t("common.loading")}
         </div>
       )}
 
@@ -248,9 +250,9 @@ export function AllowlistEditor() {
                   fontSize: "10px",
                   color: "var(--color-text-muted)",
                 }}
-                title={`Added by user ${entry.addedBy}`}
+                title={t("admin.allowlist.addedByTooltip", { id: entry.addedBy })}
               >
-                by {entry.addedBy.slice(0, 8)}
+                {t("admin.allowlist.addedByShort", { id: entry.addedBy.slice(0, 8) })}
               </span>
             )}
           </div>
@@ -273,16 +275,16 @@ export function AllowlistEditor() {
               flexShrink: 0,
             }}
           >
-            {removingEmail === entry.email ? "Removing…" : "Remove"}
+            {removingEmail === entry.email ? t("common.removing") : t("common.remove")}
           </button>
         </div>
       ))}
 
       <ConfirmDialog
         isOpen={confirmRemove !== null}
-        title="Remove from allowlist"
-        body={`Remove ${confirmRemove} from the allowlist? They will no longer be able to sign up.`}
-        confirmLabel="Remove"
+        title={t("admin.allowlist.removeConfirmTitle")}
+        body={t("admin.allowlist.removeConfirmBody", { email: confirmRemove })}
+        confirmLabel={t("common.remove")}
         onConfirm={handleRemoveConfirm}
         onCancel={() => setConfirmRemove(null)}
         variant="destructive"

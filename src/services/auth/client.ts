@@ -16,14 +16,23 @@ async function handleUnauthorized(): Promise<void> {
   try {
     const { useAuthStore } = await import("./session");
     const state = useAuthStore.getState();
+    // Only tear down / redirect when a session actually existed at the time
+    // of this 401. `signOut()` clears `isSignedIn` synchronously before its
+    // own network call, so a 401 produced by an already-in-progress,
+    // deliberate sign-out (e.g. sign-out-all, or self-revoke) lands here with
+    // `isSignedIn` already false — leave it alone so the caller's own
+    // navigation (e.g. to /signin) isn't clobbered. A solo / never-signed-in
+    // user hitting a backend-dependent endpoint also has `isSignedIn` false,
+    // so they're correctly left on whatever page they're on instead of being
+    // ejected to /onboarding.
     if (state.isSignedIn) {
       await state.signOut();
-    }
-    if (typeof window !== "undefined") {
-      const path = window.location.pathname;
-      // Avoid loops on the public sign-in / onboarding pages.
-      if (path !== "/onboarding" && path !== "/signin") {
-        window.location.assign("/onboarding");
+      if (typeof window !== "undefined") {
+        const path = window.location.pathname;
+        // Avoid loops on the public sign-in / onboarding pages.
+        if (path !== "/onboarding" && path !== "/signin") {
+          window.location.assign("/onboarding");
+        }
       }
     }
   } catch {
@@ -34,11 +43,14 @@ async function handleUnauthorized(): Promise<void> {
 async function handleRateLimited(retryAfter: number | null): Promise<void> {
   try {
     // Toast is mounted by App.tsx; if it isn't ready we just no-op.
-    const mod = await import("@/components/shared/Toast");
+    const [mod, { default: i18next }] = await Promise.all([
+      import("@/components/shared/Toast"),
+      import("@/i18n"),
+    ]);
     const message =
       retryAfter !== null && retryAfter > 0
-        ? `Too many requests, retrying in ${retryAfter}s`
-        : "Too many requests, slow down";
+        ? i18next.t("errors.rateLimitedRetry", { seconds: retryAfter })
+        : i18next.t("errors.rateLimited");
     mod.toast?.(message, "warning", 4000);
   } catch {
     // ignore — best-effort

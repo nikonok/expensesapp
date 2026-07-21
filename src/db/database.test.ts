@@ -1,39 +1,59 @@
 // @vitest-environment node
+import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
-import Dexie, { type EntityTable } from "dexie";
-import { indexedDB, IDBKeyRange } from "fake-indexeddb";
+import { db } from "./database";
 import type { Account, Transaction, Setting } from "./models";
 
-// Point Dexie at fake-indexeddb before any db is opened
-Dexie.dependencies.indexedDB = indexedDB;
-Dexie.dependencies.IDBKeyRange = IDBKeyRange;
-
-function makeTestDb() {
-  const db = new Dexie("test-db-" + Math.random()) as Dexie & {
-    accounts: EntityTable<Account, "id">;
-    transactions: EntityTable<Transaction, "id">;
-    settings: EntityTable<Setting, "key">;
-  };
-
-  db.version(1).stores({
-    accounts: "++id, type, name, isTrashed, currency",
-    categories: "++id, type, name, isTrashed, displayOrder",
-    transactions:
-      "++id, date, accountId, categoryId, type, [date+displayOrder], [accountId+date], transferGroupId",
-    budgets: "++id, categoryId, accountId, month, [categoryId+month], [accountId+month]",
-    exchangeRates: "++id, baseCurrency, &[baseCurrency+date]",
-    settings: "key",
-    backups: "++id, createdAt",
-  });
-
-  return db;
-}
+const EXPECTED_TABLES = [
+  "accounts",
+  "categories",
+  "transactions",
+  "budgets",
+  "exchangeRates",
+  "settings",
+  "backups",
+  "logs",
+  "pendingUploads",
+  "syncCursors",
+  "recordMappings",
+] as const;
 
 describe("Database layer", () => {
-  let db: ReturnType<typeof makeTestDb>;
+  beforeEach(async () => {
+    await db.accounts.clear();
+    await db.transactions.clear();
+    await db.settings.clear();
+  });
 
-  beforeEach(() => {
-    db = makeTestDb();
+  it("opens successfully at the current schema version", async () => {
+    await db.open();
+    expect(db.isOpen()).toBe(true);
+    expect(db.verno).toBeGreaterThanOrEqual(9);
+  });
+
+  it("pendingUploads store indexes recordId (used by enqueuePush coalescing)", () => {
+    const pendingUploads = db.table("pendingUploads");
+    const indexNames = pendingUploads.schema.indexes.map((i) => i.name);
+    expect(indexNames).toContain("recordId");
+  });
+
+  it("declares every expected table", () => {
+    const tableNames = db.tables.map((t) => t.name);
+    for (const name of EXPECTED_TABLES) {
+      expect(tableNames).toContain(name);
+    }
+  });
+
+  it("transactions store indexes transferGroupId (used by transfer revert/lookup)", () => {
+    const transactions = db.table("transactions");
+    const indexNames = transactions.schema.indexes.map((i) => i.name);
+    expect(indexNames).toContain("transferGroupId");
+  });
+
+  it("categories store indexes displayOrder (used by drag-reorder sort)", () => {
+    const categories = db.table("categories");
+    const indexNames = categories.schema.indexes.map((i) => i.name);
+    expect(indexNames).toContain("displayOrder");
   });
 
   it("can insert and retrieve an account", async () => {
@@ -93,12 +113,13 @@ describe("Database layer", () => {
     expect(retrieved!.note).toBe("Lunch");
   });
 
-  it("compound index [date+displayOrder] works — insert two tx same date, query by date", async () => {
+  it("date index supports a range query (used by useTransactions)", async () => {
     const now = new Date().toISOString();
-    const base: Omit<Transaction, "id" | "displayOrder"> = {
+    const base: Omit<Transaction, "id"> = {
       type: "EXPENSE",
       date: "2026-03-29",
       timestamp: now,
+      displayOrder: 0,
       accountId: 1,
       categoryId: 1,
       currency: "USD",
@@ -113,16 +134,14 @@ describe("Database layer", () => {
     };
 
     await db.transactions.add({ ...base, displayOrder: 0 });
-    await db.transactions.add({ ...base, displayOrder: 1 });
+    await db.transactions.add({ ...base, date: "2026-03-30", displayOrder: 1 });
 
     const results = await db.transactions
-      .where("[date+displayOrder]")
-      .between(["2026-03-29", Dexie.minKey], ["2026-03-29", Dexie.maxKey], true, true)
+      .where("date")
+      .between("2026-03-29", "2026-03-30", true, true)
       .toArray();
 
     expect(results.length).toBe(2);
-    expect(results[0].displayOrder).toBe(0);
-    expect(results[1].displayOrder).toBe(1);
   });
 
   it("settings table uses key as primary key (not auto-increment)", async () => {

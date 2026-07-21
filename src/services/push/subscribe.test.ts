@@ -88,9 +88,21 @@ vi.mock("./subscribe", async (importOriginal) => {
       });
       if (!res.ok) {
         console.error("ensurePushSubscription: failed to register with backend");
+        try {
+          await subscription.unsubscribe();
+        } catch {
+          /* best-effort cleanup */
+        }
+        return null;
       }
     } catch (err) {
       console.error("ensurePushSubscription: failed to register with backend", err);
+      try {
+        await subscription.unsubscribe();
+      } catch {
+        /* best-effort cleanup */
+      }
+      return null;
     }
 
     return keys;
@@ -207,16 +219,17 @@ describe("ensurePushSubscription", () => {
     expect(body.endpoint).toBe("https://push.example.com/sub-42");
   });
 
-  it("still returns keys even if backend POST fails", async () => {
+  it("returns null and tears down the browser subscription when backend POST fails", async () => {
     const NotificationMock = Object.assign(vi.fn(), {
       permission: "granted" as NotificationPermission,
       requestPermission: vi.fn(),
     });
     vi.stubGlobal("Notification", NotificationMock);
 
+    const subscription = makePushSubscription();
     const registration = {
       pushManager: {
-        subscribe: vi.fn().mockResolvedValue(makePushSubscription()),
+        subscribe: vi.fn().mockResolvedValue(subscription),
         getSubscription: vi.fn().mockResolvedValue(null),
       },
     };
@@ -230,8 +243,10 @@ describe("ensurePushSubscription", () => {
     const { ensurePushSubscription } = await import("./subscribe");
     const result = await ensurePushSubscription();
 
-    // Keys should still be returned (browser subscription succeeded).
-    expect(result).not.toBeNull();
+    // An unregistered subscription is useless — report failure rather than
+    // silently returning an id-less subscription (B-retry-8).
+    expect(result).toBeNull();
+    expect(subscription.unsubscribe).toHaveBeenCalledOnce();
   });
 
   it("returns null when VAPID key is not set", async () => {
@@ -297,5 +312,26 @@ describe("disablePush", () => {
 
     const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/v1/push/subscribe/sub-none");
+  });
+
+  it("skips the backend DELETE entirely when subscriptionId is empty (B-retry-8)", async () => {
+    const subscription = makePushSubscription();
+    const registration = {
+      pushManager: {
+        subscribe: vi.fn(),
+        getSubscription: vi.fn().mockResolvedValue(subscription),
+      },
+    };
+    vi.stubGlobal("navigator", {
+      serviceWorker: { ready: Promise.resolve(registration) },
+    });
+
+    const { disablePush } = await import("./subscribe");
+    await disablePush("");
+
+    // Local unsubscribe still happens...
+    expect(subscription.unsubscribe).toHaveBeenCalledOnce();
+    // ...but no malformed "/push/subscribe/" DELETE is ever attempted.
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });

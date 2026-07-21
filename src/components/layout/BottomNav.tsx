@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from "react-router";
 import { flushSync } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { Wallet, Tag, ArrowLeftRight, Target, LayoutDashboard } from "lucide-react";
 import type { TabName } from "../../types";
 import { useUIStore } from "../../stores/ui-store";
@@ -7,16 +8,15 @@ import { useUIStore } from "../../stores/ui-store";
 interface Tab {
   name: TabName;
   path: string;
-  label: string;
   Icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
 }
 
 const TABS: Tab[] = [
-  { name: "accounts", path: "/accounts", label: "Accounts", Icon: Wallet },
-  { name: "categories", path: "/categories", label: "Categories", Icon: Tag },
-  { name: "transactions", path: "/transactions", label: "Transactions", Icon: ArrowLeftRight },
-  { name: "budget", path: "/budget", label: "Budget", Icon: Target },
-  { name: "overview", path: "/overview", label: "Overview", Icon: LayoutDashboard },
+  { name: "accounts", path: "/accounts", Icon: Wallet },
+  { name: "categories", path: "/categories", Icon: Tag },
+  { name: "transactions", path: "/transactions", Icon: ArrowLeftRight },
+  { name: "budget", path: "/budget", Icon: Target },
+  { name: "overview", path: "/overview", Icon: LayoutDashboard },
 ];
 
 function navigateWithTransition(navigate: ReturnType<typeof useNavigate>, path: string) {
@@ -30,6 +30,7 @@ function navigateWithTransition(navigate: ReturnType<typeof useNavigate>, path: 
 }
 
 export default function BottomNav() {
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -51,10 +52,11 @@ export default function BottomNav() {
     >
       {TABS.map((tab) => {
         const isActive = activeTab === tab.name;
+        const label = t(`nav.${tab.name}`);
         return (
           <button
             key={tab.name}
-            aria-label={tab.label}
+            aria-label={label}
             aria-current={isActive ? "page" : undefined}
             onClick={() => {
               if (!isActive) {
@@ -111,7 +113,7 @@ export default function BottomNav() {
                   lineHeight: 1,
                 }}
               >
-                {tab.label}
+                {label}
               </span>
             )}
           </button>

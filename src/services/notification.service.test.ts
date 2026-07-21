@@ -188,5 +188,14 @@ describe("notification.service", () => {
 
       expect(result).toBe(false);
     });
+
+    it("resolves to false when Notification is undefined (unsupported environment)", async () => {
+      vi.stubGlobal("Notification", undefined);
+
+      const { notificationService } = await import("./notification.service");
+      const result = await notificationService.requestPermission();
+
+      expect(result).toBe(false);
+    });
   });
 });

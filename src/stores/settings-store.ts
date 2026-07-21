@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { db } from "../db/database";
 import { pushSetting, SYNCED_SETTING_KEYS } from "../services/sync/push-helpers";
+import { settingSchemas } from "../utils/validation";
 
 interface SettingsStore {
   mainCurrency: string;
@@ -38,7 +39,7 @@ const VALID_SETTING_KEYS = new Set([
   "pushSubscriptionId",
 ]);
 
-const DEFAULTS: Omit<SettingsStore, "load" | "update" | "isLoaded"> = {
+export const DEFAULTS: Omit<SettingsStore, "load" | "update" | "isLoaded"> = {
   mainCurrency: "USD",
   language: "en",
   startupScreen: "transactions",
@@ -102,14 +103,24 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         isLoaded: true,
       });
     } catch (err) {
-      // Leave isLoaded: false so callers can retry. Defaults remain in place.
+      // Leave isLoaded: false and rethrow so callers can retry / surface a
+      // fallback UI (App.tsx force-sets isLoaded: true on catch so the
+      // spinner doesn't hang forever with in-memory defaults).
       console.error("Failed to load settings:", err);
+      throw err;
     }
   },
 
   update: async (key: string, value: unknown) => {
     if (!VALID_SETTING_KEYS.has(key)) {
       console.error("Unknown setting key:", key);
+      return;
+    }
+    const schema = (
+      settingSchemas as Record<string, { safeParse: (v: unknown) => { success: boolean } }>
+    )[key];
+    if (schema && !schema.safeParse(value).success) {
+      console.error("Invalid value for setting:", key, value);
       return;
     }
     const prev = (get() as unknown as Record<string, unknown>)[key];

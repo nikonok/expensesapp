@@ -7,12 +7,14 @@ package auth
 // only sha256(token) so a database breach yields nothing reusable.
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -32,19 +34,24 @@ const (
 	cacheTTL        = 60 * time.Second
 	rotateThreshold = 24 * time.Hour
 	tokenBytes      = 32
+	// deviceTouchThreshold caps how often devices.last_seen_at is updated per
+	// device — at most once per hour, best-effort.
+	deviceTouchThreshold = time.Hour
 )
 
 // SessionInfo carries the validated session data back to the caller.
 type SessionInfo struct {
-	SessionID   string
-	UserID      string
-	DeviceID    string
-	Email       string
-	DisplayName string
-	IsAdmin     bool
-	IsRoot      bool
-	LastUsedAt  time.Time
-	Suspended   bool
+	SessionID        string
+	UserID           string
+	DeviceID         string
+	DeviceStatus     string
+	DeviceLastSeenAt time.Time // zero value if the device has never been touched
+	Email            string
+	DisplayName      string
+	IsAdmin          bool
+	IsRoot           bool
+	LastUsedAt       time.Time
+	Suspended        bool
 }
 
 // cacheEntry holds a cached SessionInfo with an expiry time.
@@ -144,16 +151,25 @@ func Validate(ctx context.Context, db *sql.DB, cookieValue string, now time.Time
 		return nil, ErrInvalidSession
 	}
 
+	var deviceLastSeenAt time.Time
+	if row.DeviceLastSeenAt.Valid {
+		if t, parseErr := httpx.ParseTime(row.DeviceLastSeenAt.String); parseErr == nil {
+			deviceLastSeenAt = t
+		}
+	}
+
 	info := &SessionInfo{
-		SessionID:   row.SessionID,
-		UserID:      row.UserID,
-		DeviceID:    row.DeviceID,
-		Email:       row.Email,
-		DisplayName: row.DisplayName,
-		IsAdmin:     row.IsAdmin != 0,
-		IsRoot:      row.IsRoot != 0,
-		LastUsedAt:  lastUsedAt,
-		Suspended:   row.SuspendedAt.Valid,
+		SessionID:        row.SessionID,
+		UserID:           row.UserID,
+		DeviceID:         row.DeviceID,
+		DeviceStatus:     row.DeviceStatus,
+		DeviceLastSeenAt: deviceLastSeenAt,
+		Email:            row.Email,
+		DisplayName:      row.DisplayName,
+		IsAdmin:          row.IsAdmin != 0,
+		IsRoot:           row.IsRoot != 0,
+		LastUsedAt:       lastUsedAt,
+		Suspended:        row.SuspendedAt.Valid,
 	}
 
 	// Store in cache.
@@ -164,6 +180,26 @@ func Validate(ctx context.Context, db *sql.DB, cookieValue string, now time.Time
 
 	if info.Suspended {
 		return nil, ErrInvalidSession
+	}
+
+	// The request authenticated via the CURRENT token_hash (not the
+	// previous_token_hash), and a previous_token_hash is still set from an
+	// earlier rotation. The client has demonstrably picked up the new
+	// cookie, so drop the old token here (best-effort, once).
+	//
+	// This makes the real grace window much shorter than the ~24h rotation
+	// cadence might suggest: previous_token_hash tolerates only the single
+	// in-flight request that was already dispatched with the old cookie
+	// before the client observed the rotated Set-Cookie header — once any
+	// request comes in on the new token, the old one is invalidated
+	// immediately. A request that still races in on the old cookie AFTER
+	// this clear gets a 401; the client's global 401 interceptor (B8, see
+	// src/services/auth/client.ts) covers that rare case, so we don't need
+	// to widen the server-side window to compensate.
+	if row.PreviousTokenHash != nil && bytes.Equal(row.TokenHash, hash[:]) {
+		if err := q.ClearPreviousSessionToken(ctx, row.SessionID); err != nil {
+			slog.WarnContext(ctx, "session: clear previous token hash failed", "err", err)
+		}
 	}
 
 	return info, nil
@@ -247,6 +283,20 @@ func TouchAndMaybeRotate(ctx context.Context, db *sql.DB, info *SessionInfo, now
 	}
 
 	return PendingRotation{}, nil
+}
+
+// TouchDeviceIfStale updates devices.last_seen_at when it is more than
+// deviceTouchThreshold old (or never set), best-effort. Callers should not
+// fail the request on error.
+func TouchDeviceIfStale(ctx context.Context, db *sql.DB, info *SessionInfo, now time.Time) error {
+	if !info.DeviceLastSeenAt.IsZero() && now.Sub(info.DeviceLastSeenAt) < deviceTouchThreshold {
+		return nil
+	}
+	q := gen.New(db)
+	return q.TouchDevice(ctx, gen.TouchDeviceParams{
+		LastSeenAt: sql.NullString{String: httpx.FormatTime(now), Valid: true},
+		ID:         info.DeviceID,
+	})
 }
 
 // Revoke marks the session as revoked in the database. The in-memory cache

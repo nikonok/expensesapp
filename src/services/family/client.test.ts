@@ -74,6 +74,46 @@ describe("acceptInvite", () => {
     expect((init as RequestInit).method).toBe("POST");
   });
 
+  it("includes the device's base64url pubkey in the body when the worker has one", async () => {
+    vi.doMock("@/services/crypto/worker-client", () => ({
+      cryptoWorker: {
+        getDevicePublicKey: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3, 4])),
+      },
+    }));
+    vi.resetModules();
+    mockFetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const { acceptInvite } = await import("./client");
+
+    await acceptInvite("inv-123");
+
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse((init as RequestInit).body as string) as { devicePubKey?: string };
+    expect(body.devicePubKey).toBe("AQIDBA");
+
+    vi.doUnmock("@/services/crypto/worker-client");
+    vi.resetModules();
+  });
+
+  it("still accepts the invite (with an empty body) when the worker throws", async () => {
+    vi.doMock("@/services/crypto/worker-client", () => ({
+      cryptoWorker: {
+        getDevicePublicKey: vi.fn().mockRejectedValue(new Error("worker unavailable")),
+      },
+    }));
+    vi.resetModules();
+    mockFetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const { acceptInvite } = await import("./client");
+
+    await acceptInvite("inv-123");
+
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse((init as RequestInit).body as string) as { devicePubKey?: string };
+    expect(body.devicePubKey).toBeUndefined();
+
+    vi.doUnmock("@/services/crypto/worker-client");
+    vi.resetModules();
+  });
+
   it("throws NeedsMigrationDecisionError on 409 needs-migration-decision", async () => {
     mockFetch.mockResolvedValueOnce(
       errorResponse(

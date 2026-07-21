@@ -91,27 +91,30 @@ export async function ensurePushSubscription(): Promise<PushSubscriptionKeys | n
   const p256dh = toBase64Url(rawKey);
   const auth = toBase64Url(rawAuth);
 
-  let backendId = "";
-  // POST to backend — fire and forget errors are swallowed after logging.
   try {
     const resp = await apiFetch<CreateSubscriptionResponse>("/api/v1/push/subscribe", {
       method: "POST",
       body: JSON.stringify({ endpoint: subscription.endpoint, p256dh, auth }),
     });
-    backendId = resp.id;
+    return {
+      endpoint: subscription.endpoint,
+      p256dh,
+      auth,
+      id: resp.id,
+    };
   } catch (err) {
     console.error("ensurePushSubscription: failed to register with backend", err);
-    // Don't return null — the browser-side subscription succeeded.
+    // The backend never learned about this subscription — an id-less
+    // subscription is useless (disablePush can't address it, and it would
+    // silently linger both locally and in the browser's push registry), so
+    // tear the browser-side subscription back down and report failure.
+    try {
+      await subscription.unsubscribe();
+    } catch (unsubErr) {
+      console.warn("ensurePushSubscription: cleanup unsubscribe failed", unsubErr);
+    }
+    return null;
   }
-
-  const keys: PushSubscriptionKeys = {
-    endpoint: subscription.endpoint,
-    p256dh,
-    auth,
-    id: backendId,
-  };
-
-  return keys;
 }
 
 // ── disablePush ───────────────────────────────────────────────────────────────
@@ -132,6 +135,14 @@ export async function disablePush(subscriptionId: string): Promise<void> {
     } catch (err) {
       console.warn("disablePush: local unsubscribe failed", err);
     }
+  }
+
+  // Guard against an empty/malformed id (e.g. a subscription that was never
+  // successfully registered with the backend) — DELETEing
+  // "/push/subscribe/" would hit a malformed route for no benefit.
+  if (!subscriptionId) {
+    console.warn("disablePush: no subscriptionId to delete on backend, skipping");
+    return;
   }
 
   // Tell the backend.

@@ -30,6 +30,14 @@ var ValidRecordTypes = map[string]struct{}{
 // current record version (or is non-zero for a new record).
 var ErrInvalidParentVersion = errors.New("invalid parent version")
 
+// ErrRecordIDConflict is returned when a client pushes a "new" record (no
+// record_meta row visible in the caller's family) whose record_id already
+// exists in a DIFFERENT family. record_meta.record_id is a global PRIMARY
+// KEY, so inserting would otherwise fail with a raw DB uniqueness error; this
+// sentinel lets the caller surface a clean conflict instead, without echoing
+// any of the other family's data.
+var ErrRecordIDConflict = errors.New("record id already exists in another family")
+
 // nowUTC is overridable in tests.
 var nowUTC = func() string { return httpx.FormatTime(timeNow()) }
 
@@ -55,10 +63,13 @@ type UpsertResult struct {
 
 // ConflictResult holds the current server state for a conflicting record.
 type ConflictResult struct {
-	RecordID        string
-	CurrentBlob     []byte
-	CurrentVersion  int64
-	CurrentUpdAtMap map[string]string
+	RecordID            string
+	CurrentBlob         []byte
+	CurrentVersion      int64
+	CurrentUpdAtMap     map[string]string
+	CurrentAddedByUser  string
+	CurrentEditedByUser string
+	CurrentDeletedAt    string // ISO-8601-ms or "" (not a tombstone)
 }
 
 // Service holds dependencies for records business logic.
@@ -82,13 +93,30 @@ func NewService(db *sql.DB) *Service {
 func (s *Service) Upsert(ctx context.Context, qt *gen.Queries, p UpsertParams) (result *UpsertResult, conflict *ConflictResult, err error) {
 	now := nowUTC()
 
-	existing, err := qt.GetRecordMeta(ctx, p.RecordID)
+	existing, err := qt.GetRecordMeta(ctx, gen.GetRecordMetaParams{
+		RecordID: p.RecordID,
+		FamilyID: p.FamilyID,
+	})
 	isNew := errors.Is(err, sql.ErrNoRows)
 	if err != nil && !isNew {
 		return nil, nil, err
 	}
 
 	if isNew {
+		// Guard against a cross-family record_id collision. record_meta.record_id
+		// is a global PRIMARY KEY, so a client-supplied ID colliding with
+		// another family's record must be rejected as a conflict — not
+		// silently attempted (PK violation) or treated as this family's fresh
+		// record (which would let a hostile family probe/overwrite another
+		// family's data via a guessed/reused recordId).
+		exists, existsErr := qt.RecordIDExistsInAnyFamily(ctx, p.RecordID)
+		if existsErr != nil {
+			return nil, nil, existsErr
+		}
+		if exists {
+			return nil, nil, ErrRecordIDConflict
+		}
+
 		// New record: parentVersion must be 0.
 		if p.ParentVersion != 0 {
 			return nil, nil, ErrInvalidParentVersion
@@ -149,7 +177,9 @@ func (s *Service) Upsert(ctx context.Context, qt *gen.Queries, p UpsertParams) (
 
 	// Existing record: check parentVersion.
 	if p.ParentVersion != existing.Version {
-		// Conflict: return current blob for client-side merge.
+		// Conflict: return current blob + authorship/tombstone fields so the
+		// client can rebuild the AAD for the CURRENT version even when it was
+		// written by a different user or is itself a tombstone.
 		blob, err := qt.GetBlobByID(ctx, existing.BlobID)
 		if err != nil {
 			return nil, nil, err
@@ -159,10 +189,13 @@ func (s *Service) Upsert(ctx context.Context, qt *gen.Queries, p UpsertParams) (
 			curMap = map[string]string{}
 		}
 		return nil, &ConflictResult{
-			RecordID:        p.RecordID,
-			CurrentBlob:     blob.Ciphertext,
-			CurrentVersion:  existing.Version,
-			CurrentUpdAtMap: curMap,
+			RecordID:            p.RecordID,
+			CurrentBlob:         blob.Ciphertext,
+			CurrentVersion:      existing.Version,
+			CurrentUpdAtMap:     curMap,
+			CurrentAddedByUser:  existing.AddedByUser,
+			CurrentEditedByUser: existing.EditedByUser,
+			CurrentDeletedAt:    existing.DeletedAt.String,
 		}, nil
 	}
 
@@ -207,6 +240,7 @@ func (s *Service) Upsert(ctx context.Context, qt *gen.Queries, p UpsertParams) (
 	newVersion := existing.Version + 1
 	if err := qt.UpdateRecordMeta(ctx, gen.UpdateRecordMetaParams{
 		RecordID:       p.RecordID,
+		FamilyID:       p.FamilyID,
 		BlobID:         blobID.String(),
 		Version:        newVersion,
 		EditedByUser:   p.UserID,

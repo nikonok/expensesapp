@@ -28,7 +28,10 @@ CREATE TABLE allowlist (
 CREATE TABLE families (
     id              TEXT PRIMARY KEY,         -- UUID v7
     created_at      TEXT NOT NULL,
-    usage_bytes     INTEGER NOT NULL DEFAULT 0   -- maintained incrementally; reconciled nightly
+    usage_bytes     INTEGER NOT NULL DEFAULT 0,  -- maintained incrementally; reconciled nightly
+    recovery_created_at TEXT                  -- opaque, client-supplied createdAt bound into
+                                               -- the recovery-envelope AAD; verbatim, never
+                                               -- reformatted. NULL falls back to created_at.
 );
 
 CREATE TABLE family_members (
@@ -174,6 +177,10 @@ CREATE TABLE snapshot_entries (
     record_type     TEXT NOT NULL,
     version         INTEGER NOT NULL,
     updated_at_map  TEXT NOT NULL,
+    added_by_user   TEXT REFERENCES users(id),  -- captured from record_meta at snapshot
+                                                 -- time; restore must reapply these verbatim
+                                                 -- (they are bound into the blob's AAD).
+    edited_by_user  TEXT REFERENCES users(id),
     PRIMARY KEY (snapshot_id, record_id)
 );
 

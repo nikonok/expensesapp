@@ -8,7 +8,7 @@ const isoDate = z.string();
 
 // ── Account ──
 
-export const backupAccountSchema = z.object({
+export const backupAccountSchema = z.looseObject({
   id: backupId,
   name: z.string(),
   type: z.enum(["REGULAR", "DEBT", "SAVINGS"]),
@@ -26,8 +26,6 @@ export const backupAccountSchema = z.object({
   savingsInterestRate: z.number().finite().nullable().optional(),
 
   // Debt-specific
-  interestRateMonthly: z.number().finite().nullable().optional(),
-  interestRateYearly: z.number().finite().nullable().optional(),
   debtOriginalAmount: z.number().int().finite().nonnegative().nullable().optional(),
   mortgageLoanAmount: z.number().int().finite().nonnegative().nullable().optional(),
   mortgageStartDate: isoDate.nullable().optional(),
@@ -43,7 +41,7 @@ export const backupAccountSchema = z.object({
 
 // ── Category ──
 
-export const backupCategorySchema = z.object({
+export const backupCategorySchema = z.looseObject({
   id: backupId,
   name: z.string(),
   type: z.enum(["EXPENSE", "INCOME"]),
@@ -63,7 +61,7 @@ const recurringRuleSchema = z.object({
   endDate: isoDate.optional(),
 });
 
-export const backupTransactionSchema = z.object({
+export const backupTransactionSchema = z.looseObject({
   id: backupId,
   type: z.enum(["EXPENSE", "INCOME", "TRANSFER"]),
   date: isoDate,
@@ -83,7 +81,7 @@ export const backupTransactionSchema = z.object({
   isTrashed: z.boolean().optional(),
 
   // Transfer-specific
-  transferGroupId: z.string().nullable(),
+  transferGroupId: z.string().uuid().nullable(),
   transferDirection: z.enum(["OUT", "IN"]).nullable(),
 
   // Debt payment metadata
@@ -101,20 +99,24 @@ export const backupTransactionSchema = z.object({
 
 // ── Budget ──
 
-export const backupBudgetSchema = z.object({
-  id: backupId,
-  categoryId: z.number().int().positive().nullable(),
-  accountId: z.number().int().positive().nullable(),
-  month: z.string(),
-  plannedAmount: z.number().int().finite().nonnegative(),
+export const backupBudgetSchema = z
+  .looseObject({
+    id: backupId,
+    categoryId: z.number().int().positive().nullable(),
+    accountId: z.number().int().positive().nullable(),
+    month: z.string(),
+    plannedAmount: z.number().int().finite().nonnegative(),
 
-  createdAt: isoDateTime,
-  updatedAt: isoDateTime,
-});
+    createdAt: isoDateTime,
+    updatedAt: isoDateTime,
+  })
+  .refine((data) => (data.categoryId != null) !== (data.accountId != null), {
+    message: "Budget must target exactly one of categoryId or accountId",
+  });
 
 // ── Exchange Rate Cache ──
 
-export const backupExchangeRateSchema = z.object({
+export const backupExchangeRateSchema = z.looseObject({
   id: backupId,
   baseCurrency: z.string(),
   date: isoDate,
@@ -125,7 +127,7 @@ export const backupExchangeRateSchema = z.object({
 // ── Setting ──
 // Primary key is `key: string` — no `id` field.
 
-export const backupSettingSchema = z.object({
+export const backupSettingSchema = z.looseObject({
   key: z.string().min(1),
   value: z.unknown(),
 });

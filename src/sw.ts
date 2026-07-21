@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 
-import { precacheAndRoute } from "workbox-precaching";
-import { registerRoute } from "workbox-routing";
+import { precacheAndRoute, createHandlerBoundToURL } from "workbox-precaching";
+import { registerRoute, NavigationRoute } from "workbox-routing";
 import { CacheFirst, StaleWhileRevalidate, NetworkFirst } from "workbox-strategies";
 import { ExpirationPlugin } from "workbox-expiration";
 
@@ -9,6 +9,18 @@ declare const self: ServiceWorkerGlobalScope;
 
 // ── Precaching (VitePWA injects the manifest at build time) ──────────────────
 precacheAndRoute(self.__WB_MANIFEST);
+
+// ── SPA navigation fallback ──────────────────────────────────────────────────
+// Without this, reloading (or a cold PWA launch) on any non-"/" route while
+// offline hits the network, fails, and shows the browser's offline page
+// instead of the app shell. Serve the precached index.html for all
+// navigations except API calls, which must hit the network (or fail as a
+// normal fetch, not be redirected to the app shell).
+registerRoute(
+  new NavigationRoute(createHandlerBoundToURL("index.html"), {
+    denylist: [/^\/api\//, /^\/v1\//],
+  }),
+);
 
 // ── Runtime caching ──────────────────────────────────────────────────────────
 
@@ -266,37 +278,81 @@ self.addEventListener("periodicsync", (event: Event) => {
 });
 
 // ── Push event: display notification from server payload ─────────────────────
+//
+// The server is zero-knowledge for financial data and never sends readable
+// content — real payloads (see backend/internal/push/digest.go) carry a
+// `type` discriminant plus non-financial metadata (family/record ids,
+// counts), not a ready-to-show title/body. Map each known `type` to a
+// generic English notification. The legacy `{title, body}` shape is still
+// honored first, in case some future producer sends direct content.
+
+interface ServerPushPayload {
+  type?: string;
+  title?: string;
+  body?: string;
+  tag?: string;
+  url?: string;
+}
+
+interface ResolvedNotification {
+  title: string;
+  body: string;
+  tag?: string;
+  url: string;
+}
+
+function resolvePushNotification(payload: ServerPushPayload): ResolvedNotification {
+  if (payload.title || payload.body) {
+    return {
+      title: payload.title ?? "Expenses",
+      body: payload.body ?? "",
+      tag: payload.tag,
+      url: payload.url ?? "/",
+    };
+  }
+
+  switch (payload.type) {
+    case "family.digest":
+    case "record.changed":
+      // NotifyFamilyRecordChanged / SendDigestForUser — a family member
+      // changed shared data; no content to show, just point at the tab.
+      return {
+        title: "Expenses",
+        body: "New family activity",
+        tag: payload.type,
+        url: "/transactions",
+      };
+    case "daily.reminder":
+      // SendDailyReminderForUser.
+      return {
+        title: "Expenses",
+        body: "Time to log your expenses!",
+        tag: "daily-reminder",
+        url: "/transactions",
+      };
+    default:
+      return { title: "Expenses", body: "New activity", tag: payload.tag, url: payload.url ?? "/" };
+  }
+}
 
 self.addEventListener("push", (event) => {
-  let title = "Expenses";
-  let body = "";
-  let tag: string | undefined;
-  let url: string | undefined;
+  let notification: ResolvedNotification = { title: "Expenses", body: "", url: "/" };
 
   if (event.data) {
     try {
-      const payload = event.data.json() as {
-        title?: string;
-        body?: string;
-        tag?: string;
-        url?: string;
-      };
-      if (payload.title) title = payload.title;
-      if (payload.body) body = payload.body;
-      if (payload.tag) tag = payload.tag;
-      if (payload.url) url = payload.url;
+      notification = resolvePushNotification(event.data.json() as ServerPushPayload);
     } catch {
-      body = event.data.text();
+      notification = { ...notification, body: event.data.text() };
     }
   }
 
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
+    self.registration.showNotification(notification.title, {
+      body: notification.body,
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png",
-      tag,
-      data: { url },
+      tag: notification.tag,
+      data: { url: notification.url },
     }),
   );
 });

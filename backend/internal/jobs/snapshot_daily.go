@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/nikonok/expensesapp/backend/internal/db/gen"
+	"github.com/nikonok/expensesapp/backend/internal/records"
 	"github.com/nikonok/expensesapp/backend/internal/snapshot"
 )
 
@@ -15,6 +16,7 @@ import (
 //  1. Creates a snapshot for every family.
 //  2. Prunes expired snapshots.
 //  3. Prunes orphan blobs.
+//  4. Reconciles families.usage_bytes from the live sum of blob sizes.
 func NewDailySnapshotJob(db *sql.DB) ScheduledJob {
 	svc := snapshot.NewService(db)
 	return ScheduledJob{
@@ -67,6 +69,12 @@ func dailySnapshotRun(db *sql.DB, svc *snapshot.Service) Job {
 		}
 		if blobErr := svc.PruneOrphanBlobs(ctx); blobErr != nil {
 			slog.WarnContext(ctx, "daily-snapshot: prune orphan blobs failed", "err", blobErr)
+		}
+
+		// Reconcile usage_bytes after pruning so the recompute reflects the
+		// post-prune blob set.
+		if reconcileErr := records.ReconcileUsage(ctx, db); reconcileErr != nil {
+			slog.WarnContext(ctx, "daily-snapshot: reconcile usage bytes failed", "err", reconcileErr)
 		}
 
 		slog.InfoContext(ctx, "daily-snapshot: done", "date", date)

@@ -6,6 +6,7 @@
 // serves as the display hint; actual per-device revoke is driven from this table).
 
 import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useToast } from "@/components/shared/Toast";
 import { useIsMobile } from "@/hooks/use-is-mobile";
@@ -75,6 +76,7 @@ function SmallBtn({
 }
 
 function StatusBadge({ suspended }: { suspended: boolean }) {
+  const { t } = useTranslation();
   return (
     <span
       style={{
@@ -89,7 +91,7 @@ function StatusBadge({ suspended }: { suspended: boolean }) {
         flexShrink: 0,
       }}
     >
-      {suspended ? "Suspended" : "Active"}
+      {suspended ? t("admin.users.statusSuspended") : t("admin.users.statusActive")}
     </span>
   );
 }
@@ -106,6 +108,7 @@ interface UserRowProps {
 }
 
 function UserRow({ user, onSuspend, onUnsuspend, onPromote, onDemote, acting }: UserRowProps) {
+  const { t } = useTranslation();
   const isSuspended = user.suspendedAt !== null;
   const isMobile = useIsMobile();
   const [expanded, setExpanded] = useState(false);
@@ -159,7 +162,7 @@ function UserRow({ user, onSuspend, onUnsuspend, onPromote, onDemote, acting }: 
               flexShrink: 0,
             }}
           >
-            Admin
+            {t("admin.users.adminBadge")}
           </span>
         )}
         {user.deletePending && (
@@ -176,7 +179,7 @@ function UserRow({ user, onSuspend, onUnsuspend, onPromote, onDemote, acting }: 
               flexShrink: 0,
             }}
           >
-            Delete pending
+            {t("admin.users.deletePendingBadge")}
           </span>
         )}
       </div>
@@ -212,7 +215,7 @@ function UserRow({ user, onSuspend, onUnsuspend, onPromote, onDemote, acting }: 
               color: "var(--color-text-secondary)",
             }}
           >
-            {user.deviceCount} device{user.deviceCount !== 1 ? "s" : ""}
+            {t("admin.users.deviceCount", { count: user.deviceCount })}
           </span>
           <span
             style={{
@@ -221,7 +224,7 @@ function UserRow({ user, onSuspend, onUnsuspend, onPromote, onDemote, acting }: 
               color: "var(--color-text-secondary)",
             }}
           >
-            {user.familyMemberCount} family
+            {t("admin.users.familyCount", { count: user.familyMemberCount })}
           </span>
           <span
             style={{
@@ -262,14 +265,14 @@ function UserRow({ user, onSuspend, onUnsuspend, onPromote, onDemote, acting }: 
       >
         {isSuspended ? (
           <SmallBtn
-            label={acting ? "…" : "Unsuspend"}
+            label={acting ? "…" : t("admin.users.unsuspend")}
             disabled={acting}
             variant="primary"
             onClick={() => onUnsuspend(user.id)}
           />
         ) : (
           <SmallBtn
-            label={acting ? "…" : "Suspend"}
+            label={acting ? "…" : t("admin.users.suspend")}
             disabled={acting}
             variant="danger"
             onClick={() => onSuspend(user.id)}
@@ -281,7 +284,7 @@ function UserRow({ user, onSuspend, onUnsuspend, onPromote, onDemote, acting }: 
           // wire a proper "revoke all sessions for this user" endpoint.
           !user.isRoot && (
             <SmallBtn
-              label={acting ? "…" : "Demote"}
+              label={acting ? "…" : t("admin.users.demote")}
               disabled={acting}
               variant="warn"
               onClick={() => onDemote(user.id)}
@@ -289,7 +292,7 @@ function UserRow({ user, onSuspend, onUnsuspend, onPromote, onDemote, acting }: 
           )
         ) : (
           <SmallBtn
-            label={acting ? "…" : "Promote"}
+            label={acting ? "…" : t("admin.users.promote")}
             disabled={acting}
             variant="default"
             onClick={() => onPromote(user.id)}
@@ -300,7 +303,7 @@ function UserRow({ user, onSuspend, onUnsuspend, onPromote, onDemote, acting }: 
           <button
             type="button"
             aria-expanded={expanded}
-            aria-label={expanded ? "Hide user details" : "Show user details"}
+            aria-label={expanded ? t("admin.users.hideDetails") : t("admin.users.showDetails")}
             onClick={() => setExpanded((v) => !v)}
             style={{
               marginLeft: "auto",
@@ -326,7 +329,7 @@ function UserRow({ user, onSuspend, onUnsuspend, onPromote, onDemote, acting }: 
             ) : (
               <ChevronDown size={14} strokeWidth={1.5} />
             )}
-            <span>Details</span>
+            <span>{t("admin.users.details")}</span>
           </button>
         )}
       </div>
@@ -344,6 +347,7 @@ interface UsersListProps {
 }
 
 export function UsersList({ filter = "all" }: UsersListProps = {}) {
+  const { t } = useTranslation();
   const { show: showToast } = useToast();
 
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -359,11 +363,11 @@ export function UsersList({ filter = "all" }: UsersListProps = {}) {
       setUsers(page.items);
       setHasMore(page.items.length >= page.limit);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to load users", "error");
+      showToast(err instanceof Error ? err.message : t("admin.users.loadFailed"), "error");
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, t]);
 
   useEffect(() => {
     loadInitial();
@@ -377,7 +381,7 @@ export function UsersList({ filter = "all" }: UsersListProps = {}) {
       setUsers((prev) => [...prev, ...page.items]);
       setHasMore(page.items.length >= page.limit);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to load more", "error");
+      showToast(err instanceof Error ? err.message : t("admin.loadMoreFailed"), "error");
     } finally {
       setLoadingMore(false);
     }
@@ -387,12 +391,12 @@ export function UsersList({ filter = "all" }: UsersListProps = {}) {
     setActingUserId(id);
     try {
       await suspendUser(id);
-      showToast("User suspended", "success");
+      showToast(t("admin.users.suspendSuccess"), "success");
       setUsers((prev) =>
         prev.map((u) => (u.id === id ? { ...u, suspendedAt: new Date().toISOString() } : u)),
       );
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to suspend", "error");
+      showToast(err instanceof Error ? err.message : t("admin.users.suspendFailed"), "error");
     } finally {
       setActingUserId(null);
     }
@@ -402,10 +406,10 @@ export function UsersList({ filter = "all" }: UsersListProps = {}) {
     setActingUserId(id);
     try {
       await unsuspendUser(id);
-      showToast("User unsuspended", "success");
+      showToast(t("admin.users.unsuspendSuccess"), "success");
       setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, suspendedAt: null } : u)));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to unsuspend", "error");
+      showToast(err instanceof Error ? err.message : t("admin.users.unsuspendFailed"), "error");
     } finally {
       setActingUserId(null);
     }
@@ -415,10 +419,10 @@ export function UsersList({ filter = "all" }: UsersListProps = {}) {
     setActingUserId(id);
     try {
       await promoteAdmin(id);
-      showToast("User promoted to admin", "success");
+      showToast(t("admin.users.promoteSuccess"), "success");
       setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, isAdmin: true } : u)));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to promote", "error");
+      showToast(err instanceof Error ? err.message : t("admin.users.promoteFailed"), "error");
     } finally {
       setActingUserId(null);
     }
@@ -428,10 +432,10 @@ export function UsersList({ filter = "all" }: UsersListProps = {}) {
     setActingUserId(id);
     try {
       await demoteAdmin(id);
-      showToast("Admin role revoked", "success");
+      showToast(t("admin.users.demoteSuccess"), "success");
       setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, isAdmin: false } : u)));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to demote", "error");
+      showToast(err instanceof Error ? err.message : t("admin.users.demoteFailed"), "error");
     } finally {
       setActingUserId(null);
     }
@@ -447,7 +451,7 @@ export function UsersList({ filter = "all" }: UsersListProps = {}) {
           color: "var(--color-text-secondary)",
         }}
       >
-        Loading…
+        {t("common.loading")}
       </div>
     );
   }
@@ -464,15 +468,15 @@ export function UsersList({ filter = "all" }: UsersListProps = {}) {
           color: "var(--color-text-secondary)",
         }}
       >
-        {filter === "admins" ? "No admins found." : "No users found."}
+        {filter === "admins" ? t("admin.users.emptyAdmins") : t("admin.users.emptyUsers")}
       </div>
     );
   }
 
   const countLabel =
     filter === "admins"
-      ? `${visibleUsers.length} admin${visibleUsers.length !== 1 ? "s" : ""} loaded`
-      : `${visibleUsers.length} user${visibleUsers.length !== 1 ? "s" : ""} loaded`;
+      ? t("admin.users.countLabelAdmins", { count: visibleUsers.length })
+      : t("admin.users.countLabelUsers", { count: visibleUsers.length });
 
   return (
     <div>
@@ -525,7 +529,7 @@ export function UsersList({ filter = "all" }: UsersListProps = {}) {
               opacity: loadingMore ? 0.6 : 1,
             }}
           >
-            {loadingMore ? "Loading…" : "Load more"}
+            {loadingMore ? t("common.loading") : t("admin.loadMore")}
           </button>
         </div>
       )}

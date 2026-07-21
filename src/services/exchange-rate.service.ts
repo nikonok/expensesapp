@@ -90,11 +90,10 @@ export const exchangeRateService = {
         });
       }
 
-      // Prune entries older than 90 days
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - PRUNE_DAYS);
-      const cutoffDate = cutoff.toISOString().slice(0, 10);
-      await db.exchangeRates.where("date").below(cutoffDate).delete();
+      // Prune entries older than 90 days. `date` is local-date (matches the
+      // cache key above) and is not a standalone index — filter, don't query.
+      const cutoffDate = getLocalDateString(PRUNE_DAYS);
+      await db.exchangeRates.filter((e) => e.date < cutoffDate).delete();
       logger.info("exchangeRate.fetch.ok", { baseCurrency });
     } catch (err) {
       logger.error("exchangeRate.fetch.failed", {
@@ -131,8 +130,10 @@ export const exchangeRateService = {
         await exchangeRateService.fetchAndCacheRates(base);
         entry = await db.exchangeRates.where("[baseCurrency+date]").equals([base, today]).first();
       } catch {
-        // Fetch failed — try to find any cached entry for this base
-        entry = await db.exchangeRates.where("baseCurrency").equals(base).last();
+        // Fetch failed — try to find any cached entry for this base, picking
+        // the most recent by date (not by insertion/primary-key order).
+        const cached = await db.exchangeRates.where("baseCurrency").equals(base).toArray();
+        entry = cached.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))[0];
       }
     }
 
@@ -142,16 +143,30 @@ export const exchangeRateService = {
     return rate;
   },
 
-  async getHistoricalRate(from: string, to: string, date: string): Promise<number | null> {
+  async getHistoricalRate(
+    from: string,
+    to: string,
+    date: string,
+    baseOverride?: string,
+  ): Promise<number | null> {
     if (from === to) return 1;
 
-    const base = await getMainCurrency();
+    const base = baseOverride ?? (await getMainCurrency());
 
     // Find most recent cached entry with date <= requested date
-    const entry = await db.exchangeRates
+    let entry = await db.exchangeRates
       .where("[baseCurrency+date]")
       .between([base, ""], [base, date], true, true)
       .last();
+
+    if (!entry) {
+      // No entry on or before the requested date — fall back to the
+      // earliest cached entry for this base (better than no rate at all).
+      entry = await db.exchangeRates
+        .where("[baseCurrency+date]")
+        .between([base, date], [base, "￿"], false, true)
+        .first();
+    }
 
     if (!entry) return null;
     const historicalRate = deriveRate(entry.rates, from, to, base);
@@ -195,7 +210,12 @@ export const exchangeRateService = {
         const uniqueDates = [...new Set(dates)];
         let hasMissing = false;
         for (const date of uniqueDates) {
-          const rate = await exchangeRateService.getHistoricalRate(currency, newMainCurrency, date);
+          const rate = await exchangeRateService.getHistoricalRate(
+            currency,
+            newMainCurrency,
+            date,
+            newMainCurrency,
+          );
           if (rate == null) {
             hasMissing = true;
           } else {

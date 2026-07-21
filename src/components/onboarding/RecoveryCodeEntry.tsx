@@ -5,6 +5,8 @@
 // On submit, calls back with the validated 24-word phrase.
 
 import { useRef, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
+import { validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
 
 const WORD_COUNT = 24;
@@ -22,6 +24,7 @@ function isValidWord(word: string): boolean {
 }
 
 export function RecoveryCodeEntry({ onSubmit, disabled = false }: RecoveryCodeEntryProps) {
+  const { t } = useTranslation();
   const [words, setWords] = useState<string[]>(Array(WORD_COUNT).fill(""));
   const [submitError, setSubmitError] = useState<string | null>(null);
   const inputRefs = useRef<Array<HTMLInputElement | null>>(Array(WORD_COUNT).fill(null));
@@ -73,7 +76,18 @@ export function RecoveryCodeEntry({ onSubmit, disabled = false }: RecoveryCodeEn
       return;
     }
 
-    onSubmit(trimmed.join(" "));
+    // Full-mnemonic checksum validation. Per-word wordlist membership above
+    // only catches unknown words — a transposition (two valid words swapped)
+    // still passes it but fails the BIP39 checksum encoded across the whole
+    // phrase. Checking this here, before onSubmit, avoids burning a 64MiB
+    // Argon2id derivation downstream only to fail with a generic AEAD error.
+    const phrase = trimmed.join(" ");
+    if (!validateMnemonic(phrase, wordlist)) {
+      setSubmitError(t("onboarding.recovery.checksumInvalid"));
+      return;
+    }
+
+    onSubmit(phrase);
   }
 
   const allValid = words.every((w) => {

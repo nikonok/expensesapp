@@ -13,7 +13,6 @@ import {
   wrapPhraseForReveal,
   unwrapPhraseForReveal,
 } from "./recovery";
-import { deriveRecoveryKey } from "./argon-init";
 
 // ── Module-level key state (stays in worker memory) ──────────────────────────
 
@@ -185,7 +184,28 @@ async function getKey(name: string): Promise<Uint8Array | null> {
   });
 }
 
+/**
+ * Guards the raw-key RPCs (`encryptRecord`, `decryptRecord`, `wrapKeyForDevice`,
+ * `unwrapKeyForDevice`) that accept or return key material directly across the
+ * postMessage boundary. These exist only for the dev-only CryptoDemoPage
+ * sandbox; production code must use the `*WithStoredKey` / `*StoredFamilyKey`
+ * variants that keep raw keys inside the worker. Throws outside dev builds so
+ * a compromised or careless caller in production can never pull raw key
+ * material out of worker scope.
+ */
+function assertDevOnlyRpc(rpcType: string): void {
+  if (!import.meta.env.DEV) {
+    throw new Error(`DevOnlyRpc: "${rpcType}" is only available in dev builds`);
+  }
+}
+
 async function clearAllKeys(): Promise<void> {
+  // Run the legacy migration first (same as putKey/getKey). Otherwise, on an
+  // upgraded install that has never called putKey/getKey since deploy, this
+  // clears only the new `expenses-app-keys` store while legacy rows still
+  // sit in `expenses-app-db.cipherKeys` — a later getKey() would then migrate
+  // (i.e. resurrect) that key material, defeating the "full reset".
+  await migrateLegacyKeysOnce();
   const db = await openKeyDb();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(KEY_STORE_NAME, "readwrite");
@@ -315,13 +335,6 @@ type Req =
       createdAt: string;
     }
   | {
-      /** Derives kRecovery from phrase + familyId via Argon2id. */
-      id: number;
-      type: "deriveRecoveryKey";
-      phrase: string;
-      familyId: string;
-    }
-  | {
       /** Unwraps Envelope A (recovery wrap) using kRecovery derived from phrase,
        *  then persists the resulting familyKey to IndexedDB. */
       id: number;
@@ -399,6 +412,19 @@ self.onmessage = async (e: MessageEvent<Req>) => {
         return;
       }
       case "getDevicePublicKey": {
+        // Fall back to the persisted key when the in-memory cache is empty
+        // (e.g. after a page reload spawned a fresh worker instance) — the
+        // device keypair itself is still persisted in the worker's IndexedDB.
+        // Re-populate the cache (both keys) so subsequent calls in this
+        // worker session don't need to hit IndexedDB again.
+        if (!cachedDevicePubKey) {
+          const [storedPub, storedPriv] = await Promise.all([
+            getKey("devicePubKey"),
+            getKey("devicePrivKey"),
+          ]);
+          if (storedPub) cachedDevicePubKey = storedPub;
+          if (storedPriv) cachedDevicePrivKey = storedPriv;
+        }
         post({ id: req.id, ok: true, result: cachedDevicePubKey });
         return;
       }
@@ -432,11 +458,13 @@ self.onmessage = async (e: MessageEvent<Req>) => {
         return;
       }
       case "encryptRecord": {
+        assertDevOnlyRpc(req.type);
         const result = await encryptRecord(req.plaintext, req.familyKey, req.meta);
         post({ id: req.id, ok: true, result });
         return;
       }
       case "decryptRecord": {
+        assertDevOnlyRpc(req.type);
         const result = await decryptRecord({
           blob: req.blob,
           familyKey: req.familyKey,
@@ -446,11 +474,13 @@ self.onmessage = async (e: MessageEvent<Req>) => {
         return;
       }
       case "wrapKeyForDevice": {
+        assertDevOnlyRpc(req.type);
         const result = await wrapKeyForDevice(req.familyKey, req.devicePubKey);
         post({ id: req.id, ok: true, result });
         return;
       }
       case "unwrapKeyForDevice": {
+        assertDevOnlyRpc(req.type);
         const result = await unwrapKeyForDevice(req.envelope, req.devicePubKey, req.devicePrivKey);
         post({ id: req.id, ok: true, result });
         return;
@@ -615,11 +645,6 @@ self.onmessage = async (e: MessageEvent<Req>) => {
           wrapPhraseForReveal(req.phrase, storedFamilyKey3, req.familyId, req.createdAt),
         ]);
         post({ id: req.id, ok: true, result: { wrapBytes: wrapBytes3, phraseCt: phraseCt3 } });
-        return;
-      }
-      case "deriveRecoveryKey": {
-        const kRecovery = await deriveRecoveryKey(req.phrase, req.familyId);
-        post({ id: req.id, ok: true, result: kRecovery });
         return;
       }
       case "unwrapRecoveryEnvelopeAndPersist": {

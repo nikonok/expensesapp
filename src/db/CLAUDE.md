@@ -4,25 +4,25 @@
 
 ## Purpose
 
-Dexie (IndexedDB) database definition: schema versions, TypeScript models, default seeds, and the legacy no-op sync stub.
+Dexie (IndexedDB) database definition: schema versions, TypeScript models, and default seeds.
 
 ## Key files
 
-- `database.ts` — Dexie instance, all `db.version(N).stores(...)` migrations, typed `EntityTable` map.
+- `database.ts` — Dexie instance, all `db.version(N).stores(...)` migrations, typed `EntityTable` map, `resolveLegacyColor` (v7 color-normalizing upgrade helper).
 - `models.ts` — TypeScript interfaces for every Dexie table (`Account`, `Category`, `Transaction`, `Budget`, `ExchangeRateCache`, `Setting`, `Backup`, `Log`, `CipherKey`, `PendingUpload`, `SyncCursor`) plus enum literals.
-- `seed.ts` — default category presets + currency list used by onboarding.
-- `sync-stub.ts` — historical no-op stub kept for compatibility; new sync code lives in `src/services/sync/`.
-- `database.test.ts` — schema upgrade + open tests.
+- `seed.ts` — `DEFAULT_CATEGORY_PRESETS` + `DEFAULT_CURRENCIES` used by onboarding.
+- `database.test.ts` — schema shape + open tests.
+- `color-migration.test.ts` — `resolveLegacyColor` unit tests + a full v6→v7 Dexie upgrade integration test.
 
 ## Public surface
 
 - `db` (`database.ts`) — single Dexie instance imported everywhere.
 - All model interfaces from `models.ts`.
-- `defaultCategoryPresets`, `currencyList` from `seed.ts`.
+- `DEFAULT_CATEGORY_PRESETS`, `DEFAULT_CURRENCIES` from `seed.ts`.
 
 ## Conventions
 
-- **Schema is collapsed for first release at v1**; subsequent additions append new versions: v2 (`logs`), v3 (`cipherKeys`), v4 (`pendingUploads` + `syncCursors`). **To add fields or tables, append `db.version(N+1).stores({...})`** — never edit an existing `db.version(N)` block.
+- **Schema is collapsed for first release at v1**; subsequent additions append new versions: v2 (`logs`), v3 (`cipherKeys`), v4 (`pendingUploads` + `syncCursors`), v5 (no-op field-only change), v6 (main-thread no longer reads/writes `cipherKeys`), v7 (normalizes legacy CSS-var colors to literal `oklch(...)`; drops indexes verified unqueried by any code path). **To add fields or tables, append `db.version(N+1).stores({...})`** — never edit an existing `db.version(N)` block.
 - Repeat all prior tables in every new `stores({...})` call (Dexie requires the full schema per version).
 - **All monetary amounts stored in minor units** (`Account.balance`, `Transaction.amount`, `Transaction.amountMainCurrency`, `Budget.plannedAmount`, etc.).
 - **Soft-delete only**: set `isTrashed = true`. Never call `db.<table>.delete(...)` on domain records. (Outbox / cipherKeys / syncCursors / exchangeRates may hard-delete — they are infrastructure tables.)

@@ -34,7 +34,7 @@ func RequestDeletion(ctx context.Context, db *sql.DB, userID string) (string, er
 	err := internaldb.WithTx(ctx, db, func(tx *sql.Tx) error {
 		qt := gen.New(tx)
 		u, err := qt.SetUserDeleteAfterIfNull(ctx, gen.SetUserDeleteAfterIfNullParams{
-			DeleteAfter: deleteAfterStr,
+			DeleteAfter: sql.NullString{String: deleteAfterStr, Valid: true},
 			ID:          userID,
 		})
 		if errors.Is(err, sql.ErrNoRows) {
@@ -44,7 +44,7 @@ func RequestDeletion(ctx context.Context, db *sql.DB, userID string) (string, er
 				return fetchErr
 			}
 			updatedUser = existing
-			return nil
+			return insertAuditTx(ctx, qt, userID, "user.delete.requested", "user", userID, nowStr)
 		}
 		if err != nil {
 			return err

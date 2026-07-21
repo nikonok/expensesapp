@@ -1,16 +1,9 @@
 import { Outlet, useLocation } from "react-router";
+import { useTranslation } from "react-i18next";
 import BottomNav from "./BottomNav";
 import TopBar from "./TopBar";
 import ContentColumn from "./ContentColumn";
 import type { TabName } from "../../types";
-
-const TAB_TITLES: Record<TabName, string> = {
-  accounts: "Accounts",
-  categories: "Categories",
-  transactions: "Transactions",
-  budget: "Budget",
-  overview: "Overview",
-};
 
 function getActiveTab(pathname: string): TabName {
   if (pathname.startsWith("/accounts")) return "accounts";
@@ -22,9 +15,10 @@ function getActiveTab(pathname: string): TabName {
 }
 
 export default function TabLayout() {
+  const { t } = useTranslation();
   const location = useLocation();
   const activeTab = getActiveTab(location.pathname);
-  const title = TAB_TITLES[activeTab];
+  const title = t(`nav.${activeTab}`);
 
   return (
     <div

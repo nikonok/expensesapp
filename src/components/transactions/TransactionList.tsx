@@ -24,7 +24,8 @@ import { useSettingsStore } from "../../stores/settings-store";
 import { useToast } from "../shared/Toast";
 import type { Transaction, Account, Category } from "../../db/models";
 import { getDayTotals } from "../../utils/transaction-utils";
-import { revertTransaction, revertTransfer } from "../../services/balance.service";
+import { QuotaError, revertTransaction, revertTransfer } from "../../services/balance.service";
+import { pushTransaction } from "../../services/sync/push-helpers";
 import { db } from "../../db/database";
 import PeriodFilter from "../shared/PeriodFilter";
 import { EmptyState } from "../shared/EmptyState";
@@ -173,6 +174,8 @@ export default function TransactionList() {
   async function handleConfirmRemove() {
     setConfirmOpen(false);
     const processedGroups = new Set<string>();
+    let failureCount = 0;
+    let lastError: unknown;
     for (const id of selectedTransactionIds) {
       const tx = txById.get(id);
       if (!tx) continue;
@@ -183,30 +186,51 @@ export default function TransactionList() {
           await revertTransfer(tx.transferGroupId);
         } catch (err) {
           console.error("Failed to revert transfer", err);
+          failureCount++;
+          lastError = err;
         }
       } else {
         try {
           await revertTransaction(tx);
         } catch (err) {
           console.error("Failed to revert transaction", err);
+          failureCount++;
+          lastError = err;
         }
       }
     }
     clearSelection();
+    if (failureCount > 0) {
+      const reason =
+        lastError instanceof QuotaError
+          ? "storage is full — export your data and clear old backups"
+          : lastError instanceof Error
+            ? lastError.message
+            : "unknown error";
+      showToast(
+        `${failureCount} transaction${failureCount !== 1 ? "s" : ""} could not be removed: ${reason}`,
+        "error",
+      );
+    }
   }
 
   // Edit handler — single selection only
-  function handleEdit() {
+  async function handleEdit() {
     const [id] = Array.from(selectedTransactionIds);
     if (id === undefined) return;
     const tx = txById.get(id);
     if (!tx) return;
-    // Navigate to the transaction's actual id (for transfers, use the OUT leg)
+    // Navigate to the transaction's actual id (for transfers, use the OUT
+    // leg). Resolve from the DB directly, not the currently-filtered
+    // `transactions` array — an active account filter may only include the
+    // IN leg, which would otherwise be mistaken for "no OUT leg found".
     let editId = id;
     if (tx.type === "TRANSFER" && tx.transferGroupId) {
-      const outTx = transactions.find(
-        (t) => t.transferGroupId === tx.transferGroupId && t.transferDirection === "OUT",
-      );
+      const groupRecords = await db.transactions
+        .where("transferGroupId")
+        .equals(tx.transferGroupId)
+        .toArray();
+      const outTx = groupRecords.find((t) => t.transferDirection === "OUT");
       if (outTx?.id !== undefined) editId = outTx.id;
     }
     clearSelection();
@@ -249,6 +273,9 @@ export default function TransactionList() {
         await db.transaction("rw", db.transactions, async () => {
           await db.transactions.bulkPut(updates);
         });
+        for (const tx of updates) {
+          await pushTransaction(tx);
+        }
       } else {
         const targetIndex = targetGroup.findIndex((t) => t.id === overId);
         if (targetIndex === -1) return;
@@ -273,6 +300,7 @@ export default function TransactionList() {
           updatedAt: now,
         }));
 
+        let partnerUpdate: Transaction | undefined;
         await db.transaction("rw", db.transactions, async () => {
           await db.transactions.bulkPut(targetUpdates);
           if (sourceUpdates.length > 0) {
@@ -285,10 +313,17 @@ export default function TransactionList() {
               .filter((t) => t.id !== activeTx.id)
               .first();
             if (partner) {
-              await db.transactions.put({ ...partner, date: targetDate, updatedAt: now });
+              partnerUpdate = { ...partner, date: targetDate, updatedAt: now };
+              await db.transactions.put(partnerUpdate);
             }
           }
         });
+        for (const tx of [...targetUpdates, ...sourceUpdates]) {
+          await pushTransaction(tx);
+        }
+        if (partnerUpdate) {
+          await pushTransaction(partnerUpdate);
+        }
       }
     } catch (err) {
       console.error("Failed to save transaction order:", err);

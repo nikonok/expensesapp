@@ -8,11 +8,13 @@
 // excerpt so the user can compare against the joining device's own display.
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useDeviceJoinStore } from "@/stores/device-join-store";
 import { approveDevice, rejectDevice } from "@/services/sync/engine";
 import { useToast } from "./Toast";
 
 export function DeviceJoinedBanner() {
+  const { t } = useTranslation();
   const { pendingDeviceJoin, clear } = useDeviceJoinStore();
   const { show: showToast } = useToast();
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
@@ -26,10 +28,10 @@ export function DeviceJoinedBanner() {
     setBusy("approve");
     try {
       await approveDevice(pending.deviceId, pending.pubKey);
-      showToast("Device approved", "success");
+      showToast(t("devices.joinedBanner.approveSuccess"), "success");
       clear();
     } catch {
-      showToast("Failed to approve device", "error");
+      showToast(t("devices.joinedBanner.approveFailed"), "error");
     } finally {
       setBusy(null);
     }
@@ -40,10 +42,10 @@ export function DeviceJoinedBanner() {
     setBusy("reject");
     try {
       await rejectDevice(pending.deviceId);
-      showToast("Device rejected", "success");
+      showToast(t("devices.joinedBanner.rejectSuccess"), "success");
       clear();
     } catch {
-      showToast("Failed to reject device", "error");
+      showToast(t("devices.joinedBanner.rejectFailed"), "error");
     } finally {
       setBusy(null);
     }
@@ -94,13 +96,14 @@ export function DeviceJoinedBanner() {
             flex: 1,
           }}
         >
-          New device joined: <strong style={{ fontWeight: 500 }}>{pending.label}</strong>
+          {t("devices.joinedBanner.newDevicePrefix")}
+          <strong style={{ fontWeight: 500 }}>{pending.label}</strong>
         </span>
 
         {/* Dismiss */}
         <button
           onClick={clear}
-          aria-label="Dismiss"
+          aria-label={t("devices.joinedBanner.dismiss")}
           disabled={busy !== null}
           style={{
             background: "none",
@@ -138,7 +141,7 @@ export function DeviceJoinedBanner() {
               color: "var(--color-text-muted)",
             }}
           >
-            Verify fingerprint on the joining device:
+            {t("devices.joinedBanner.verifyFingerprint")}
           </span>
           <span
             style={{
@@ -194,7 +197,7 @@ export function DeviceJoinedBanner() {
             minWidth: 88,
           }}
         >
-          {busy === "reject" ? "…" : "Reject"}
+          {busy === "reject" ? "…" : t("devices.joinedBanner.reject")}
         </button>
         <button
           onClick={handleApprove}
@@ -214,7 +217,7 @@ export function DeviceJoinedBanner() {
             minWidth: 88,
           }}
         >
-          {busy === "approve" ? "…" : "Approve"}
+          {busy === "approve" ? "…" : t("devices.joinedBanner.approve")}
         </button>
       </div>
     </div>

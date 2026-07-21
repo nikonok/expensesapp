@@ -22,7 +22,7 @@ function evaluateRaw(expr: string, decimalPlaces: number): number | null {
   const scale = Math.pow(10, dp);
 
   // Normalize unicode operators to ASCII
-  let normalized = expr.replace(/×/g, "*").replace(/÷/g, "/");
+  let normalized = expr.replace(/×/g, "*").replace(/÷/g, "/").replace(/−/g, "-");
 
   // Strip trailing operator
   normalized = normalized.replace(/[+\-*/]\s*$/, "");

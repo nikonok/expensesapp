@@ -62,9 +62,10 @@ type DeviceEnvelope struct {
 }
 
 type Family struct {
-	ID         string
-	CreatedAt  string
-	UsageBytes int64
+	ID                string
+	CreatedAt         string
+	UsageBytes        int64
+	RecoveryCreatedAt sql.NullString
 }
 
 type FamilyInvite struct {
@@ -106,6 +107,15 @@ type HeldNotification struct {
 	Payload      []byte
 	DeliverAfter string
 	CreatedAt    string
+}
+
+type Migration struct {
+	ID             string
+	UserID         string
+	SourceFamilyID sql.NullString
+	TargetFamilyID string
+	RecordCount    int64
+	CommittedAt    string
 }
 
 type NotificationSetting struct {
@@ -163,12 +173,13 @@ type RecordMetum struct {
 }
 
 type Session struct {
-	ID         string
-	DeviceID   string
-	TokenHash  []byte
-	CreatedAt  string
-	LastUsedAt string
-	RevokedAt  sql.NullString
+	ID                string
+	DeviceID          string
+	TokenHash         []byte
+	PreviousTokenHash []byte
+	CreatedAt         string
+	LastUsedAt        string
+	RevokedAt         sql.NullString
 }
 
 type Snapshot struct {
@@ -186,6 +197,15 @@ type SnapshotEntry struct {
 	RecordType   string
 	Version      int64
 	UpdatedAtMap string
+	AddedByUser  sql.NullString
+	EditedByUser sql.NullString
+}
+
+type SupportLog struct {
+	ID        string
+	UserID    string
+	Payload   []byte
+	CreatedAt string
 }
 
 type User struct {
@@ -200,20 +220,4 @@ type User struct {
 	DeleteAfter  sql.NullString
 	CreatedAt    string
 	LastSigninAt sql.NullString
-}
-
-type Migration struct {
-	ID             string
-	UserID         string
-	SourceFamilyID sql.NullString
-	TargetFamilyID string
-	RecordCount    int64
-	CommittedAt    string
-}
-
-type SupportLog struct {
-	ID        string
-	UserID    string
-	Payload   []byte
-	CreatedAt string
 }

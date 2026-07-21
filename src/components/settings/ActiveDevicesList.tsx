@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { apiFetch } from "@/services/auth/client";
 import { useAuthStore } from "@/services/auth/session";
 import { useToast } from "@/components/shared/Toast";
@@ -20,6 +21,7 @@ interface DeviceItem {
 }
 
 export function ActiveDevicesList() {
+  const { t } = useTranslation();
   const { show: showToast } = useToast();
   const navigate = useNavigate();
   const currentDeviceId = useAuthStore((s) => s.device?.id);
@@ -36,11 +38,11 @@ export function ActiveDevicesList() {
       const items = await apiFetch<DeviceItem[]>("/api/v1/me/devices");
       setDevices(items.filter((d) => d.status === "active"));
     } catch {
-      showToast("Failed to load devices", "error");
+      showToast(t("devices.active.loadFailed"), "error");
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, t]);
 
   useEffect(() => {
     loadDevices();
@@ -50,16 +52,16 @@ export function ActiveDevicesList() {
     setRevoking(deviceId);
     try {
       await apiFetch(`/api/v1/me/devices/${deviceId}/revoke`, { method: "POST" });
-      showToast("Device signed out", "success");
+      showToast(t("devices.active.signOutSuccess"), "success");
       if (deviceId === currentDeviceId) {
         // Sign out of current device → go to sign-in screen.
-        useAuthStore.getState().signOut();
+        await useAuthStore.getState().signOut();
         navigate("/signin", { replace: true });
       } else {
         setDevices((prev) => prev.filter((d) => d.id !== deviceId));
       }
     } catch {
-      showToast("Failed to sign out device", "error");
+      showToast(t("devices.active.signOutFailed"), "error");
     } finally {
       setRevoking(null);
     }
@@ -80,11 +82,11 @@ export function ActiveDevicesList() {
     setSigningOutAll(true);
     try {
       await apiFetch("/api/v1/auth/signout-all", { method: "POST" });
-      showToast("Signed out of all devices", "success");
-      useAuthStore.getState().signOut();
+      showToast(t("devices.active.signOutAllSuccess"), "success");
+      await useAuthStore.getState().signOut();
       navigate("/signin", { replace: true });
     } catch {
-      showToast("Failed to sign out of all devices", "error");
+      showToast(t("devices.active.signOutAllFailed"), "error");
     } finally {
       setSigningOutAll(false);
       setConfirmSignOutAll(false);
@@ -101,7 +103,7 @@ export function ActiveDevicesList() {
           color: "var(--color-text-muted)",
         }}
       >
-        Loading…
+        {t("common.loading")}
       </div>
     );
   }
@@ -116,7 +118,7 @@ export function ActiveDevicesList() {
           color: "var(--color-text-muted)",
         }}
       >
-        No active devices
+        {t("devices.active.empty")}
       </div>
     );
   }
@@ -174,7 +176,7 @@ export function ActiveDevicesList() {
                       flexShrink: 0,
                     }}
                   >
-                    This device
+                    {t("devices.active.thisDeviceBadge")}
                   </span>
                 )}
               </div>
@@ -187,7 +189,9 @@ export function ActiveDevicesList() {
                     marginTop: 2,
                   }}
                 >
-                  Last seen {new Date(device.lastSeenAt).toLocaleDateString()}
+                  {t("devices.active.lastSeen", {
+                    date: new Date(device.lastSeenAt).toLocaleDateString(),
+                  })}
                 </div>
               )}
             </div>
@@ -196,7 +200,9 @@ export function ActiveDevicesList() {
               onClick={() => handleRevoke(device.id)}
               disabled={revoking === device.id}
               aria-label={
-                isCurrent ? `Sign out of this device (${device.label})` : `Sign out ${device.label}`
+                isCurrent
+                  ? t("devices.active.ariaSignOutSelf", { label: device.label })
+                  : t("devices.active.ariaSignOutOther", { label: device.label })
               }
               style={{
                 background: "none",
@@ -213,7 +219,11 @@ export function ActiveDevicesList() {
                 flexShrink: 0,
               }}
             >
-              {revoking === device.id ? "…" : isCurrent ? "Sign out (this device)" : "Sign out"}
+              {revoking === device.id
+                ? "…"
+                : isCurrent
+                  ? t("devices.active.signOutThisDevice")
+                  : t("devices.active.signOut")}
             </button>
           </div>
         );
@@ -231,7 +241,7 @@ export function ActiveDevicesList() {
         <button
           onClick={() => setConfirmSignOutAll(true)}
           disabled={signingOutAll}
-          aria-label="Sign out of all devices"
+          aria-label={t("devices.active.signOutAllDevices")}
           style={{
             background: "none",
             border: "1px solid var(--color-expense)",
@@ -245,15 +255,17 @@ export function ActiveDevicesList() {
             minHeight: 44,
           }}
         >
-          {signingOutAll ? "Signing out…" : "Sign out all devices"}
+          {signingOutAll
+            ? t("devices.active.signingOutAll")
+            : t("devices.active.signOutAllDevices")}
         </button>
       </div>
 
       <ConfirmDialog
         isOpen={confirmSelfSignOut}
-        title="Sign out of this device"
-        body="You are about to sign out of this device. Continue?"
-        confirmLabel="Sign out"
+        title={t("devices.active.confirmSelfTitle")}
+        body={t("devices.active.confirmSelfBody")}
+        confirmLabel={t("devices.active.signOut")}
         onConfirm={() => {
           setConfirmSelfSignOut(false);
           if (currentDeviceId) revokeDevice(currentDeviceId);
@@ -264,9 +276,9 @@ export function ActiveDevicesList() {
 
       <ConfirmDialog
         isOpen={confirmSignOutAll}
-        title="Sign out of all devices"
-        body="This will revoke every active session for your account. You will need to sign in again on every device."
-        confirmLabel="Sign out all"
+        title={t("devices.active.confirmAllTitle")}
+        body={t("devices.active.confirmAllBody")}
+        confirmLabel={t("devices.active.confirmAllLabel")}
         onConfirm={signOutAll}
         onCancel={() => setConfirmSignOutAll(false)}
         variant="destructive"

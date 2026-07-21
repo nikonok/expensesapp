@@ -40,6 +40,10 @@ type InitParams struct {
 	PhraseCt []byte
 	// Salt is the 16-byte HKDF-derived salt stored explicitly.
 	Salt []byte
+	// RecoveryCreatedAt is an opaque, client-supplied createdAt string bound
+	// into the recovery-envelope AAD. Stored verbatim (never reformatted);
+	// empty when the client did not supply one.
+	RecoveryCreatedAt string
 }
 
 // Service holds dependencies for family business logic.
@@ -72,8 +76,9 @@ func (s *Service) Init(ctx context.Context, p InitParams) error {
 
 		// Insert families row.
 		if err := qt.InsertFamily(ctx, gen.InsertFamilyParams{
-			ID:        p.FamilyID,
-			CreatedAt: now,
+			ID:                p.FamilyID,
+			CreatedAt:         now,
+			RecoveryCreatedAt: nullString(p.RecoveryCreatedAt),
 		}); err != nil {
 			return err
 		}
@@ -149,10 +154,10 @@ func (s *Service) LookupActive(ctx context.Context, userID string) (*gen.FamilyM
 
 // SendInviteParams carries inputs for sending an invite.
 type SendInviteParams struct {
-	CallerUserID    string
-	CallerFamilyID  string
-	CallerEmail     string
-	InviteeEmail    string
+	CallerUserID   string
+	CallerFamilyID string
+	CallerEmail    string
+	InviteeEmail   string
 }
 
 // SendInviteResult carries the result of a successful invite send.
@@ -186,7 +191,10 @@ func (s *Service) SendInvite(ctx context.Context, p SendInviteParams) (SendInvit
 		}
 
 		// Duplicate invite check.
-		_, err := qt.GetPendingInviteForEmail(ctx, p.CallerFamilyID, p.InviteeEmail)
+		_, err := qt.GetPendingInviteForEmail(ctx, gen.GetPendingInviteForEmailParams{
+			FamilyID:     p.CallerFamilyID,
+			InviteeEmail: p.InviteeEmail,
+		})
 		if err == nil {
 			return ErrDuplicateInvite
 		}
@@ -233,15 +241,36 @@ type AcceptInviteParams struct {
 	InviteID     string
 	CallerUserID string
 	CallerEmail  string
+	// CallerDeviceID is the device making this request (from the session).
+	// It does not hold the target family's key yet, so it is moved to
+	// 'pending' as part of the same transaction — mirroring how a brand-new
+	// device is created 'pending' on sign-in when the user already belongs
+	// to a family (see auth.PostGoogle).
+	CallerDeviceID string
+	// DevicePubKey is an optional X25519 public key (raw bytes) for
+	// CallerDeviceID. Solo devices (never part of a family) may not have
+	// generated a keypair yet; if supplied here, it is written onto the
+	// device row so an existing family member can wrap the family key for it.
+	DevicePubKey []byte
+}
+
+// AcceptInviteResult carries the result of a successful invite accept.
+type AcceptInviteResult struct {
+	FamilyID string
+	// DeviceWentPending is true when CallerDeviceID was transitioned from
+	// 'active' to 'pending' as part of this accept.
+	DeviceWentPending bool
 }
 
 // AcceptInvite accepts the invite atomically. Returns ErrNeedsMigrationDecision
 // when the caller is already in a family.
-func (s *Service) AcceptInvite(ctx context.Context, p AcceptInviteParams) error {
+func (s *Service) AcceptInvite(ctx context.Context, p AcceptInviteParams) (AcceptInviteResult, error) {
 	now := nowUTC()
 	nowStr := httpx.FormatTime(now)
 
-	return internaldb.WithTx(ctx, s.db, func(tx *sql.Tx) error {
+	var result AcceptInviteResult
+
+	err := internaldb.WithTx(ctx, s.db, func(tx *sql.Tx) error {
 		qt := gen.New(tx)
 
 		// Load invite.
@@ -298,12 +327,31 @@ func (s *Service) AcceptInvite(ctx context.Context, p AcceptInviteParams) error 
 			return fmt.Errorf("update invite status: %w", err)
 		}
 
+		// The accepting device does not hold the target family's key yet —
+		// move it back to 'pending' so RequireActiveDevice blocks push/pull
+		// until an existing member of the target family wraps a fresh
+		// envelope for it via POST /v1/family/devices/{id}/envelope.
+		if p.CallerDeviceID != "" {
+			if len(p.DevicePubKey) > 0 {
+				if err := qt.UpdateDevicePubKey(ctx, gen.UpdateDevicePubKeyParams{
+					PubKey: p.DevicePubKey,
+					ID:     p.CallerDeviceID,
+				}); err != nil {
+					return fmt.Errorf("update device pub key: %w", err)
+				}
+			}
+			if err := qt.SetDevicePendingByID(ctx, p.CallerDeviceID); err != nil {
+				return fmt.Errorf("set device pending: %w", err)
+			}
+			result.DeviceWentPending = true
+		}
+
 		// Audit.
 		auditID, err := uuid.NewV7()
 		if err != nil {
 			return err
 		}
-		return qt.InsertAuditEntry(ctx, gen.InsertAuditEntryParams{
+		if err := qt.InsertAuditEntry(ctx, gen.InsertAuditEntryParams{
 			ID:          auditID.String(),
 			ActorUserID: nullString(p.CallerUserID),
 			ActorEmail:  nullString(p.CallerEmail),
@@ -312,8 +360,14 @@ func (s *Service) AcceptInvite(ctx context.Context, p AcceptInviteParams) error 
 			TargetID:    nullString(p.InviteID),
 			DetailJson:  sql.NullString{},
 			CreatedAt:   nowStr,
-		})
+		}); err != nil {
+			return err
+		}
+
+		result.FamilyID = invite.FamilyID
+		return nil
 	})
+	return result, err
 }
 
 // DeclineInviteParams carries inputs for declining an invite.
@@ -436,10 +490,16 @@ func (s *Service) MigrateSolo(ctx context.Context, p MigrateSoloParams) (Migrate
 
 		// Verify that the caller has a right to migrate into the target family:
 		// either already a member (e.g. idempotent re-try) or holds a pending invite.
-		_, memberErr := qt.GetFamilyMemberByUserID(ctx, p.TargetFamilyID, p.CallerUserID)
+		_, memberErr := qt.GetFamilyMemberByUserID(ctx, gen.GetFamilyMemberByUserIDParams{
+			FamilyID: p.TargetFamilyID,
+			UserID:   p.CallerUserID,
+		})
 		if errors.Is(memberErr, sql.ErrNoRows) {
 			// Not a member — check for a pending invite.
-			_, inviteErr := qt.GetPendingInviteForEmail(ctx, p.TargetFamilyID, p.CallerEmail)
+			_, inviteErr := qt.GetPendingInviteForEmail(ctx, gen.GetPendingInviteForEmailParams{
+				FamilyID:     p.TargetFamilyID,
+				InviteeEmail: p.CallerEmail,
+			})
 			if errors.Is(inviteErr, sql.ErrNoRows) {
 				return ErrNotInTargetFamily
 			}
@@ -475,9 +535,28 @@ func (s *Service) MigrateSolo(ctx context.Context, p MigrateSoloParams) (Migrate
 				return fmt.Errorf("advance seq: %w", err)
 			}
 
-			// Try insert; if record already exists in target, update it.
-			existingMeta, metaErr := qt.GetRecordMeta(ctx, rec.RecordID)
+			// Try insert; if the record already has a row in the caller's OWN
+			// source family (its pre-migration home), update that row in
+			// place. Scoping the lookup by SourceFamilyID (rather than an
+			// unscoped global lookup) prevents a client from using a
+			// record_id that happens to belong to a DIFFERENT, unrelated
+			// family to read or overwrite that family's row.
+			existingMeta, metaErr := qt.GetRecordMeta(ctx, gen.GetRecordMetaParams{
+				RecordID: rec.RecordID,
+				FamilyID: p.SourceFamilyID,
+			})
 			if errors.Is(metaErr, sql.ErrNoRows) {
+				// Not found in the source family either — this is a brand-new
+				// record_id. Guard against it colliding with some OTHER
+				// family's row before inserting (record_meta.record_id is a
+				// global PRIMARY KEY).
+				exists, existsErr := qt.RecordIDExistsInAnyFamily(ctx, rec.RecordID)
+				if existsErr != nil {
+					return fmt.Errorf("check record id collision %s: %w", rec.RecordID, existsErr)
+				}
+				if exists {
+					return fmt.Errorf("migrate record %s: %w", rec.RecordID, records.ErrRecordIDConflict)
+				}
 				if err := qt.InsertRecordMeta(ctx, gen.InsertRecordMetaParams{
 					RecordID:       rec.RecordID,
 					FamilyID:       p.TargetFamilyID,
@@ -497,7 +576,12 @@ func (s *Service) MigrateSolo(ctx context.Context, p MigrateSoloParams) (Migrate
 			} else if metaErr != nil {
 				return fmt.Errorf("get record_meta %s: %w", rec.RecordID, metaErr)
 			} else {
-				if err := qt.UpdateRecordMeta(ctx, gen.UpdateRecordMetaParams{
+				// Rewrite family_id along with the update: the record's ownership
+				// row moves from the caller's source (solo) family into the
+				// target family, matching where its blob and family_seq (already
+				// allocated from the target family's counter above) now live.
+				if err := qt.UpdateRecordMetaFamily(ctx, gen.UpdateRecordMetaFamilyParams{
+					NewFamilyID:    p.TargetFamilyID,
 					BlobID:         blobID.String(),
 					Version:        existingMeta.Version + 1,
 					EditedByUser:   rec.EditedByUser,
@@ -506,6 +590,7 @@ func (s *Service) MigrateSolo(ctx context.Context, p MigrateSoloParams) (Migrate
 					FamilySeq:      seq,
 					LastModifiedAt: nowStr,
 					RecordID:       rec.RecordID,
+					OldFamilyID:    p.SourceFamilyID,
 				}); err != nil {
 					return fmt.Errorf("update record_meta %s: %w", rec.RecordID, err)
 				}
@@ -656,7 +741,10 @@ func (s *Service) RemoveMember(ctx context.Context, p RemoveMemberParams) error 
 		qt := gen.New(tx)
 
 		// Load target's current membership in caller's family.
-		targetMember, err := qt.GetFamilyMemberByUserID(ctx, p.CallerFamilyID, p.TargetUserID)
+		targetMember, err := qt.GetFamilyMemberByUserID(ctx, gen.GetFamilyMemberByUserIDParams{
+			FamilyID: p.CallerFamilyID,
+			UserID:   p.TargetUserID,
+		})
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotSameFamily
 		}

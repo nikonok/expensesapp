@@ -98,14 +98,26 @@ func NewRouter(db *sql.DB, authH *authpkg.Handler, reauthH *authpkg.ReauthHandle
 			// Sync + live + family-envelope endpoints (Phase 4+) — require active family membership.
 			r.Group(func(r chi.Router) {
 				r.Use(authpkg.RequireFamilyMembership(db))
-				r.Post("/v1/sync/push", syncH.PostPush)
-				r.Get("/v1/sync/pull", syncH.GetPull)
+
+				// GetLive stays reachable for 'pending' devices (they need it to
+				// receive the device.activated SSE event); push/pull do not.
 				r.Get("/v1/sync/live", liveH.GetLive)
 				r.Get("/v1/family/recovery-envelope", familyH.GetRecoveryEnvelope)
 
-				// Snapshot endpoints (Phase 8+).
-				r.Get("/v1/snapshots", snapshotH.GetSnapshots)
-				r.Post("/v1/snapshots/{date}/restore", snapshotH.PostRestore)
+				// Sync push/pull, and snapshot list/restore, all require an
+				// active (non-pending) device — a device still awaiting its
+				// family-key envelope must not be able to read or write
+				// family ciphertext, nor trigger a snapshot restore that
+				// rolls back the whole family's live record state.
+				r.Group(func(r chi.Router) {
+					r.Use(authpkg.RequireActiveDevice)
+					r.Post("/v1/sync/push", syncH.PostPush)
+					r.Get("/v1/sync/pull", syncH.GetPull)
+
+					// Snapshot endpoints (Phase 8+).
+					r.Get("/v1/snapshots", snapshotH.GetSnapshots)
+					r.Post("/v1/snapshots/{date}/restore", snapshotH.PostRestore)
+				})
 			})
 
 			// Push subscription endpoints (Phase 9+).

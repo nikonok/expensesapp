@@ -79,6 +79,25 @@ UPDATE devices SET status = 'revoked', revoked_at = ?, revoke_reason = ? WHERE i
 -- name: TouchDevice :exec
 UPDATE devices SET last_seen_at = ? WHERE id = ?;
 
+-- name: SetDevicePendingByID :exec
+-- Moves an already-active device back to 'pending', requiring an existing
+-- family member to wrap a fresh key envelope for it before it may sync
+-- push/pull again. Used when a device gains membership in a family whose
+-- key it does not yet hold (e.g. accepting a family invite).
+UPDATE devices SET status = 'pending' WHERE id = ? AND status = 'active';
+
+-- name: UpdateDevicePubKey :exec
+-- Overwrites a device's stored public key. Used when a solo device (created
+-- without a family, hence no X25519 key) later joins a family and supplies
+-- its keypair for the first time.
+UPDATE devices SET pub_key = ? WHERE id = ?;
+
+-- name: DeleteDevicesByUser :exec
+-- Cascades sessions (-> reauth_challenges/reauth_grants), device_envelopes, and
+-- push_subscriptions via their ON DELETE CASCADE FKs to devices(id)/sessions(id).
+-- Used by account purge for both the hard-delete and the PII-scrub path.
+DELETE FROM devices WHERE user_id = ?;
+
 -- ----- sessions -----
 
 -- name: InsertSession :exec
@@ -98,6 +117,7 @@ SELECT
     s.previous_token_hash,
     d.user_id,
     d.status AS device_status,
+    d.last_seen_at AS device_last_seen_at,
     u.email,
     u.display_name,
     u.is_admin,
@@ -154,7 +174,15 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 -- ----- families -----
 
 -- name: InsertFamily :exec
-INSERT INTO families (id, created_at, usage_bytes) VALUES (?, ?, 0);
+-- recovery_created_at is the opaque, client-supplied createdAt bound into the
+-- recovery-envelope AAD (B9/B10); NULL when the client did not supply one
+-- (legacy clients), in which case callers fall back to families.created_at.
+INSERT INTO families (id, created_at, usage_bytes, recovery_created_at) VALUES (?, ?, 0, ?);
+
+-- name: SetFamilyRecoveryCreatedAt :exec
+-- Allows updating recovery_created_at when a new recovery envelope is stored
+-- (regenerate path), if the request carries a createdAt value.
+UPDATE families SET recovery_created_at = ? WHERE id = ?;
 
 -- name: InsertFamilyMember :exec
 INSERT INTO family_members (family_id, user_id, joined_at, left_at, last_removed_at)
@@ -175,6 +203,12 @@ INSERT INTO family_seq (family_id, next_seq) VALUES (?, 1);
 -- Returns the active family_members row for a user (left_at IS NULL).
 SELECT * FROM family_members WHERE user_id = ? AND left_at IS NULL LIMIT 1;
 
+-- name: ListActiveFamilyIDsForUser :many
+-- Returns family_ids the user is currently an active member of. Used by
+-- account purge to find families that may become empty once this user
+-- soft-leaves, so they can be cascade-deleted (data-retention requirement).
+SELECT family_id FROM family_members WHERE user_id = ? AND left_at IS NULL;
+
 -- name: GetFamilyByID :one
 SELECT * FROM families WHERE id = ? LIMIT 1;
 
@@ -182,7 +216,7 @@ SELECT * FROM families WHERE id = ? LIMIT 1;
 -- Hard-delete a family row. FK ON DELETE CASCADE removes its members, invites,
 -- device envelopes, recovery envelope, family_seq, blobs, record_meta, and
 -- snapshots in one shot. Used by family.Leave when the last active member
--- leaves (B4f).
+-- leaves (B4f), and by account purge when a user's departure empties a family.
 DELETE FROM families WHERE id = ?;
 
 -- ----- blobs -----
@@ -197,7 +231,18 @@ SELECT * FROM blobs WHERE id = ? LIMIT 1;
 -- ----- record_meta -----
 
 -- name: GetRecordMeta :one
-SELECT * FROM record_meta WHERE record_id = ? LIMIT 1;
+-- Family-scoped: record_id is a client-supplied UUID and record_meta.record_id
+-- is a global PRIMARY KEY, so a lookup that ignores family_id would let one
+-- family read another family's record via a guessed/reused recordId. Always
+-- scope by the caller's family_id; a record_id that exists but belongs to a
+-- different family must look identical to "not found" here.
+SELECT * FROM record_meta WHERE record_id = ? AND family_id = ? LIMIT 1;
+
+-- name: RecordIDExistsInAnyFamily :one
+-- Used to reject a cross-family record_id collision at insert time (before it
+-- would otherwise hit the record_meta PRIMARY KEY(record_id) and surface as a
+-- generic DB error). Deliberately does NOT reveal which family owns it.
+SELECT EXISTS(SELECT 1 FROM record_meta WHERE record_id = ?) AS record_exists;
 
 -- name: InsertRecordMeta :exec
 INSERT INTO record_meta (record_id, family_id, record_type, blob_id, version,
@@ -206,11 +251,55 @@ INSERT INTO record_meta (record_id, family_id, record_type, blob_id, version,
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdateRecordMeta :exec
+-- Family-scoped for the same reason as GetRecordMeta above.
 UPDATE record_meta
 SET blob_id = ?, version = ?, edited_by_user = ?,
     updated_at_map = ?, deleted_at = ?,
     family_seq = ?, last_modified_at = ?
-WHERE record_id = ?;
+WHERE record_id = ? AND family_id = ?;
+
+-- name: UpdateRecordMetaFamily :exec
+-- Same as UpdateRecordMeta, but also rewrites family_id. Used by MigrateSolo
+-- to move an existing record's ownership row from the caller's solo
+-- (source) family into the target family it is migrating into -- otherwise
+-- the row would keep pointing at the old family_id even though its blob
+-- and family_seq have already moved to the target. The WHERE clause still
+-- scopes the lookup by the record's CURRENT (source) family_id for the same
+-- anti-collision reason as GetRecordMeta above; sqlc.arg names disambiguate
+-- the two family_id occurrences.
+UPDATE record_meta
+SET family_id       = sqlc.arg(new_family_id),
+    blob_id         = sqlc.arg(blob_id),
+    version         = sqlc.arg(version),
+    edited_by_user  = sqlc.arg(edited_by_user),
+    updated_at_map  = sqlc.arg(updated_at_map),
+    deleted_at      = sqlc.arg(deleted_at),
+    family_seq      = sqlc.arg(family_seq),
+    last_modified_at = sqlc.arg(last_modified_at)
+WHERE record_id = sqlc.arg(record_id) AND family_id = sqlc.arg(old_family_id);
+
+-- name: CountRecordMetaRefsForUser :one
+-- Counts record_meta rows (across all families) that still reference userID
+-- as added_by_user or edited_by_user. record_meta has NO ON DELETE clause on
+-- those FKs (RESTRICT), and rewriting them would break the AAD binding on the
+-- referenced blob, so account purge uses this to decide hard-delete vs a
+-- PII-scrubbed tombstone.
+SELECT COUNT(*) FROM record_meta
+WHERE added_by_user = sqlc.arg(user_id) OR edited_by_user = sqlc.arg(user_id);
+
+-- name: CountSnapshotEntryRefsForUser :one
+-- Counts snapshot_entries rows that still reference userID as added_by_user
+-- or edited_by_user. Those columns have NO ON DELETE clause (see migration
+-- 00005) and are captured verbatim from record_meta at snapshot time, bound
+-- into the referenced blob's AAD (see InsertSnapshotEntry) -- rewriting them
+-- would make the ciphertext undecryptable, same constraint as record_meta.
+-- Expired snapshots are removed by DeleteExpiredSnapshots, which cascades to
+-- their entries via snapshot_entries.snapshot_id ON DELETE CASCADE, so a
+-- plain COUNT(*) here already reflects only live (non-expired) snapshots.
+-- Account purge ORs this into the same hard-delete-vs-scrub decision as
+-- CountRecordMetaRefsForUser.
+SELECT COUNT(*) FROM snapshot_entries
+WHERE added_by_user = sqlc.arg(user_id) OR edited_by_user = sqlc.arg(user_id);
 
 -- name: ListRecordsSinceSeq :many
 -- Returns records for a family with family_seq > afterSeq, ordered by family_seq ASC.
@@ -243,6 +332,14 @@ RETURNING next_seq - 1;
 -- name: IncrementFamilyUsage :exec
 UPDATE families SET usage_bytes = usage_bytes + ? WHERE id = ?;
 
+-- name: ReconcileFamilyUsageBytes :exec
+-- Recomputes usage_bytes for every family from the live sum of blobs.byte_count,
+-- correcting any drift left by incremental updates (e.g. PruneOrphanBlobs
+-- deletes rows without decrementing usage_bytes). Self-healing; safe to run
+-- repeatedly on a schedule.
+UPDATE families
+SET usage_bytes = COALESCE((SELECT SUM(b.byte_count) FROM blobs b WHERE b.family_id = families.id), 0);
+
 -- ----- reauth_challenges -----
 
 -- name: InsertReauthChallenge :exec
@@ -255,6 +352,11 @@ WHERE nonce = ? AND used_at IS NULL LIMIT 1;
 
 -- name: MarkReauthChallengeUsed :exec
 UPDATE reauth_challenges SET used_at = ? WHERE nonce = ? AND session_id = ?;
+
+-- name: DeleteOldReauthChallenges :exec
+-- Periodic cleanup: reauth_challenges have a 60s TTL, but expired/used rows are
+-- never otherwise removed. cutoff is normally "now - 24h".
+DELETE FROM reauth_challenges WHERE expires_at < ?;
 
 -- ----- reauth_grants -----
 
@@ -275,7 +377,12 @@ UPDATE reauth_grants SET used_at = ? WHERE id = ? AND session_id = ?;
 UPDATE reauth_grants
 SET used_at = ?
 WHERE id = ? AND used_at IS NULL AND expires_at > ?
-RETURNING id, session_id, purpose, expires_at, used_at
+RETURNING id, session_id, purpose, expires_at, used_at;
+
+-- name: DeleteOldReauthGrants :exec
+-- Periodic cleanup: reauth_grants have a 60s TTL, but expired/used rows are
+-- never otherwise removed. cutoff is normally "now - 24h".
+DELETE FROM reauth_grants WHERE expires_at < ?;
 
 -- ----- family_recovery_envelopes -----
 
@@ -346,6 +453,12 @@ VALUES (?, ?, ?, ?, ?, ?);
 -- name: GetMigrationRecord :one
 SELECT * FROM migrations WHERE id = ? LIMIT 1;
 
+-- name: DeleteMigrationsByUser :exec
+-- Removes solo-to-family migration idempotency records for the user. Called
+-- during account purge (both hard-delete and PII-scrub paths); these rows
+-- also have a NOT NULL FK to users(id) with no ON DELETE clause.
+DELETE FROM migrations WHERE user_id = ?;
+
 -- ----- snapshots -----
 
 -- name: InsertSnapshot :exec
@@ -353,8 +466,12 @@ INSERT INTO snapshots (id, family_id, snapshot_date, created_at, expires_at)
 VALUES (?, ?, ?, ?, ?);
 
 -- name: InsertSnapshotEntry :exec
-INSERT INTO snapshot_entries (snapshot_id, record_id, blob_id, record_type, version, updated_at_map)
-VALUES (?, ?, ?, ?, ?, ?);
+-- added_by_user/edited_by_user are captured verbatim from record_meta at
+-- snapshot time so restore can reapply them (they are bound into the blob's
+-- AAD; rewriting them to the restoring caller would make the ciphertext
+-- undecryptable).
+INSERT INTO snapshot_entries (snapshot_id, record_id, blob_id, record_type, version, updated_at_map, added_by_user, edited_by_user)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: ListSnapshotsForFamily :many
 -- Returns up to 30 most recent snapshots for the family, ordered by snapshot_date DESC.
@@ -369,7 +486,7 @@ WHERE family_id = ? AND snapshot_date = ?
 LIMIT 1;
 
 -- name: ListSnapshotEntries :many
-SELECT snapshot_id, record_id, blob_id, record_type, version, updated_at_map
+SELECT snapshot_id, record_id, blob_id, record_type, version, updated_at_map, added_by_user, edited_by_user
 FROM snapshot_entries WHERE snapshot_id = ?;
 
 -- name: DeleteExpiredSnapshots :exec
@@ -387,7 +504,7 @@ WHERE id NOT IN (SELECT blob_id FROM record_meta)
 SELECT id FROM families ORDER BY id;
 
 -- name: ListNonDeletedRecordMetaForFamily :many
-SELECT record_id, blob_id, record_type, version, updated_at_map
+SELECT record_id, blob_id, record_type, version, updated_at_map, added_by_user, edited_by_user
 FROM record_meta
 WHERE family_id = ? AND deleted_at IS NULL;
 
@@ -449,6 +566,13 @@ ON CONFLICT(user_id) DO UPDATE SET
     family_digest  = excluded.family_digest,
     updated_at     = excluded.updated_at;
 
+-- name: ListNotificationSettingsForDigest :many
+-- Returns users with an eligible reminder configured, for the hourly digest-push job.
+SELECT user_id, tz, reminder_time, daily_reminder, family_digest
+FROM notification_settings
+WHERE (daily_reminder = 1 OR family_digest = 1)
+  AND reminder_time IS NOT NULL;
+
 -- ----- held_notifications -----
 
 -- name: InsertHeldNotification :exec
@@ -498,13 +622,77 @@ SELECT * FROM users WHERE delete_after IS NOT NULL AND delete_after <= ?;
 -- name: HardDeleteUser :exec
 DELETE FROM users WHERE id = ?;
 
+-- name: ScrubUserPII :exec
+-- Replaces PII on a user row without deleting it, for a user whose
+-- record_meta references (added_by_user/edited_by_user) still survive in a
+-- shared family; those FKs have no ON DELETE clause, and rewriting the
+-- referenced record_meta rows would break their AAD binding. Keeps the row
+-- (and its id) alive as a scrubbed tombstone instead of hard-deleting it.
+UPDATE users
+SET email = ?, display_name = ?, google_sub = NULL, is_admin = 0, is_root = 0,
+    promoter_id = NULL, suspended_at = NULL, delete_after = NULL
+WHERE id = ?;
+
 -- ----- family member soft-leave for purge -----
 
 -- name: SoftLeaveAllFamilies :exec
 -- Soft-leave all active family memberships for a user before hard delete.
 UPDATE family_members SET left_at = ? WHERE user_id = ? AND left_at IS NULL;
 
+-- ----- pre-purge cleanup for non-CASCADE FKs -----
+
+-- name: DeleteAllowlistByAddedBy :exec
+-- Removes allowlist entries added by the given user.
+-- Called before HardDeleteUser to satisfy the RESTRICT FK.
+DELETE FROM allowlist WHERE added_by = ?;
+
+-- name: DeleteFamilyInvitesByInvitedBy :exec
+-- Removes pending invites created by the user.
+DELETE FROM family_invites WHERE invited_by = ?;
+
 -- ----- support_logs -----
 
 -- name: InsertSupportLog :exec
 INSERT INTO support_logs (id, user_id, payload, created_at) VALUES (?, ?, ?, ?);
+
+-- ----- admin: user list -----
+
+-- name: ListAdminUsers :many
+SELECT
+    u.id,
+    u.email,
+    u.display_name,
+    u.last_signin_at,
+    u.suspended_at,
+    u.is_admin,
+    u.is_root,
+    u.promoter_id,
+    u.delete_after,
+    COALESCE(f.usage_bytes, 0)           AS usage_bytes,
+    COUNT(DISTINCT CASE WHEN fm.left_at IS NULL THEN fm.user_id END) AS family_member_count,
+    COUNT(DISTINCT d.id)                 AS device_count,
+    CASE WHEN fre.family_id IS NOT NULL THEN 1 ELSE 0 END AS has_recovery_code
+FROM users u
+LEFT JOIN family_members fm2 ON fm2.user_id = u.id AND fm2.left_at IS NULL
+LEFT JOIN families f          ON f.id = fm2.family_id
+LEFT JOIN family_members fm   ON fm.family_id = fm2.family_id AND fm.left_at IS NULL
+LEFT JOIN devices d            ON d.user_id = u.id AND d.status IN ('pending','active')
+LEFT JOIN family_recovery_envelopes fre ON fre.family_id = fm2.family_id
+GROUP BY u.id
+ORDER BY u.created_at DESC
+LIMIT ? OFFSET ?;
+
+-- ----- admin: audit log -----
+
+-- name: ListAuditLog :many
+SELECT id, actor_user_id, actor_email, action, target_kind, target_id, detail_json, created_at
+FROM audit_log
+WHERE (id < sqlc.narg(after_id) OR sqlc.narg(after_id) IS NULL)
+ORDER BY id DESC
+LIMIT sqlc.arg(limit);
+
+-- ----- admin: get promoter chain for subtree check -----
+
+-- name: GetUserPromoterID :one
+-- Returns the promoter_id for a user. Used for subtree walks.
+SELECT promoter_id FROM users WHERE id = ? LIMIT 1;

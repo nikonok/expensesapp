@@ -84,6 +84,13 @@ func main() {
 	srv := &http.Server{
 		Addr:    cfg.BindAddr,
 		Handler: r,
+		// ReadHeaderTimeout guards against slow-header DoS. IdleTimeout bounds
+		// how long a keep-alive connection can sit idle between requests.
+		// Deliberately NOT setting ReadTimeout/WriteTimeout: the SSE endpoint
+		// (/v1/sync/live) is a long-lived streaming response and would be cut
+		// off by either.
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	// Start background job runner (non-blocking).
@@ -92,6 +99,7 @@ func main() {
 		jobs.NewDigestPushJob(database, digestSvc, qhSvc),
 		jobs.NewHeldDrainerJob(database, deliverer),
 		jobs.NewDeletionPurgeJob(database),
+		jobs.NewReauthCleanupJob(database),
 	)
 	runner.Start(context.Background())
 
@@ -116,10 +124,14 @@ func main() {
 	// Stop jobs before HTTP server so no new snapshots start during drain.
 	runner.Stop()
 
+	// Signal all open SSE connections (/v1/sync/live) to close. Without this,
+	// srv.Shutdown would otherwise wait up to the full 25s context deadline
+	// for every long-lived SSE stream to end on its own.
+	hub.Shutdown()
+
 	if err := srv.Shutdown(ctx); err != nil {
 		slog.Error("shutdown error", "error", err)
 		os.Exit(1)
 	}
 	slog.Info("stopped")
 }
-

@@ -18,6 +18,21 @@ import (
 // blobOverheadBytes = 1 (version) + 24 (nonce) + 32 (commit) + 16 (AEAD tag).
 const blobOverheadBytes = 73
 
+// Supported record-blob cipher-suite version bytes (first byte of the blob).
+// suiteV1 is the original XChaCha20-Poly1305 envelope; suiteV2 adds
+// createdAt binding in the AAD (see crypto/aad.go). Both are accepted on
+// push so clients rolling out v2 are not rejected mid-migration.
+const (
+	suiteV1 byte = 0x01
+	suiteV2 byte = 0x02
+)
+
+// isSupportedSuiteVersion reports whether b is a cipher-suite version byte
+// this server accepts for record blobs.
+func isSupportedSuiteVersion(b byte) bool {
+	return b == suiteV1 || b == suiteV2
+}
+
 // pushRequest is the JSON body for POST /v1/sync/push.
 type pushRequest struct {
 	Records []pushRecord `json:"records"`
@@ -47,6 +62,15 @@ type pushResponseConflict struct {
 	CurrentBlob         string            `json:"currentBlob"` // base64url
 	CurrentVersion      int64             `json:"currentVersion"`
 	CurrentUpdatedAtMap map[string]string `json:"currentUpdatedAtMap"`
+	CurrentAddedByUser  string            `json:"currentAddedByUser,omitempty"`
+	CurrentEditedByUser string            `json:"currentEditedByUser,omitempty"`
+	CurrentDeletedAt    string            `json:"currentDeletedAt,omitempty"`
+	// Reason distinguishes a genuine version conflict ("version") from a
+	// synthetic conflict entry produced when the batch hit the family's
+	// storage quota ("quota") — the client cannot tell these apart from
+	// currentBlob:"" alone, and needs to branch differently (retry later vs.
+	// re-encrypt and resubmit).
+	Reason string `json:"reason"`
 }
 
 // pushResponse is the JSON body returned by POST /v1/sync/push.
@@ -113,8 +137,8 @@ func (h *Handler) PostPush(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Validate version byte is 0x01.
-		if ciphertext[0] != 0x01 {
+		// Validate version byte is a supported cipher suite (0x01 or 0x02).
+		if !isSupportedSuiteVersion(ciphertext[0]) {
 			httpx.WriteError(w, r, http.StatusBadRequest, "bad-request", jsonIndex("blob", i)+" has unsupported version byte")
 			return
 		}
@@ -189,6 +213,7 @@ func (h *Handler) PostPush(w http.ResponseWriter, r *http.Request) {
 					CurrentBlob:         "",
 					CurrentVersion:      0,
 					CurrentUpdatedAtMap: nil,
+					Reason:              "quota",
 				})
 				quotaRejected++
 				continue
@@ -215,6 +240,20 @@ func (h *Handler) PostPush(w http.ResponseWriter, r *http.Request) {
 						CurrentBlob:         "",
 						CurrentVersion:      0,
 						CurrentUpdatedAtMap: nil,
+						Reason:              "version",
+					})
+					continue
+				}
+				// The record_id already exists in a different family. Surface a
+				// clean conflict with no data echo — never reveal that another
+				// family owns it.
+				if errors.Is(err, records.ErrRecordIDConflict) {
+					conflicts = append(conflicts, pushResponseConflict{
+						RecordID:            v.raw.RecordID,
+						CurrentBlob:         "",
+						CurrentVersion:      0,
+						CurrentUpdatedAtMap: nil,
+						Reason:              "version",
 					})
 					continue
 				}
@@ -227,6 +266,10 @@ func (h *Handler) PostPush(w http.ResponseWriter, r *http.Request) {
 					CurrentBlob:         curBlobB64,
 					CurrentVersion:      conflict.CurrentVersion,
 					CurrentUpdatedAtMap: conflict.CurrentUpdAtMap,
+					CurrentAddedByUser:  conflict.CurrentAddedByUser,
+					CurrentEditedByUser: conflict.CurrentEditedByUser,
+					CurrentDeletedAt:    conflict.CurrentDeletedAt,
+					Reason:              "version",
 				})
 				continue
 			}

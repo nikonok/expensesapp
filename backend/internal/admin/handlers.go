@@ -4,6 +4,7 @@ package admin
 // Routes registered under /v1/admin/* behind RequireAdmin middleware.
 
 import (
+	"context"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
@@ -23,7 +24,6 @@ import (
 	"github.com/nikonok/expensesapp/backend/internal/live"
 	"github.com/nikonok/expensesapp/backend/internal/records"
 )
-
 
 // defaultPageSize is the default number of items per page for list endpoints.
 const defaultPageSize = 50
@@ -48,19 +48,19 @@ func NewHandler(db *sql.DB, hub *live.Hub) *Handler {
 
 // adminUserResponse is one element in GET /v1/admin/users.
 type adminUserResponse struct {
-	ID               string  `json:"id"`
-	Email            string  `json:"email"`
-	DisplayName      string  `json:"displayName"`
-	LastSignInAt     *string `json:"lastSignInAt"`
-	SuspendedAt      *string `json:"suspendedAt"`
-	IsAdmin          bool    `json:"isAdmin"`
-	IsRoot           bool    `json:"isRoot"`
-	PromoterID       *string `json:"promoterId"`
-	StorageUsagePct  float64 `json:"storageUsagePct"`
-	FamilyMemberCount int64  `json:"familyMemberCount"`
-	DeviceCount      int64   `json:"deviceCount"`
-	HasRecoveryCode  bool    `json:"hasRecoveryCode"`
-	DeletePending    bool    `json:"deletePending"`
+	ID                string  `json:"id"`
+	Email             string  `json:"email"`
+	DisplayName       string  `json:"displayName"`
+	LastSignInAt      *string `json:"lastSignInAt"`
+	SuspendedAt       *string `json:"suspendedAt"`
+	IsAdmin           bool    `json:"isAdmin"`
+	IsRoot            bool    `json:"isRoot"`
+	PromoterID        *string `json:"promoterId"`
+	StorageUsagePct   float64 `json:"storageUsagePct"`
+	FamilyMemberCount int64   `json:"familyMemberCount"`
+	DeviceCount       int64   `json:"deviceCount"`
+	HasRecoveryCode   bool    `json:"hasRecoveryCode"`
+	DeletePending     bool    `json:"deletePending"`
 }
 
 // paginatedUsersResponse wraps the user list with pagination metadata.
@@ -106,10 +106,11 @@ type paginatedAuditResponse struct {
 // Helper: current actor from context
 // --------------------------------------------------------------------------
 
-// actorInfo bundles the caller's ID and email fetched from DB.
+// actorInfo bundles the caller's ID, email, and root flag fetched from DB.
 type actorInfo struct {
-	id    string
-	email string
+	id     string
+	email  string
+	isRoot bool
 }
 
 // getActor loads the caller's user row from the DB using the userID in context.
@@ -121,7 +122,7 @@ func (h *Handler) getActor(r *http.Request) (actorInfo, error) {
 	if err != nil {
 		return actorInfo{}, err
 	}
-	return actorInfo{id: u.ID, email: u.Email}, nil
+	return actorInfo{id: u.ID, email: u.Email, isRoot: u.IsRoot != 0}, nil
 }
 
 // --------------------------------------------------------------------------
@@ -500,6 +501,15 @@ func (h *Handler) PostPromoteAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Only the root user may promote another user to admin (mirrors the
+	// per-admin-subtree restriction on demote — see admin/CLAUDE.md).
+	if !actor.isRoot {
+		now := httpx.FormatTime(time.Now())
+		_ = insertAdminAudit(ctx, h.db, actor.id, actor.email, "admin.promote.denied", "user", targetID, now)
+		httpx.WriteError(w, r, http.StatusForbidden, "root-required", "only the root user may promote admins")
+		return
+	}
+
 	if err := internaldb.WithTx(ctx, h.db, func(tx *sql.Tx) error {
 		q := gen.New(tx)
 
@@ -617,7 +627,7 @@ func (h *Handler) GetAuditLog(w http.ResponseWriter, r *http.Request) {
 
 	q := gen.New(h.db)
 	rows, err := q.ListAuditLog(ctx, gen.ListAuditLogParams{
-		AfterID: afterID,
+		AfterID: sql.NullString{String: afterID, Valid: afterID != ""},
 		Limit:   int64(limit) + 1, // fetch one extra to detect next page
 	})
 	if err != nil {
@@ -749,11 +759,31 @@ func (h *Handler) PostRevokeDevice(w http.ResponseWriter, r *http.Request) {
 
 var errNotFound = errors.New("not found")
 var errForbidden = errors.New("forbidden")
-var errCannotSuspendSelf = errors.New("cannot suspend self")
 
 // --------------------------------------------------------------------------
 // Helpers
 // --------------------------------------------------------------------------
+
+// insertAdminAudit writes a single best-effort audit_log row outside of a
+// transaction (used for access-denial audits where there is no other write
+// to piggyback on).
+func insertAdminAudit(ctx context.Context, db *sql.DB, actorUserID, actorEmail, action, targetKind, targetID, createdAt string) error {
+	q := gen.New(db)
+	id, err := uuid.NewV7()
+	if err != nil {
+		return err
+	}
+	return q.InsertAuditEntry(ctx, gen.InsertAuditEntryParams{
+		ID:          id.String(),
+		ActorUserID: sql.NullString{String: actorUserID, Valid: actorUserID != ""},
+		ActorEmail:  sql.NullString{String: actorEmail, Valid: actorEmail != ""},
+		Action:      action,
+		TargetKind:  sql.NullString{String: targetKind, Valid: targetKind != ""},
+		TargetID:    sql.NullString{String: targetID, Valid: targetID != ""},
+		DetailJson:  sql.NullString{},
+		CreatedAt:   createdAt,
+	})
+}
 
 // parseIntParam reads a query parameter as int, falling back to defaultVal.
 // The result is clamped to [0, maxVal].

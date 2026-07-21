@@ -5,13 +5,17 @@
 // After 30s, replaces the waiting UI with RecoveryCodeEntry (§8.2 timeout branch).
 // Architecture §8.2, Phase 5e / Phase 6d.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { useAuthStore } from "@/services/auth/session";
 import { apiFetch } from "@/services/auth/client";
+import { useSettingsStore } from "@/stores/settings-store";
+import { logger } from "@/services/log.service";
 import { RecoveryCodeEntry } from "@/components/onboarding/RecoveryCodeEntry";
 
 export default function DeviceJoinWaiting() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [showRecovery, setShowRecovery] = useState(false);
   const [recovering, setRecovering] = useState(false);
@@ -19,11 +23,85 @@ export default function DeviceJoinWaiting() {
   const awaitingEnvelope = useAuthStore((s) => s.awaitingEnvelope);
   const device = useAuthStore((s) => s.device);
   const [wasAwaiting, setWasAwaiting] = useState(awaitingEnvelope);
+  // Fingerprint of THIS device's own pubkey — shown so the approver can
+  // compare it against the same fingerprint rendered next to Approve/Reject
+  // on their device (DeviceJoinedBanner). Same derivation, same input pubkey.
+  const [fingerprint, setFingerprint] = useState<string | null>(null);
+  const selfActivationAttempted = useRef(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowRecovery(true), 30_000);
     return () => clearTimeout(timer);
   }, []);
+
+  // Fingerprint display + self-activation attempt.
+  //
+  // Self-activation: a device that already holds the familyKey (e.g. a
+  // re-sign-in minted a new pending device row for a user who is already an
+  // active family member) doesn't need another device's approval — it can
+  // wrap the stored familyKey for its own pubkey and upload it itself.
+  //
+  // Backend authorization (verified against backend/internal/family/devices.go
+  // PostDeviceEnvelope): the envelope endpoint only requires the UPLOADER to
+  // be an active family member (`GetActiveFamilyMember`, independent of the
+  // TARGET device's own status) and the target device to be pending in the
+  // same family. It does not require the caller's own device to be active,
+  // so a pending device whose user is already an active member is allowed to
+  // upload its own envelope. A genuinely new device (no stored familyKey yet)
+  // simply gets "NoStoredFamilyKey" from the worker and falls through to the
+  // normal wait-for-approval UI below.
+  useEffect(() => {
+    if (!device?.id) return;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const { cryptoWorker } = await import("@/services/crypto/worker-client");
+        // Fetch pub key via the list endpoint (no single-device GET exists) —
+        // this is the exact pubkey the server (and therefore the approving
+        // device's SSE payload) has on file for us.
+        const allDevices = await apiFetch<{ id: string; pubKey: string }[]>("/api/v1/me/devices");
+        const devInfo = allDevices.find((d) => d.id === device.id);
+        if (!devInfo || cancelled) return;
+
+        try {
+          const fp = await cryptoWorker.fingerprintPublicKey(devInfo.pubKey);
+          if (!cancelled) setFingerprint(fp);
+        } catch (err) {
+          logger.warn(
+            "deviceJoin.fingerprint.failed",
+            err instanceof Error ? err : new Error(String(err)),
+          );
+        }
+
+        if (!awaitingEnvelope || selfActivationAttempted.current) return;
+        selfActivationAttempted.current = true;
+
+        const envelopeB64u = await cryptoWorker.wrapStoredFamilyKeyForDevice(devInfo.pubKey);
+        if (cancelled) return;
+        await apiFetch(`/api/v1/family/devices/${device.id}/envelope`, {
+          method: "POST",
+          body: JSON.stringify({ envelope: envelopeB64u }),
+        });
+        if (cancelled) return;
+
+        useAuthStore.getState().clearAwaitingEnvelope();
+        await useSettingsStore.getState().update("hasCompletedOnboarding", true);
+        navigate("/accounts", { replace: true });
+      } catch (err) {
+        // Expected for a genuinely new device (no stored familyKey yet, or
+        // the uploader isn't actually an active family member) — swallow and
+        // let the normal wait-for-approval UI stand.
+        logger.info("deviceJoin.selfActivate.skipped", {
+          reason: err instanceof Error ? err.message : String(err),
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [device?.id, awaitingEnvelope, navigate]);
 
   // Track when we first render with awaitingEnvelope=true.
   useEffect(() => {
@@ -31,12 +109,20 @@ export default function DeviceJoinWaiting() {
   }, [awaitingEnvelope]);
 
   // Navigate to the main app once the family key has been received and persisted
-  // (awaitingEnvelope transitions from true → false).
+  // (awaitingEnvelope transitions from true → false). This device is joining
+  // an existing family — it inherits family data and must never run
+  // onboarding (which would re-seed default categories/accounts).
   useEffect(() => {
     if (wasAwaiting && !awaitingEnvelope) {
+      void useSettingsStore.getState().update("hasCompletedOnboarding", true);
       navigate("/accounts", { replace: true });
     }
   }, [wasAwaiting, awaitingEnvelope, navigate]);
+
+  async function handleSignOut() {
+    await useAuthStore.getState().signOut();
+    navigate("/signin", { replace: true });
+  }
 
   async function handleRecoverySubmit(phrase: string) {
     setRecovering(true);
@@ -94,6 +180,13 @@ export default function DeviceJoinWaiting() {
         createdAt,
       );
 
+      // Seed the canonical local familyId immediately — a cold-recovery
+      // device has never pulled yet, so `syncCursors` has no row and
+      // `getLocalFamilyId()` would otherwise return null until the first
+      // successful pull.
+      const { setLocalFamilyId } = await import("@/services/family/active-family");
+      await setLocalFamilyId(familyId);
+
       // 3. Self-upload: wrap stored familyKey for our own device pub key and POST it.
       if (device?.id) {
         // Fetch pub key via the list endpoint (no single-device GET exists).
@@ -112,12 +205,18 @@ export default function DeviceJoinWaiting() {
       // 4. Mark that we're no longer awaiting an envelope.
       useAuthStore.getState().clearAwaitingEnvelope();
 
+      // This device recovered access to an existing family — it must never
+      // run onboarding (which would re-seed default categories/accounts).
+      await useSettingsStore.getState().update("hasCompletedOnboarding", true);
+
       // Navigate to main app.
       navigate("/accounts", { replace: true });
     } catch (err) {
-      setRecoveryError(
-        err instanceof Error ? err.message : "Recovery failed. Check your words and try again.",
+      logger.warn(
+        "deviceJoin.recovery.submit.failed",
+        err instanceof Error ? err : new Error(String(err)),
       );
+      setRecoveryError(t("devices.joinWaiting.recoveryFailed"));
     } finally {
       setRecovering(false);
     }
@@ -147,7 +246,7 @@ export default function DeviceJoinWaiting() {
             alignSelf: "flex-start",
           }}
         >
-          Recover access
+          {t("devices.joinWaiting.recoverAccessTitle")}
         </h1>
 
         <p
@@ -160,7 +259,7 @@ export default function DeviceJoinWaiting() {
             alignSelf: "flex-start",
           }}
         >
-          Enter your 24-word recovery code to restore access to your data.
+          {t("devices.joinWaiting.recoverAccessSubtitle")}
         </p>
 
         {recoveryError && (
@@ -199,7 +298,23 @@ export default function DeviceJoinWaiting() {
             minHeight: 44,
           }}
         >
-          Wait for approval instead
+          {t("devices.joinWaiting.waitForApproval")}
+        </button>
+
+        <button
+          onClick={() => void handleSignOut()}
+          style={{
+            background: "none",
+            border: "none",
+            padding: "var(--space-2) var(--space-4)",
+            fontFamily: '"DM Sans", sans-serif',
+            fontSize: "var(--text-caption)",
+            color: "var(--color-text-disabled)",
+            cursor: "pointer",
+            minHeight: 44,
+          }}
+        >
+          {t("devices.joinWaiting.signOut")}
         </button>
       </div>
     );
@@ -261,7 +376,7 @@ export default function DeviceJoinWaiting() {
           marginBottom: "var(--space-3)",
         }}
       >
-        Waiting for approval
+        {t("devices.joinWaiting.title")}
       </h1>
 
       <p
@@ -275,8 +390,47 @@ export default function DeviceJoinWaiting() {
           lineHeight: 1.5,
         }}
       >
-        Open the app on one of your other devices to approve this sign-in.
+        {t("devices.joinWaiting.subtitle")}
       </p>
+
+      {fingerprint && (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "var(--space-1)",
+            marginBottom: "var(--space-8)",
+            padding: "var(--space-3) var(--space-4)",
+            background: "var(--color-surface-raised)",
+            border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius-card)",
+            maxWidth: 320,
+          }}
+        >
+          <span
+            style={{
+              fontFamily: '"DM Sans", sans-serif',
+              fontSize: "var(--text-caption)",
+              color: "var(--color-text-muted)",
+            }}
+          >
+            {t("devices.joinWaiting.fingerprintLabel")}
+          </span>
+          <span
+            style={{
+              fontFamily: '"JetBrains Mono", monospace',
+              fontSize: "var(--text-body)",
+              color: "var(--color-text)",
+              letterSpacing: "0.06em",
+              wordBreak: "break-all",
+            }}
+            data-testid="own-device-fingerprint"
+          >
+            {fingerprint}
+          </span>
+        </div>
+      )}
 
       <button
         onClick={() => setShowRecovery(true)}
@@ -293,7 +447,24 @@ export default function DeviceJoinWaiting() {
           minWidth: 44,
         }}
       >
-        Enter recovery code instead
+        {t("devices.joinWaiting.enterRecoveryCode")}
+      </button>
+
+      <button
+        onClick={() => void handleSignOut()}
+        style={{
+          background: "none",
+          border: "none",
+          padding: "var(--space-2) var(--space-4)",
+          fontFamily: '"DM Sans", sans-serif',
+          fontSize: "var(--text-caption)",
+          color: "var(--color-text-disabled)",
+          cursor: "pointer",
+          minHeight: 44,
+          minWidth: 44,
+        }}
+      >
+        {t("devices.joinWaiting.signOut")}
       </button>
 
       <style>{`

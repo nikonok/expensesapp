@@ -6,6 +6,7 @@
 //   3. Regenerate recovery code  — confirm → reauth → generate new phrase + envelopes
 
 import { useState, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import * as bip39 from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -49,6 +50,7 @@ async function deriveArgon2Salt(familyId: string): Promise<Uint8Array> {
 }
 
 export function SecuritySettings() {
+  const { t } = useTranslation();
   const { show: showToast } = useToast();
 
   // ── Show recovery phrase ─────────────────────────────────────────────────────
@@ -69,14 +71,14 @@ export function SecuritySettings() {
     try {
       const familyId = await getLocalFamilyId();
       if (!familyId) {
-        showToast("No family synced yet — cannot reveal phrase", "error");
+        showToast(t("settings.security.noFamilyReveal"), "error");
         return;
       }
       const { grantId } = await requestReauthGrant();
       const phrase = await revealRecoveryPhrase(grantId, familyId);
       setRevealedPhrase(phrase);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to reveal recovery code", "error");
+      showToast(err instanceof Error ? err.message : t("settings.security.revealFailed"), "error");
     } finally {
       setRevealLoading(false);
     }
@@ -86,14 +88,14 @@ export function SecuritySettings() {
     if (!revealedPhrase) return;
     try {
       await navigator.clipboard.writeText(revealedPhrase);
-      showToast("Copied — will clear in 30s", "success");
+      showToast(t("settings.security.copiedClipboard"), "success");
       if (clearClipboardTimerRef.current !== null) clearTimeout(clearClipboardTimerRef.current);
       clearClipboardTimerRef.current = setTimeout(() => {
         navigator.clipboard.writeText("").catch(() => {});
         clearClipboardTimerRef.current = null;
       }, CLIPBOARD_CLEAR_MS);
     } catch {
-      showToast("Failed to copy", "error");
+      showToast(t("settings.security.copyFailed"), "error");
     }
   }
 
@@ -107,7 +109,7 @@ export function SecuritySettings() {
     try {
       const familyId = await getLocalFamilyId();
       if (!familyId) {
-        showToast("No family synced yet — cannot regenerate", "error");
+        showToast(t("settings.security.noFamilyRegen"), "error");
         return;
       }
 
@@ -149,10 +151,10 @@ export function SecuritySettings() {
         }),
       });
 
-      showToast("Recovery code regenerated", "success");
+      showToast(t("settings.security.regenSuccess"), "success");
       setRevealedPhrase(null);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to regenerate recovery code", "error");
+      showToast(err instanceof Error ? err.message : t("settings.security.regenFailed"), "error");
     } finally {
       setRegenLoading(false);
     }
@@ -190,7 +192,9 @@ export function SecuritySettings() {
               color: "var(--color-text)",
             }}
           >
-            {revealLoading ? "Verifying…" : "Show recovery code"}
+            {revealLoading
+              ? t("settings.security.verifying")
+              : t("settings.security.showRecoveryCode")}
           </span>
         </button>
       ) : (
@@ -208,7 +212,7 @@ export function SecuritySettings() {
               margin: "0 0 var(--space-3)",
             }}
           >
-            Recovery code — store it somewhere safe
+            {t("settings.security.storeItSafe")}
           </p>
 
           {/* 4-column word grid */}
@@ -279,7 +283,7 @@ export function SecuritySettings() {
                 cursor: "pointer",
               }}
             >
-              Copy
+              {t("onboarding.recovery.copy")}
             </button>
             <button
               onClick={() => setRevealedPhrase(null)}
@@ -296,7 +300,7 @@ export function SecuritySettings() {
                 cursor: "pointer",
               }}
             >
-              Hide
+              {t("settings.security.hide")}
             </button>
           </div>
         </div>
@@ -328,15 +332,17 @@ export function SecuritySettings() {
             color: "var(--color-text)",
           }}
         >
-          {regenLoading ? "Regenerating…" : "Regenerate recovery code"}
+          {regenLoading
+            ? t("settings.security.regenerating")
+            : t("settings.security.regenerateRecoveryCode")}
         </span>
       </button>
 
       <ConfirmDialog
         isOpen={regenConfirmOpen}
-        title="Regenerate recovery code"
-        body="This will invalidate your current recovery code and create a new one. Make sure to save the new code."
-        confirmLabel="Regenerate"
+        title={t("settings.security.regenerateRecoveryCode")}
+        body={t("settings.security.regenConfirmBody")}
+        confirmLabel={t("settings.security.regenerate")}
         onConfirm={handleRegenConfirm}
         onCancel={() => setRegenConfirmOpen(false)}
         variant="destructive"

@@ -16,8 +16,9 @@ import {
 } from "date-fns";
 import type { PeriodFilter, PeriodFilterType } from "../types";
 
-export function getLocalDateString(): string {
+export function getLocalDateString(daysAgo: number = 0): string {
   const now = new Date();
+  now.setDate(now.getDate() - daysAgo);
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
@@ -133,9 +134,6 @@ export function getPeriodLabel(filter: PeriodFilter): string {
 
     case "month": {
       const d = parseISO(filter.startDate);
-      const thisMonthStr = format(today, "yyyy-MM");
-      const filterMonthStr = format(d, "yyyy-MM");
-      if (thisMonthStr === filterMonthStr) return format(d, "MMMM yyyy");
       return format(d, "MMMM yyyy");
     }
 

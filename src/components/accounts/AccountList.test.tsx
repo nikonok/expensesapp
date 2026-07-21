@@ -50,7 +50,14 @@ describe("AccountList — Total Balance display", () => {
   });
 
   it("displays minor-unit netWorth divided by 100 (10000 minor units = $100.00)", () => {
-    vi.mocked(useTotalBalance).mockReturnValue({ netWorth: 1_000_000, mainCurrency: "USD", ratesAvailable: true });
+    vi.mocked(useTotalBalance).mockReturnValue({
+      netWorth: 1_000_000,
+      mainCurrency: "USD",
+      ratesAvailable: true,
+      groups: [],
+      grandAssets: null,
+      grandDebts: null,
+    });
 
     render(<AccountList />);
 
@@ -59,7 +66,14 @@ describe("AccountList — Total Balance display", () => {
   });
 
   it("does not show the raw minor-unit value (regression guard)", () => {
-    vi.mocked(useTotalBalance).mockReturnValue({ netWorth: 1_000_000, mainCurrency: "USD", ratesAvailable: true });
+    vi.mocked(useTotalBalance).mockReturnValue({
+      netWorth: 1_000_000,
+      mainCurrency: "USD",
+      ratesAvailable: true,
+      groups: [],
+      grandAssets: null,
+      grandDebts: null,
+    });
 
     render(<AccountList />);
 
@@ -67,7 +81,14 @@ describe("AccountList — Total Balance display", () => {
   });
 
   it("displays a negative netWorth correctly divided by 100", () => {
-    vi.mocked(useTotalBalance).mockReturnValue({ netWorth: -50_000, mainCurrency: "EUR", ratesAvailable: true });
+    vi.mocked(useTotalBalance).mockReturnValue({
+      netWorth: -50_000,
+      mainCurrency: "EUR",
+      ratesAvailable: true,
+      groups: [],
+      grandAssets: null,
+      grandDebts: null,
+    });
 
     render(<AccountList />);
 
@@ -77,7 +98,14 @@ describe("AccountList — Total Balance display", () => {
   });
 
   it("shows the loading ellipsis when netWorth is null", () => {
-    vi.mocked(useTotalBalance).mockReturnValue({ netWorth: null, mainCurrency: "USD", ratesAvailable: true });
+    vi.mocked(useTotalBalance).mockReturnValue({
+      netWorth: null,
+      mainCurrency: "USD",
+      ratesAvailable: true,
+      groups: [],
+      grandAssets: null,
+      grandDebts: null,
+    });
 
     render(<AccountList />);
 

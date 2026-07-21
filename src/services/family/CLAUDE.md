@@ -10,7 +10,7 @@ Family lifecycle on the client: create/init, invite/accept/decline, list members
 
 - `client.ts` — typed HTTP wrappers: `createInvite`, `listIncomingInvites`, `acceptInvite`, `declineInvite`, `listFamilyMembers`, `leaveFamily`, `removeMember`, `migrateSolo`, plus `NeedsMigrationDecisionError`.
 - `init.ts` — initial family creation: generates `familyKey`, recovery envelopes, and POSTs the commit.
-- `migrate.ts` — gathers local Dexie records, re-encrypts each under the target family key (via `cryptoWorker.encryptRecord`), and POSTs `migrateSolo`.
+- `migrate.ts` — gathers local Dexie records, re-encrypts them under the target family key in a single batch call (via `cryptoWorker.migrateSoloRecords`), and POSTs `migrateSolo`.
 - `active-family.ts` — reads / persists the active `familyId` (Dexie settings key).
 - `client.test.ts`, `init.test.ts` — unit tests.
 
@@ -25,12 +25,12 @@ Family lifecycle on the client: create/init, invite/accept/decline, list members
 
 - **Invite/join/leave flow**:
   1. Inviter calls `createInvite(email)` → backend stores pending invite.
-  2. Invitee calls `listIncomingInvites()` then `acceptInvite(inviteId)`.
+  2. Invitee calls `listIncomingInvites()` then `acceptInvite(inviteId)`. `acceptInvite` best-effort reads this device's pubkey via `cryptoWorker.getDevicePublicKey()` and sends it (base64url) as `devicePubKey` in the body — the backend uses it to update the device's on-file pubkey and drive the `device.joined` approval flow. Optional server-side; a missing/failed pubkey read still accepts the invite.
   3. If the invitee has solo data, the backend responds 409 with problem type `needs-migration-decision`; `acceptInvite` throws `NeedsMigrationDecisionError` carrying `targetFamilyId`. The UI then prompts the user; on "merge" the client unwraps the target family key (provided by the backend on a subsequent retry) and calls `migrateSoloRecordsToFamily`.
   4. `leaveFamily(takeCopy)` soft-leaves; `removeMember(userId)` is admin/owner-only.
-- **`migrationId` is required and is the idempotency key** for `POST /api/v1/family/migrate-solo`. The backend rejects (`400 bad-request`) when missing and returns the cached migration result on retries with the same id. As of writing, the frontend `migrateSolo` call does not yet send `migrationId` — see WORK_PLAN.md brief B2 for the fix.
+- **`migrationId` is required and is the idempotency key** for `POST /api/v1/family/migrate-solo`. The backend rejects (`400 bad-request`) when missing and returns the cached migration result on retries with the same id. `migrate.ts`'s `getOrCreateMigrationId(sourceFamilyId, targetFamilyId)` mints (or reuses, on retry) this id and persists it in `db.settings` keyed by the `(source, target)` pair before calling `migrateSolo` — WORK_PLAN.md brief B2 is done.
 - Use `apiFetch` only (CSRF header + cookie handling). Never call `fetch` directly here.
-- Re-encryption in `migrate.ts` must use `cryptoWorker.encryptRecord(plaintext, targetFamilyKey, meta)` (the explicit-key variant) — the stored key is still the previous solo key at this point.
+- Re-encryption in `migrate.ts` must use `cryptoWorker.migrateSoloRecords(targetEnvelope, persistAfter, records)` (the envelope-based batch variant) — it unwraps the target key in-worker and encrypts every record without the raw key ever crossing `postMessage`.
 
 ## Gotchas
 

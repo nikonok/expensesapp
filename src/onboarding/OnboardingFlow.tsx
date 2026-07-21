@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { ChevronLeft } from "lucide-react";
@@ -18,6 +18,9 @@ import { SignInStep } from "./SignInStep";
 import { RecoveryCodeSetup } from "../components/onboarding/RecoveryCodeSetup";
 import { useAuthStore } from "../services/auth/session";
 import { initFamilyAndShowPhrase } from "../services/family/init";
+import { pushSetting } from "../services/sync/push-helpers";
+import { logger } from "../services/log.service";
+import { PRIMARY_ACCENT_COLOR } from "../utils/constants";
 
 // Step order: 0=Sign-in, 1=RecoveryCode(conditional), 2=Welcome, 3=Currency, 4=First-account, 5=Categories
 const TOTAL_STEPS = 6;
@@ -498,15 +501,36 @@ function StepCategories({
 
 // ── Step 1: Recovery Code ──────────────────────────────────────────────────────
 
-function StepRecoveryCode({ onNext }: { onNext: () => void }) {
+function StepRecoveryCode({
+  onNext,
+  phrase,
+  onPhraseReady,
+}: {
+  onNext: () => void;
+  /** Phrase generated earlier this onboarding session, if any — lifted to the
+   *  parent so a remount (e.g. forward-navigating back into this step) can
+   *  re-show it instead of re-running family init. */
+  phrase: string | null;
+  onPhraseReady: (phrase: string) => void;
+}) {
   const { t } = useTranslation();
-  const [phrase, setPhrase] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!phrase);
   const authStore = useAuthStore();
+  // Guards against React StrictMode's dev-only double-invoke of this effect
+  // (mount → cleanup → mount again on the same instance), which would
+  // otherwise fire two concurrent `initFamilyAndShowPhrase` calls.
+  const hasStartedRef = useRef(false);
 
-  // Kick off family init on mount
+  // Kick off family init on mount — but only once per family, ever.
   useEffect(() => {
+    if (phrase) {
+      // Already created — just show it again.
+      setLoading(false);
+      return;
+    }
+    if (hasStartedRef.current) return;
+    hasStartedRef.current = true;
     const run = async () => {
       const pubKey = useAuthStore.getState().pendingDevicePubKey;
       if (!pubKey) {
@@ -519,9 +543,13 @@ function StepRecoveryCode({ onNext }: { onNext: () => void }) {
           devicePubKey: pubKey,
         });
         authStore.clearPendingKeypair();
-        setPhrase(result.phrase);
+        onPhraseReady(result.phrase);
       } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : t("errors.generic"));
+        logger.warn(
+          "onboarding.recovery.init.failed",
+          e instanceof Error ? e : new Error(String(e)),
+        );
+        setError(t("onboarding.recovery.initFailed"));
       } finally {
         setLoading(false);
       }
@@ -651,6 +679,10 @@ export default function OnboardingFlow({
   );
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Lifted out of StepRecoveryCode so a remount of that step (e.g. forward
+  // navigation revisiting it) can re-show the already-generated phrase
+  // instead of re-running family init.
+  const [recoveryPhrase, setRecoveryPhrase] = useState<string | null>(null);
 
   const handleNumpadSave = (result: number) => {
     const scale = Math.pow(10, getCurrencyDecimalPlaces(currency));
@@ -679,51 +711,72 @@ export default function OnboardingFlow({
     setIsSaving(true);
     setError(null);
     try {
-      if (skipAccount) {
+      // Guard against re-running handleFinish (e.g. a double-tap, or a retry
+      // after a previous partial failure): if onboarding is already marked
+      // complete, or seed data already exists, don't duplicate anything —
+      // just finish the flow.
+      if (settingsStore.hasCompletedOnboarding) {
+        navigate(`/${settingsStore.startupScreen}`, { replace: true });
+        return;
+      }
+
+      const [existingAccountCount, existingCategoryCount] = await Promise.all([
+        db.accounts.count(),
+        db.categories.count(),
+      ]);
+      const alreadySeeded = existingAccountCount > 0 || existingCategoryCount > 0;
+
+      if (skipAccount || alreadySeeded) {
         await settingsStore.update("hasCompletedOnboarding", true);
       } else {
         const now = new Date().toISOString();
-
-        // 1. Save main currency
-        await settingsStore.update("mainCurrency", currency);
-
-        // 2. Create first account
-        if (accountName.trim()) {
-          await db.accounts.add({
-            name: accountName.trim(),
-            type: "REGULAR",
-            color: "var(--color-primary)",
-            icon: "wallet",
-            currency: currency,
-            description: "",
-            balance: startingBalance,
-            startingBalance: startingBalance,
-            includeInTotal: true,
-            isTrashed: false,
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
-
-        // 3. Create selected category presets
         const selectedPresets = DEFAULT_CATEGORY_PRESETS.filter((_, i) => categorySelected[i]);
-        if (selectedPresets.length > 0) {
-          await db.categories.bulkAdd(
-            selectedPresets.map((preset, idx) => ({
-              name: preset.name,
-              type: preset.type,
-              color: preset.color,
-              icon: preset.icon,
-              displayOrder: idx,
+
+        // Account + categories + settings are written atomically: a failure
+        // partway through (e.g. quota exceeded) must not leave a partial
+        // seed that duplicates on retry.
+        await db.transaction("rw", db.accounts, db.categories, db.settings, async () => {
+          // 1. Create first account
+          if (accountName.trim()) {
+            await db.accounts.add({
+              name: accountName.trim(),
+              type: "REGULAR",
+              color: PRIMARY_ACCENT_COLOR,
+              icon: "wallet",
+              currency: currency,
+              description: "",
+              balance: startingBalance,
+              startingBalance: startingBalance,
+              includeInTotal: true,
               isTrashed: false,
               createdAt: now,
               updatedAt: now,
-            })),
-          );
-        }
+            });
+          }
 
-        // 4. Mark onboarding complete
-        await settingsStore.update("hasCompletedOnboarding", true);
+          // 2. Create selected category presets
+          if (selectedPresets.length > 0) {
+            await db.categories.bulkAdd(
+              selectedPresets.map((preset, idx) => ({
+                name: preset.name,
+                type: preset.type,
+                color: preset.color,
+                icon: preset.icon,
+                displayOrder: idx,
+                isTrashed: false,
+                createdAt: now,
+                updatedAt: now,
+              })),
+            );
+          }
+
+          // 3. Save main currency + mark onboarding complete
+          await db.settings.put({ key: "mainCurrency", value: currency });
+          await db.settings.put({ key: "hasCompletedOnboarding", value: true });
+        });
+
+        useSettingsStore.setState({ mainCurrency: currency, hasCompletedOnboarding: true });
+        pushSetting("mainCurrency", currency).catch(() => {});
       }
 
       // 5. Navigate to startup screen
@@ -740,21 +793,60 @@ export default function OnboardingFlow({
     }
   };
 
+  // Returning to the startup screen instead of continuing through
+  // welcome/currency/categories only makes sense when the user is
+  // re-authenticating via `/signin` on a device that already completed
+  // onboarding — never for a fresh onboarding run.
+  const isReturningSignIn = initialStep === "sign-in" && settingsStore.hasCompletedOnboarding;
+
   // After sign-in completes (step 0), determine next step based on needsFamilyInit.
-  // When the user is re-authenticating via `/signin` (initialStep === "sign-in")
-  // and they have already completed onboarding, return them to the startup screen
-  // rather than re-running them through welcome/currency/categories.
+  // A solo user upgrading to cloud sync (needsFamilyInit=true) ALWAYS needs the
+  // recovery-code step to run — that's what actually creates the family and
+  // shows the phrase — even if onboarding was already completed, otherwise
+  // sign-in is a dead end with no family ever created.
   const handleSignInNext = () => {
     const { isSignedIn, needsFamilyInit } = useAuthStore.getState();
-    if (initialStep === "sign-in" && settingsStore.hasCompletedOnboarding) {
+    if (isSignedIn && needsFamilyInit) {
+      goToStep(1); // Recovery code step
+      return;
+    }
+    if (isReturningSignIn) {
       navigate(`/${settingsStore.startupScreen}`, { replace: true });
       return;
     }
-    if (isSignedIn && needsFamilyInit) {
-      goToStep(1); // Recovery code step
-    } else {
-      goToStep(2); // Skip to Welcome
+    goToStep(2); // Skip to Welcome
+  };
+
+  // Mirrors handleSignInNext's completed-onboarding guard so "Skip" from the
+  // sign-in step doesn't re-run onboarding / re-seed for a returning user.
+  const handleSkipSignIn = () => {
+    if (isReturningSignIn) {
+      navigate(`/${settingsStore.startupScreen}`, { replace: true });
+      return;
     }
+    goToStep(2);
+  };
+
+  // After the recovery-code step finishes (family created + phrase shown),
+  // a re-authenticating already-onboarded user returns to their startup tab
+  // instead of continuing into Welcome/currency/categories.
+  const handleRecoveryCodeNext = () => {
+    if (isReturningSignIn) {
+      navigate(`/${settingsStore.startupScreen}`, { replace: true });
+      return;
+    }
+    goToStep(2);
+  };
+
+  // Back from Welcome (2) must skip the recovery-code step (1) — re-entering
+  // it would remount StepRecoveryCode and, without the phrase already being
+  // cached in `recoveryPhrase`, re-run family init.
+  const handleBack = () => {
+    if (step === 2) {
+      goToStep(0);
+      return;
+    }
+    goToStep(step - 1);
   };
 
   return (
@@ -783,7 +875,7 @@ export default function OnboardingFlow({
         }}
       >
         {step < TOTAL_STEPS && (
-          <ProgressDots current={step} onBack={step > 0 ? () => goToStep(step - 1) : undefined} />
+          <ProgressDots current={step} onBack={step > 0 ? handleBack : undefined} />
         )}
         <div
           style={{
@@ -795,8 +887,14 @@ export default function OnboardingFlow({
           }}
         >
           <SlideContainer step={step} direction={direction}>
-            {step === 0 && <SignInStep onNext={handleSignInNext} onSkip={() => goToStep(2)} />}
-            {step === 1 && <StepRecoveryCode onNext={() => goToStep(2)} />}
+            {step === 0 && <SignInStep onNext={handleSignInNext} onSkip={handleSkipSignIn} />}
+            {step === 1 && (
+              <StepRecoveryCode
+                onNext={handleRecoveryCodeNext}
+                phrase={recoveryPhrase}
+                onPhraseReady={setRecoveryPhrase}
+              />
+            )}
             {step === 2 && <StepWelcome onNext={() => goToStep(3)} onSkip={skipToComplete} />}
             {step === 3 && (
               <StepCurrency

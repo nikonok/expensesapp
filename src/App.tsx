@@ -11,7 +11,7 @@ import {
 } from "./services/sync/background-sync";
 import { startLiveSync, flushOutbox } from "./services/sync/engine";
 import { getLocalFamilyId } from "./services/family/active-family";
-import { ToastProvider, useToast } from "./components/shared/Toast";
+import { ToastProvider } from "./components/shared/Toast";
 import { checkDatabaseIntegrity } from "./services/integrity.service";
 import { checkAndRunAutoBackup, setAutoBackupSchedule } from "./services/backup.service";
 import { logger } from "./services/log.service";
@@ -34,8 +34,15 @@ const DeviceJoinWaiting = lazy(() => import("./pages/DeviceJoinWaiting"));
 const AdminPage = lazy(() => import("./pages/AdminPage"));
 const CryptoDemoPage = import.meta.env.DEV ? lazy(() => import("./pages/CryptoDemoPage")) : null;
 
+const TAB_PATHS = new Set(["/accounts", "/categories", "/transactions", "/budget", "/overview"]);
+
 function AdminRoute() {
   const isAdmin = useAuthStore((s) => s.user?.isAdmin ?? false);
+  const sessionResolved = useAuthStore((s) => s.sessionResolved);
+  // Wait for the session-restore call to settle before deciding — otherwise a
+  // cold-started admin bookmarks/deep-link would bounce to /accounts before
+  // refreshMe() has a chance to report the real isAdmin state.
+  if (!sessionResolved) return null;
   if (!isAdmin) return <Navigate to="/accounts" replace />;
   return (
     <Suspense fallback={null}>
@@ -54,9 +61,10 @@ function AppRoutes() {
     notificationEnabled,
     notificationTime,
   } = useSettingsStore();
-  const { isSignedIn, awaitingEnvelope } = useAuthStore();
+  const { isSignedIn, awaitingEnvelope, sessionResolved } = useAuthStore();
   const [integrityError, setIntegrityError] = useState(false);
   const coldStartPathRef = useRef(window.location.pathname);
+  const liveSyncDisconnectRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -79,6 +87,14 @@ function AppRoutes() {
       }
     })();
   }, [load]);
+
+  // Restore the session on cold start — the auth store is otherwise purely
+  // in-memory and resets on every reload, so without this a returning
+  // signed-in user (or a device still awaiting envelope approval) would
+  // render as a brand-new anonymous/solo user until their next network call.
+  useEffect(() => {
+    void useAuthStore.getState().refreshMe();
+  }, []);
 
   useEffect(() => {
     const DEXIE_ERRORS = new Set([
@@ -122,13 +138,6 @@ function AppRoutes() {
     return () => window.removeEventListener("backup-restored", handleBackupRestored);
   }, []);
 
-  const { show: showToast } = useToast();
-  useEffect(() => {
-    const handleUpdate = () => showToast("App updated — restart to apply", "info", 6000);
-    window.addEventListener("sw-update-available", handleUpdate);
-    return () => window.removeEventListener("sw-update-available", handleUpdate);
-  }, [showToast]);
-
   useEffect(() => {
     if (!isLoaded) return;
     if (notificationEnabled) {
@@ -140,6 +149,33 @@ function AppRoutes() {
       unregisterPeriodicSync();
     }
   }, [isLoaded, notificationEnabled, notificationTime]);
+
+  // Connects the live SSE stream for whatever family the session currently
+  // belongs to and flushes any queued outbox uploads. `getLocalFamilyId()`
+  // itself falls back to the `family.id` hydrated by `refreshMe()` when the
+  // local sync-cursor table has no row yet — true for a brand-new/pending
+  // device that has never completed a pull, which otherwise could never
+  // receive the `device.activated` SSE event that completes its own join.
+  const connectLiveSync = async () => {
+    if (liveSyncDisconnectRef.current) return; // already connected
+    try {
+      const familyId = await getLocalFamilyId();
+      if (!familyId) return;
+      liveSyncDisconnectRef.current = startLiveSync(familyId);
+      // Flush anything that was queued while offline / signed out.
+      flushOutbox().catch((err) => {
+        logger.warn(
+          "sync.flush.startup.failed",
+          err instanceof Error ? err : new Error(String(err)),
+        );
+      });
+    } catch (err) {
+      logger.warn(
+        "sync.liveSync.start.failed",
+        err instanceof Error ? err : new Error(String(err)),
+      );
+    }
+  };
 
   // ── Background catch-up sync (Phase 12) ──────────────────────────────────
   // Set up foreground visibilitychange catch-up and BroadcastChannel listener
@@ -156,59 +192,77 @@ function AppRoutes() {
     setupBroadcastChannelListener();
     registerCatchUpPeriodicSync().catch(() => {});
 
-    let disconnect: (() => void) | null = null;
     let cancelled = false;
-    (async () => {
-      try {
-        const familyId = await getLocalFamilyId();
-        if (cancelled || !familyId) return;
-        disconnect = startLiveSync(familyId);
-        // Flush anything that was queued while offline / signed out.
-        flushOutbox().catch((err) => {
-          logger.warn(
-            "sync.flush.startup.failed",
-            err instanceof Error ? err : new Error(String(err)),
-          );
-        });
-      } catch (err) {
-        logger.warn(
-          "sync.liveSync.start.failed",
-          err instanceof Error ? err : new Error(String(err)),
-        );
-      }
+    void (async () => {
+      if (!cancelled) await connectLiveSync();
     })();
 
     return () => {
       cancelled = true;
-      if (disconnect) disconnect();
+      if (liveSyncDisconnectRef.current) {
+        liveSyncDisconnectRef.current();
+        liveSyncDisconnectRef.current = null;
+      }
       teardownBackgroundSync();
     };
   }, [isLoaded, isSignedIn]);
 
+  // Leaving a family / accepting an invite changes the active family without
+  // toggling `isSignedIn`, so the effect above never reruns on its own. Those
+  // flows dispatch this event right after clearing local family state so the
+  // stale SSE connection (still bound to the old family) is torn down here.
+  // Deliberately does NOT auto-reconnect: `refreshMe()` would report this
+  // device's real (already-active) status and could clobber an
+  // intentionally-set `awaitingEnvelope` flag from the accept-invite handoff
+  // (see FamilySettings.tsx). The next natural reconnect point is the
+  // `/devices/waiting` → `/accounts` transition once envelope handling
+  // completes, or a future sign-in/reload.
   useEffect(() => {
-    if (!isLoaded) return;
-    if (!hasCompletedOnboarding) {
-      navigate("/onboarding", { replace: true });
-      return;
-    }
-    // New device waiting for envelope — takes priority over startup-screen redirect.
+    const handleFamilySyncReset = () => {
+      if (liveSyncDisconnectRef.current) {
+        liveSyncDisconnectRef.current();
+        liveSyncDisconnectRef.current = null;
+      }
+      teardownBackgroundSync();
+    };
+    window.addEventListener("family-sync-reset", handleFamilySyncReset);
+    return () => window.removeEventListener("family-sync-reset", handleFamilySyncReset);
+  }, []);
+
+  useEffect(() => {
+    if (!isLoaded || !sessionResolved) return;
+    // New device waiting for envelope — takes priority over every other
+    // redirect, including the onboarding gate below (a device joining an
+    // existing family never runs onboarding).
     if (isSignedIn && awaitingEnvelope) {
       navigate("/devices/waiting", { replace: true });
       return;
     }
-    // On PWA cold start, always redirect to the configured startup tab unless already on it.
+    if (!hasCompletedOnboarding) {
+      navigate("/onboarding", { replace: true });
+      return;
+    }
+    // On PWA cold start, redirect to the configured startup tab only when the
+    // cold-start path IS a tab route (or "/") — deep links (settings, admin,
+    // sign-in, a transaction edit URL, a push-notification URL, etc.) must be
+    // left alone.
     const path = coldStartPathRef.current;
     if (path) {
       coldStartPathRef.current = "";
-      if (
-        !path.startsWith("/dev/") &&
-        path !== "/devices/waiting" &&
-        path !== `/${startupScreen}`
-      ) {
+      const isTabRoute = path === "/" || TAB_PATHS.has(path);
+      if (isTabRoute && path !== `/${startupScreen}`) {
         navigate(`/${startupScreen}`, { replace: true });
       }
     }
-  }, [isLoaded, hasCompletedOnboarding, isSignedIn, awaitingEnvelope, navigate, startupScreen]);
+  }, [
+    isLoaded,
+    sessionResolved,
+    hasCompletedOnboarding,
+    isSignedIn,
+    awaitingEnvelope,
+    navigate,
+    startupScreen,
+  ]);
 
   if (integrityError) {
     return <IntegrityErrorScreen />;

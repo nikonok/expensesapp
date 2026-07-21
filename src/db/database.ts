@@ -10,9 +10,13 @@ import type {
   Log,
   PendingUpload,
   SyncCursor,
+  RecordMapping,
 } from "./models";
+import { COLOR_PALETTE, PRIMARY_ACCENT_COLOR } from "../utils/constants";
 
-const db = new Dexie("expenses-app-db") as Dexie & {
+export const DB_NAME = "expenses-app-db";
+
+const db = new Dexie(DB_NAME) as Dexie & {
   accounts: EntityTable<Account, "id">;
   categories: EntityTable<Category, "id">;
   transactions: EntityTable<Transaction, "id">;
@@ -23,6 +27,7 @@ const db = new Dexie("expenses-app-db") as Dexie & {
   logs: EntityTable<Log, "id">;
   pendingUploads: EntityTable<PendingUpload, "id">;
   syncCursors: EntityTable<SyncCursor, "familyId">;
+  recordMappings: EntityTable<RecordMapping, "uuid">;
 };
 
 // v1 — initial release schema (all development migrations collapsed)
@@ -117,6 +122,92 @@ db.version(6).stores({
   cipherKeys: "name",
   pendingUploads: "++id, recordId, attempts",
   syncCursors: "&familyId",
+});
+
+// v7 — normalize legacy `var(--swatch-N)` / `var(--color-primary)` colors on
+// accounts + categories to literal oklch values (accountSchema/categorySchema
+// only accept literal `oklch(...)`, so non-conforming seeded records were
+// silently dropped by the sync pull path). Also drops indexes that are never
+// queried via `.where()`/`.orderBy()` (verified by grep across the codebase)
+// — including the boolean `isTrashed` indexes, which are invalid IndexedDB
+// keys in some browsers.
+export function resolveLegacyColor(color: string): string | null {
+  if (color === "var(--color-primary)") return PRIMARY_ACCENT_COLOR;
+  const match = /^var\(--swatch-(\d+)\)$/.exec(color);
+  if (match) {
+    const swatch = COLOR_PALETTE.find((s) => s.id === Number(match[1]));
+    if (swatch) return swatch.value;
+  }
+  return null;
+}
+
+db.version(7)
+  .stores({
+    accounts: "++id, type",
+    categories: "++id, type, displayOrder",
+    transactions: "++id, date, accountId, categoryId, type, transferGroupId",
+    budgets: "++id, categoryId, accountId, month, [categoryId+month], [accountId+month]",
+    exchangeRates: "++id, baseCurrency, &[baseCurrency+date]",
+    settings: "key",
+    backups: "++id, createdAt",
+    logs: "++id, timestamp, level",
+    cipherKeys: "name",
+    pendingUploads: "++id",
+    syncCursors: "&familyId",
+  })
+  .upgrade(async (tx) => {
+    await tx
+      .table<Account, number>("accounts")
+      .toCollection()
+      .modify((account) => {
+        const resolved = resolveLegacyColor(account.color);
+        if (resolved) account.color = resolved;
+      });
+    await tx
+      .table<Category, number>("categories")
+      .toCollection()
+      .modify((category) => {
+        const resolved = resolveLegacyColor(category.color);
+        if (resolved) category.color = resolved;
+      });
+  });
+
+// v8 — add `recordMappings`: the canonical local↔server record-identity table
+// shared by the live sync engine and the solo→family migration path. Primary
+// key is the server-facing `uuid` (globally unique); `&[recordType+localId]`
+// is a unique compound index used to resolve/mint a mapping for a local row
+// on push. See src/services/sync/record-mapping.ts.
+db.version(8).stores({
+  accounts: "++id, type",
+  categories: "++id, type, displayOrder",
+  transactions: "++id, date, accountId, categoryId, type, transferGroupId",
+  budgets: "++id, categoryId, accountId, month, [categoryId+month], [accountId+month]",
+  exchangeRates: "++id, baseCurrency, &[baseCurrency+date]",
+  settings: "key",
+  backups: "++id, createdAt",
+  logs: "++id, timestamp, level",
+  cipherKeys: "name",
+  pendingUploads: "++id",
+  syncCursors: "&familyId",
+  recordMappings: "uuid, &[recordType+localId]",
+});
+
+// v9 — index `pendingUploads.recordId` so `enqueuePush` can coalesce rapid
+// successive edits to the same logical record into a single outbox row
+// (`.where("recordId").equals(...)`) instead of a full-table scan.
+db.version(9).stores({
+  accounts: "++id, type",
+  categories: "++id, type, displayOrder",
+  transactions: "++id, date, accountId, categoryId, type, transferGroupId",
+  budgets: "++id, categoryId, accountId, month, [categoryId+month], [accountId+month]",
+  exchangeRates: "++id, baseCurrency, &[baseCurrency+date]",
+  settings: "key",
+  backups: "++id, createdAt",
+  logs: "++id, timestamp, level",
+  cipherKeys: "name",
+  pendingUploads: "++id, recordId",
+  syncCursors: "&familyId",
+  recordMappings: "uuid, &[recordType+localId]",
 });
 
 export { db };

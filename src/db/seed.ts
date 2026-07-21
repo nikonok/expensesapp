@@ -1,4 +1,12 @@
 import type { CategoryType } from "./models";
+import { COLOR_PALETTE } from "../utils/constants";
+
+/** Resolves a swatch id to its literal oklch value (see ColorPicker.tsx). */
+function swatch(id: number): string {
+  const found = COLOR_PALETTE.find((s) => s.id === id);
+  if (!found) throw new Error(`Unknown swatch id ${id}`);
+  return found.value;
+}
 
 export const DEFAULT_CURRENCIES: string[] = [
   "AED",
@@ -166,10 +174,10 @@ export interface CategoryPreset {
 }
 
 export const DEFAULT_CATEGORY_PRESETS: CategoryPreset[] = [
-  { name: "Food", type: "EXPENSE", icon: "utensils", color: "var(--swatch-5)" },
-  { name: "Transport", type: "EXPENSE", icon: "car", color: "var(--swatch-16)" },
-  { name: "Housing", type: "EXPENSE", icon: "home", color: "var(--swatch-17)" },
-  { name: "Entertainment", type: "EXPENSE", icon: "gamepad-2", color: "var(--swatch-18)" },
-  { name: "Salary", type: "INCOME", icon: "briefcase", color: "var(--swatch-12)" },
-  { name: "Freelance", type: "INCOME", icon: "laptop", color: "var(--swatch-14)" },
+  { name: "Food", type: "EXPENSE", icon: "utensils", color: swatch(5) },
+  { name: "Transport", type: "EXPENSE", icon: "car", color: swatch(16) },
+  { name: "Housing", type: "EXPENSE", icon: "home", color: swatch(17) },
+  { name: "Entertainment", type: "EXPENSE", icon: "gamepad-2", color: swatch(18) },
+  { name: "Salary", type: "INCOME", icon: "briefcase", color: swatch(12) },
+  { name: "Freelance", type: "INCOME", icon: "laptop", color: swatch(14) },
 ];

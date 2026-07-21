@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	internaldb "github.com/nikonok/expensesapp/backend/internal/db"
 	"github.com/nikonok/expensesapp/backend/internal/db/gen"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
 )
@@ -71,6 +72,6 @@ func (h *Handler) GetRecoveryEnvelope(w http.ResponseWriter, r *http.Request) {
 		Salt:         base64.RawURLEncoding.EncodeToString(envelope.Salt),
 		Version:      envelope.Version,
 		FamilyId:     family.ID,
-		CreatedAt:    family.CreatedAt,
+		CreatedAt:    internaldb.RecoveryCreatedAtOrFallback(family),
 	})
 }

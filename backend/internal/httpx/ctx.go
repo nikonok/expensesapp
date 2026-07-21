@@ -10,6 +10,7 @@ const (
 	keyDeviceID
 	keySessionID
 	keyFamilyID
+	keyDeviceStatus
 )
 
 // WithRequestID returns a child context carrying the given request ID.
@@ -64,5 +65,17 @@ func WithFamilyID(ctx context.Context, id string) context.Context {
 // FamilyID retrieves the family ID from ctx, or "" if not present.
 func FamilyID(ctx context.Context) string {
 	v, _ := ctx.Value(keyFamilyID).(string)
+	return v
+}
+
+// WithDeviceStatus returns a child context carrying the given device status
+// (e.g. "pending", "active").
+func WithDeviceStatus(ctx context.Context, status string) context.Context {
+	return context.WithValue(ctx, keyDeviceStatus, status)
+}
+
+// DeviceStatus retrieves the device status from ctx, or "" if not present.
+func DeviceStatus(ctx context.Context) string {
+	v, _ := ctx.Value(keyDeviceStatus).(string)
 	return v
 }

@@ -24,6 +24,14 @@ interface BackupJSON {
   };
 }
 
+/** Highest backup format version this app version knows how to restore. */
+const SUPPORTED_BACKUP_VERSION = 1;
+
+/** Automatic and manual backups are pruned independently, keeping at most
+ *  this many of each kind. This ensures an automatic backup can never evict
+ *  the user's own manually-created backups (and vice versa). */
+const MAX_BACKUPS_PER_KIND = 3;
+
 class BackupService {
   private _autoBackupIntervalId: ReturnType<typeof setInterval> | null = null;
 
@@ -31,6 +39,7 @@ class BackupService {
     if (typeof parsed !== "object" || parsed === null) return false;
     const p = parsed as Record<string, unknown>;
     if (!("version" in p) || !("tables" in p)) return false;
+    if (typeof p.version !== "number") return false;
     const tables = p.tables as Record<string, unknown>;
     if (typeof tables !== "object" || tables === null) return false;
     const required = [
@@ -42,6 +51,15 @@ class BackupService {
       "settings",
     ];
     return required.every((k) => Array.isArray(tables[k]));
+  }
+
+  private assertSupportedVersion(version: number): void {
+    if (version > SUPPORTED_BACKUP_VERSION) {
+      throw new Error(
+        `This backup was created by a newer version of the app (format v${version}, ` +
+          `this app supports up to v${SUPPORTED_BACKUP_VERSION}). Please update the app before restoring it.`,
+      );
+    }
   }
 
   private async _buildSnapshot(): Promise<BackupJSON> {
@@ -79,10 +97,16 @@ class BackupService {
     await db.transaction("rw", db.backups, async () => {
       await db.backups.add(record as Backup);
 
-      // Prune: keep only the most recent backup
-      const allBackups = await db.backups.orderBy("createdAt").toArray();
-      if (allBackups.length > 1) {
-        const idsToDelete = allBackups.slice(0, allBackups.length - 1).map((b) => b.id!);
+      // Prune: keep only the most recent MAX_BACKUPS_PER_KIND backups of the
+      // SAME kind (automatic vs. manual). Automatic backups must never evict
+      // a manual backup, and vice versa.
+      const sameKind = (await db.backups.toArray())
+        .filter((b) => b.isAutomatic === isAutomatic)
+        .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+      if (sameKind.length > MAX_BACKUPS_PER_KIND) {
+        const idsToDelete = sameKind
+          .slice(0, sameKind.length - MAX_BACKUPS_PER_KIND)
+          .map((b) => b.id!);
         await db.backups.bulkDelete(idsToDelete);
       }
     });
@@ -107,6 +131,7 @@ class BackupService {
       if (!this.validateBackupStructure(parsed)) {
         throw new Error("Backup data has invalid structure");
       }
+      this.assertSupportedVersion(parsed.version);
       await this._restoreData(parsed);
       logger.info("backup.restored", { source: "in-db", backupId });
     } catch (err) {
@@ -157,6 +182,7 @@ class BackupService {
     if (!this.validateBackupStructure(parsed)) {
       throw new Error("Invalid backup file structure");
     }
+    this.assertSupportedVersion(parsed.version);
 
     try {
       await this._restoreData(parsed);
@@ -210,7 +236,11 @@ class BackupService {
 
     const now = Date.now();
     const threshold = intervalHours * 3_600_000;
-    const lastMs = lastAt ? new Date(lastAt).getTime() : 0;
+    const parsedLastMs = lastAt ? new Date(lastAt).getTime() : 0;
+    // An unparsable lastAutoBackupAt (NaN) must be treated as "never backed
+    // up" — otherwise `now - NaN` is NaN and the overdue check never fires,
+    // permanently disabling auto-backup.
+    const lastMs = Number.isNaN(parsedLastMs) ? 0 : parsedLastMs;
 
     if (now - lastMs > threshold) {
       logger.info("backup.auto.run", { intervalHours });
@@ -266,7 +296,17 @@ class BackupService {
 
     await db.transaction(
       "rw",
-      [db.accounts, db.categories, db.transactions, db.budgets, db.exchangeRates, db.settings],
+      [
+        db.accounts,
+        db.categories,
+        db.transactions,
+        db.budgets,
+        db.exchangeRates,
+        db.settings,
+        db.pendingUploads,
+        db.syncCursors,
+        db.recordMappings,
+      ],
       async () => {
         await db.accounts.clear();
         await db.categories.clear();
@@ -274,6 +314,19 @@ class BackupService {
         await db.budgets.clear();
         await db.exchangeRates.clear();
         await db.settings.clear();
+        // The restored data invalidates any queued-but-unsent sync writes and
+        // pull cursors from the pre-restore state — force a clean re-bootstrap.
+        await db.pendingUploads.clear();
+        await db.syncCursors.clear();
+        // Restored rows keep their original Dexie ids, which would otherwise
+        // resolve to pre-restore recordMappings entries whose
+        // lastServerVersion may be NEWER than the restored content — a
+        // later edit would then push with a matching parentVersion and
+        // silently overwrite newer server state. Clearing recordMappings
+        // makes every restored record look "new" to the sync engine (fresh
+        // UUID, parentVersion 0), so it goes through the normal
+        // conflict-reconciliation path against the server instead.
+        await db.recordMappings.clear();
 
         if (validAccounts.length) await db.accounts.bulkAdd(validAccounts as any);
         if (validCategories.length) await db.categories.bulkAdd(validCategories as any);

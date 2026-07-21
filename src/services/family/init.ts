@@ -6,6 +6,7 @@
 import * as bip39 from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
 import { apiFetch } from "../auth/client";
+import { setLocalFamilyId } from "./active-family";
 
 /**
  * Derive the 16-byte Argon2 salt via HKDF-SHA256.
@@ -113,7 +114,11 @@ export async function initFamilyAndShowPhrase(opts: {
   // 4. Derive the Argon2 salt (deterministic from familyId via HKDF-SHA256)
   const salt = await deriveArgon2Salt(familyId);
 
-  // 5. POST /api/v1/family/init
+  // 5. POST /api/v1/family/init. `createdAt` is stored verbatim by the
+  //    backend and echoed back by the recovery-envelope endpoint — it MUST
+  //    be the exact string bound into the recovery-envelope AAD above, or a
+  //    later cold-recovery unwrap on another device would derive a
+  //    different AAD and fail to decrypt.
   await apiFetch<unknown>("/api/v1/family/init", {
     method: "POST",
     body: JSON.stringify({
@@ -124,8 +129,15 @@ export async function initFamilyAndShowPhrase(opts: {
         phraseCt: toBase64Url(phraseCt),
         salt: toBase64Url(salt),
       },
+      createdAt,
     }),
   });
+
+  // Seed the canonical local familyId immediately — this device just
+  // created the family and has never pulled yet, so `syncCursors` has no
+  // row and `getLocalFamilyId()` would otherwise return null until the
+  // first successful pull.
+  await setLocalFamilyId(familyId);
 
   return { familyId, phrase };
 }

@@ -98,7 +98,10 @@ func (h *Handler) PostRestore(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve snapshot by date.
 	q := gen.New(h.db)
-	snap, err := q.GetSnapshotByDate(ctx, familyID, date)
+	snap, err := q.GetSnapshotByDate(ctx, gen.GetSnapshotByDateParams{
+		FamilyID:     familyID,
+		SnapshotDate: date,
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		httpx.WriteError(w, r, http.StatusNotFound, "not-found", "no snapshot found for that date")
 		return

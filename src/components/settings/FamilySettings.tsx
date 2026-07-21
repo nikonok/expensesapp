@@ -8,9 +8,14 @@
 //   4. "Leave family" button with confirm dialog.
 
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { ComingSoonStub } from "@/components/shared/ComingSoonStub";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useToast } from "@/components/shared/Toast";
+import { useAuthStore } from "@/services/auth/session";
+import { db } from "@/db/database";
+import { logger } from "@/services/log.service";
 import {
   createInvite,
   listIncomingInvites,
@@ -25,6 +30,38 @@ import {
 } from "@/services/family/client";
 // TODO(WORK_PLAN B5): re-enable with proper key wrap
 // import { migrateSoloRecordsToFamily } from "@/services/family/migrate";
+
+/**
+ * Tears down anything tied to the family we're about to leave/switch away
+ * from: disconnects the live SSE connection (dispatched first, synchronously,
+ * to win the race against the server's `you.removed` broadcast which would
+ * otherwise trigger a full local wipe + sign-out — see App.tsx's
+ * `family-sync-reset` listener), then clears the local sync cursor/outbox and
+ * the crypto worker's stored family key. Leaves settings/auth untouched.
+ */
+async function clearLocalFamilyState(): Promise<void> {
+  window.dispatchEvent(new CustomEvent("family-sync-reset"));
+  try {
+    await db.transaction("rw", db.syncCursors, db.pendingUploads, async () => {
+      await db.syncCursors.clear();
+      await db.pendingUploads.clear();
+    });
+  } catch (err) {
+    logger.warn(
+      "family.clearLocalState.dexie.failed",
+      err instanceof Error ? err : new Error(String(err)),
+    );
+  }
+  try {
+    const { cryptoWorker } = await import("@/services/crypto/worker-client");
+    await cryptoWorker.clearAllStoredKeys();
+  } catch (err) {
+    logger.warn(
+      "family.clearLocalState.keys.failed",
+      err instanceof Error ? err : new Error(String(err)),
+    );
+  }
+}
 
 // ── Row atoms ─────────────────────────────────────────────────────────────────
 
@@ -118,14 +155,17 @@ interface MigrationDialogProps {
   targetFamilyId?: string;
   onClose: () => void;
   onDone?: () => void;
+  onDiscard: () => void;
+  discarding: boolean;
 }
 
-function MigrationDialog({ isOpen, onClose }: MigrationDialogProps) {
+function MigrationDialog({ isOpen, onClose, onDiscard, discarding }: MigrationDialogProps) {
   // TODO(WORK_PLAN B5): re-enable with proper key wrap.
   // The previous implementation encrypted migrated records under an
   // all-zero family key, which would silently corrupt them. The "Move my
   // data" button is wrapped in <ComingSoonStub> until B5 plumbs the real
   // wrapped key through the worker.
+  const { t } = useTranslation();
 
   if (!isOpen) return null;
 
@@ -178,7 +218,7 @@ function MigrationDialog({ isOpen, onClose }: MigrationDialogProps) {
             margin: 0,
           }}
         >
-          You have existing data
+          {t("family.migration.title")}
         </h2>
         <p
           style={{
@@ -188,8 +228,7 @@ function MigrationDialog({ isOpen, onClose }: MigrationDialogProps) {
             margin: 0,
           }}
         >
-          Your current records can be moved to the shared family, or you can start fresh and discard
-          them.
+          {t("family.migration.body")}
         </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
@@ -210,12 +249,33 @@ function MigrationDialog({ isOpen, onClose }: MigrationDialogProps) {
                 cursor: "pointer",
               }}
             >
-              Move my data
+              {t("family.migration.moveMyData")}
             </button>
           </ComingSoonStub>
 
           <button
+            onClick={onDiscard}
+            disabled={discarding}
+            style={{
+              minHeight: "44px",
+              width: "100%",
+              background: "var(--color-expense-dim)",
+              color: "var(--color-expense)",
+              border: "1px solid oklch(62% 0.28 18 / 50%)",
+              borderRadius: "var(--radius-btn)",
+              fontFamily: '"DM Sans", sans-serif',
+              fontWeight: 500,
+              fontSize: "var(--text-body)",
+              cursor: discarding ? "not-allowed" : "pointer",
+              opacity: discarding ? 0.6 : 1,
+            }}
+          >
+            {discarding ? t("family.migration.discarding") : t("family.migration.startFresh")}
+          </button>
+
+          <button
             onClick={onClose}
+            disabled={discarding}
             style={{
               minHeight: "44px",
               background: "none",
@@ -225,10 +285,10 @@ function MigrationDialog({ isOpen, onClose }: MigrationDialogProps) {
               fontFamily: '"DM Sans", sans-serif',
               fontWeight: 400,
               fontSize: "var(--text-caption)",
-              cursor: "pointer",
+              cursor: discarding ? "not-allowed" : "pointer",
             }}
           >
-            Cancel
+            {t("common.cancel")}
           </button>
         </div>
       </div>
@@ -239,7 +299,9 @@ function MigrationDialog({ isOpen, onClose }: MigrationDialogProps) {
 // ── FamilySettings ────────────────────────────────────────────────────────────
 
 export function FamilySettings() {
+  const { t } = useTranslation();
   const { show: showToast } = useToast();
+  const navigate = useNavigate();
 
   // ── Members ────────────────────────────────────────────────────────────────
   const [members, setMembers] = useState<FamilyMember[]>([]);
@@ -267,10 +329,14 @@ export function FamilySettings() {
     setRemovingMember(userId);
     try {
       await removeMember(userId);
-      showToast("Member removed", "success");
+      showToast(t("family.removeSuccess"), "success");
       setMembers((prev) => prev.filter((m) => m.userId !== userId));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to remove member", "error");
+      logger.warn(
+        "family.member.remove.failed",
+        err instanceof Error ? err : new Error(String(err)),
+      );
+      showToast(t("family.removeFailed"), "error");
     } finally {
       setRemovingMember(null);
     }
@@ -286,10 +352,11 @@ export function FamilySettings() {
     setInviteSending(true);
     try {
       await createInvite(email);
-      showToast("Invite sent", "success");
+      showToast(t("family.inviteSentSuccess"), "success");
       setInviteEmail("");
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to send invite", "error");
+      logger.warn("family.invite.send.failed", err instanceof Error ? err : new Error(String(err)));
+      showToast(t("family.inviteSendFailed"), "error");
     } finally {
       setInviteSending(false);
     }
@@ -322,18 +389,26 @@ export function FamilySettings() {
     targetFamilyId: string;
   } | null>(null);
 
+  // On success, this device has no key for the family it just joined — clear
+  // any stale state from whatever family it was in before, then hand off to
+  // the standard approval/envelope flow (DeviceJoinWaiting) to receive one.
   async function handleAccept(inviteId: string) {
     setActingInvite(inviteId);
     try {
       await acceptInvite(inviteId);
-      showToast("Joined family!", "success");
-      setInvites((prev) => prev.filter((i) => i.inviteId !== inviteId));
-      loadMembers();
+      await clearLocalFamilyState();
+      useAuthStore.setState({ awaitingEnvelope: true });
+      showToast(t("family.joinedSuccess"), "success");
+      navigate("/devices/waiting", { replace: true });
     } catch (err) {
       if (err instanceof NeedsMigrationDecisionError) {
         setMigrationDialog({ inviteId, targetFamilyId: err.targetFamilyId });
       } else {
-        showToast(err instanceof Error ? err.message : "Failed to accept invite", "error");
+        logger.warn(
+          "family.invite.accept.failed",
+          err instanceof Error ? err : new Error(String(err)),
+        );
+        showToast(t("family.acceptFailed"), "error");
       }
     } finally {
       setActingInvite(null);
@@ -344,12 +419,63 @@ export function FamilySettings() {
     setActingInvite(inviteId);
     try {
       await declineInvite(inviteId);
-      showToast("Invite declined", "success");
+      showToast(t("family.declineSuccess"), "success");
       setInvites((prev) => prev.filter((i) => i.inviteId !== inviteId));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to decline invite", "error");
+      logger.warn(
+        "family.invite.decline.failed",
+        err instanceof Error ? err : new Error(String(err)),
+      );
+      showToast(t("family.declineFailed"), "error");
     } finally {
       setActingInvite(null);
+    }
+  }
+
+  // ── Migration dialog — discard path ─────────────────────────────────────────
+  const [discarding, setDiscarding] = useState(false);
+
+  async function handleDiscardAndJoin() {
+    if (!migrationDialog) return;
+    const { inviteId } = migrationDialog;
+    setDiscarding(true);
+    try {
+      // The backend refuses to accept an invite while the caller still has
+      // an active family membership — leave the current (solo) family
+      // server-side first. Records stay on the server under that family
+      // until the user rejoins or deletes their account (same as the
+      // existing "Leave family" button below).
+      await leaveFamily(false);
+      // Discard local domain data seeded under the old family — the user
+      // chose to start fresh rather than migrate it. Settings/auth untouched.
+      // recordMappings is cleared too: a record id later reused under the
+      // new family would otherwise inherit a stale mapping (wrong family,
+      // wrong lastServerVersion) — self-healing but wasteful.
+      await db.transaction(
+        "rw",
+        [db.accounts, db.categories, db.transactions, db.budgets, db.recordMappings],
+        async () => {
+          await db.accounts.clear();
+          await db.categories.clear();
+          await db.transactions.clear();
+          await db.budgets.clear();
+          await db.recordMappings.clear();
+        },
+      );
+      await clearLocalFamilyState();
+      await acceptInvite(inviteId);
+      useAuthStore.setState({ awaitingEnvelope: true });
+      setMigrationDialog(null);
+      showToast(t("family.joinedSuccess"), "success");
+      navigate("/devices/waiting", { replace: true });
+    } catch (err) {
+      logger.warn(
+        "family.migration.discard.failed",
+        err instanceof Error ? err : new Error(String(err)),
+      );
+      showToast(t("family.joinFailed"), "error");
+    } finally {
+      setDiscarding(false);
     }
   }
 
@@ -362,10 +488,17 @@ export function FamilySettings() {
     setLeaveLoading(true);
     try {
       await leaveFamily(false);
-      showToast("Left family", "success");
+      // Tear down the live sync connection for the family we just left
+      // BEFORE anything else — the backend also pushes a `you.removed` SSE
+      // event to the leaver, which would otherwise trigger a full local wipe
+      // + sign-out (see engine.ts). Disconnecting first means we never
+      // process that event and land the simpler "stay on settings" outcome.
+      await clearLocalFamilyState();
+      showToast(t("family.leaveSuccess"), "success");
       setMembers([]);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to leave family", "error");
+      logger.warn("family.leave.failed", err instanceof Error ? err : new Error(String(err)));
+      showToast(t("family.leaveFailed"), "error");
     } finally {
       setLeaveLoading(false);
     }
@@ -388,10 +521,8 @@ export function FamilySettings() {
         }}
       >
         {membersLoading
-          ? "Loading members…"
-          : hasMembersData
-            ? `Family (${memberCount} member${memberCount !== 1 ? "s" : ""})`
-            : "Family (1 member)"}
+          ? t("family.membersLoading")
+          : t("family.membersHeader", { count: hasMembersData ? memberCount : 1 })}
       </div>
 
       {!membersLoading &&
@@ -422,11 +553,11 @@ export function FamilySettings() {
                   flexShrink: 0,
                 }}
               >
-                You
+                {t("family.you")}
               </span>
             ) : (
               <ActionButton
-                label={removingMember === member.userId ? "Removing…" : "Remove"}
+                label={removingMember === member.userId ? t("common.removing") : t("common.remove")}
                 disabled={removingMember === member.userId}
                 variant="danger"
                 onClick={() => handleRemoveMember(member.userId)}
@@ -447,7 +578,7 @@ export function FamilySettings() {
       >
         <input
           type="email"
-          placeholder="Invite by email"
+          placeholder={t("family.invitePlaceholder")}
           value={inviteEmail}
           onChange={(e) => setInviteEmail(e.target.value)}
           onKeyDown={(e) => {
@@ -468,7 +599,7 @@ export function FamilySettings() {
           }}
         />
         <ActionButton
-          label={inviteSending ? "Sending…" : "Send"}
+          label={inviteSending ? t("family.sending") : t("family.send")}
           disabled={inviteSending || inviteEmail.trim() === ""}
           variant="primary"
           onClick={handleSendInvite}
@@ -485,7 +616,7 @@ export function FamilySettings() {
             color: "var(--color-text-muted)",
           }}
         >
-          Pending invites
+          {t("family.pendingInvites")}
         </div>
       )}
 
@@ -510,13 +641,13 @@ export function FamilySettings() {
 
             <div style={{ display: "flex", gap: "var(--space-2)", flexShrink: 0 }}>
               <ActionButton
-                label={actingInvite === invite.inviteId ? "…" : "Accept"}
+                label={actingInvite === invite.inviteId ? "…" : t("family.accept")}
                 disabled={actingInvite === invite.inviteId}
                 variant="primary"
                 onClick={() => handleAccept(invite.inviteId)}
               />
               <ActionButton
-                label={actingInvite === invite.inviteId ? "…" : "Decline"}
+                label={actingInvite === invite.inviteId ? "…" : t("family.decline")}
                 disabled={actingInvite === invite.inviteId}
                 variant="danger"
                 onClick={() => handleDecline(invite.inviteId)}
@@ -551,7 +682,7 @@ export function FamilySettings() {
             color: "var(--color-expense)",
           }}
         >
-          {leaveLoading ? "Leaving…" : "Leave family"}
+          {leaveLoading ? t("family.leaving") : t("family.leaveFamily")}
         </span>
       </button>
 
@@ -575,7 +706,7 @@ export function FamilySettings() {
               color: "var(--color-text)",
             }}
           >
-            Take a copy first
+            {t("family.takeCopyFirst")}
           </span>
         </div>
       </ComingSoonStub>
@@ -583,9 +714,9 @@ export function FamilySettings() {
       {/* Leave confirm dialog */}
       <ConfirmDialog
         isOpen={leaveConfirmOpen}
-        title="Leave family"
-        body="You will lose access to shared records. Your own records will remain on the server until you rejoin or delete your account."
-        confirmLabel="Leave"
+        title={t("family.leaveFamily")}
+        body={t("family.leaveConfirmBody")}
+        confirmLabel={t("family.leaveConfirmLabel")}
         onConfirm={handleLeaveConfirm}
         onCancel={() => setLeaveConfirmOpen(false)}
         variant="destructive"
@@ -597,6 +728,8 @@ export function FamilySettings() {
         inviteId={migrationDialog?.inviteId ?? ""}
         targetFamilyId={migrationDialog?.targetFamilyId ?? ""}
         onClose={() => setMigrationDialog(null)}
+        onDiscard={() => void handleDiscardAndJoin()}
+        discarding={discarding}
         onDone={() => {
           setMigrationDialog(null);
           loadInvites();

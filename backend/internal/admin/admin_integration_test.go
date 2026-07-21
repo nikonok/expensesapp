@@ -456,6 +456,56 @@ func TestAdmin_PromoteDemote(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
+// TestAdmin_PromoteRequiresRoot
+// --------------------------------------------------------------------------
+
+// TestAdmin_PromoteRequiresRoot verifies that a non-root admin cannot promote
+// another user to admin — only the root user may (mirrors demote's
+// per-subtree restriction; see admin/CLAUDE.md).
+func TestAdmin_PromoteRequiresRoot(t *testing.T) {
+	authpkg.ClearSessionCache()
+	env := testenv.New(t, testenv.WithBootstrapEmail("root@example.com"))
+	defer env.Close()
+
+	ctx := context.Background()
+	q := gen.New(env.DB)
+
+	// Sign in as root so we can seed a non-root admin.
+	env.Verifier.Claims = &authpkg.Claims{
+		Email: "root@example.com", EmailVerified: true, Sub: "sub-root",
+	}
+	signInAdmin(t, env, "root@example.com")
+	authpkg.ClearSessionCache()
+
+	rootUser, err := q.GetUserByEmail(ctx, "root@example.com")
+	require.NoError(t, err)
+
+	// Seed a non-root admin (promoted by root).
+	addToAllowlistAdmin(t, env.DB, "adminx@example.com")
+	adminXID := seedAdminUser(t, env.DB, rootUser.ID, "adminx@example.com")
+
+	// Seed a plain (non-admin) target user to promote.
+	addToAllowlistAdmin(t, env.DB, "target@example.com")
+	_, targetID, _ := env.MintSession(t, "target@example.com")
+
+	// Admin X (non-root) attempts to promote target — must be denied.
+	cookieX, _, _ := env.MintSession(t, "adminx@example.com")
+	clientX := sessionClientFor(t, env, cookieX)
+
+	promoteResp := postJSON(t, clientX, env.Server.URL+"/v1/admin/admins/"+targetID+"/promote", nil)
+	promoteBody := readBody(t, promoteResp)
+	assert.Equal(t, http.StatusForbidden, promoteResp.StatusCode,
+		"non-root admin must not be able to promote; body: %s", promoteBody)
+
+	// Verify target is still not admin.
+	target, err := q.GetUserByID(ctx, targetID)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), target.IsAdmin, "target must remain non-admin")
+
+	_ = adminXID
+}
+
+// --------------------------------------------------------------------------
 // TestAdmin_DemoteOutsideSubtree
 // --------------------------------------------------------------------------
 

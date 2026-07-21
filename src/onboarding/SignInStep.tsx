@@ -55,7 +55,7 @@ function Spinner() {
 export function SignInStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { isSigningIn, error, signIn } = useAuthStore();
+  const { isSigningIn, error, errorStatus, signIn } = useAuthStore();
 
   const handleSignIn = async () => {
     await signIn();
@@ -154,7 +154,9 @@ export function SignInStep({ onNext, onSkip }: { onNext: () => void; onSkip: () 
                 margin: "var(--space-1) 0 0",
               }}
             >
-              {t("onboarding.signin.error_fallback")}
+              {errorStatus === 403
+                ? t("onboarding.signin.error_forbidden")
+                : t("onboarding.signin.error_fallback")}
             </p>
           )}
           <button style={skipLinkStyle} onClick={onSkip}>

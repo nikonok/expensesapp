@@ -63,9 +63,19 @@ func (s *Service) RestoreSnapshot(ctx context.Context, familyID, snapshotID, cal
 			snapshotIDs[e.RecordID] = struct{}{}
 		}
 
-		// Upsert each snapshot entry into record_meta.
+		// Upsert each snapshot entry into record_meta. Authorship
+		// (added_by_user/edited_by_user) is bound into the blob's AAD by the
+		// client, so restore must reapply the ORIGINAL values captured on the
+		// snapshot entry rather than the restoring caller — otherwise the
+		// (unchanged) ciphertext becomes undecryptable. Historical snapshot
+		// entries taken before authorship capture was added have NULL here;
+		// fall back to callerUserID only for those (best effort — such a
+		// snapshot cannot fully round-trip either way).
 		for _, entry := range entries {
-			existing, lookupErr := qt.GetRecordMeta(ctx, entry.RecordID)
+			existing, lookupErr := qt.GetRecordMeta(ctx, gen.GetRecordMetaParams{
+				RecordID: entry.RecordID,
+				FamilyID: familyID,
+			})
 			isNew := errors.Is(lookupErr, sql.ErrNoRows)
 			if lookupErr != nil && !isNew {
 				return lookupErr
@@ -76,6 +86,9 @@ func (s *Service) RestoreSnapshot(ctx context.Context, familyID, snapshotID, cal
 				return seqErr
 			}
 
+			addedBy := stringOrFallback(entry.AddedByUser, callerUserID)
+			editedBy := stringOrFallback(entry.EditedByUser, callerUserID)
+
 			if isNew {
 				if insertErr := qt.InsertRecordMeta(ctx, gen.InsertRecordMetaParams{
 					RecordID:       entry.RecordID,
@@ -83,8 +96,8 @@ func (s *Service) RestoreSnapshot(ctx context.Context, familyID, snapshotID, cal
 					RecordType:     entry.RecordType,
 					BlobID:         entry.BlobID,
 					Version:        entry.Version + 1,
-					AddedByUser:    callerUserID,
-					EditedByUser:   callerUserID,
+					AddedByUser:    addedBy,
+					EditedByUser:   editedBy,
 					UpdatedAtMap:   entry.UpdatedAtMap,
 					DeletedAt:      sql.NullString{},
 					FamilySeq:      seq,
@@ -96,9 +109,10 @@ func (s *Service) RestoreSnapshot(ctx context.Context, familyID, snapshotID, cal
 			} else {
 				if updateErr := qt.UpdateRecordMeta(ctx, gen.UpdateRecordMetaParams{
 					RecordID:       entry.RecordID,
+					FamilyID:       familyID,
 					BlobID:         entry.BlobID,
 					Version:        existing.Version + 1,
-					EditedByUser:   callerUserID,
+					EditedByUser:   editedBy,
 					UpdatedAtMap:   entry.UpdatedAtMap,
 					DeletedAt:      sql.NullString{},
 					FamilySeq:      seq,
@@ -111,6 +125,11 @@ func (s *Service) RestoreSnapshot(ctx context.Context, familyID, snapshotID, cal
 		}
 
 		// Soft-delete records in record_meta that are NOT in the snapshot.
+		// The client applies tombstones by identity (recordId/deletedAt)
+		// without needing to decrypt them, but the row's added_by_user/
+		// edited_by_user are still bound into its blob's AAD — preserve the
+		// record's own values here too rather than overwriting with the
+		// restoring caller.
 		allRecords, err := qt.ListAllRecordMetaForFamily(ctx, familyID)
 		if err != nil {
 			return err
@@ -130,9 +149,10 @@ func (s *Service) RestoreSnapshot(ctx context.Context, familyID, snapshotID, cal
 
 			if updateErr := qt.UpdateRecordMeta(ctx, gen.UpdateRecordMetaParams{
 				RecordID:       rec.RecordID,
+				FamilyID:       familyID,
 				BlobID:         rec.BlobID,
 				Version:        rec.Version + 1,
-				EditedByUser:   callerUserID,
+				EditedByUser:   rec.EditedByUser,
 				UpdatedAtMap:   rec.UpdatedAtMap,
 				DeletedAt:      sql.NullString{String: nowStr, Valid: true},
 				FamilySeq:      seq,
@@ -171,6 +191,14 @@ func (s *Service) RestoreSnapshot(ctx context.Context, familyID, snapshotID, cal
 	}
 
 	return &RestoreResult{NewCursor: syncp.EncodeCursor(finalCursor)}, nil
+}
+
+// stringOrFallback returns ns.String when valid and non-empty, else fallback.
+func stringOrFallback(ns sql.NullString, fallback string) string {
+	if ns.Valid && ns.String != "" {
+		return ns.String
+	}
+	return fallback
 }
 
 // insertAudit writes a single audit_log row using an already-open *gen.Queries.

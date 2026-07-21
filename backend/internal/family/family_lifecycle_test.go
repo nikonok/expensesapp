@@ -12,6 +12,7 @@ import (
 	"bufio"
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -573,6 +574,178 @@ func TestMigrateSolo_Idempotent(t *testing.T) {
 	_ = bobSoloFamilyID
 }
 
+// validSyncBlob builds a structurally valid /v1/sync/push blob: version byte
+// 0x01 followed by 73+payloadLen-1 zero bytes (24-byte nonce + 32-byte commit
+// + 16-byte AEAD tag overhead, per blobOverheadBytes in internal/sync). Not
+// cryptographically valid, but push only checks structural shape.
+func validSyncBlob(payloadLen int) string {
+	b := make([]byte, 73+payloadLen)
+	b[0] = 0x01
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+// --------------------------------------------------------------------------
+// TestMigrateSolo_RewritesRecordMetaFamily
+// --------------------------------------------------------------------------
+
+// TestMigrateSolo_RewritesRecordMetaFamily verifies that when a migrated
+// record already has a record_meta row in the caller's source (solo) family,
+// migrate-solo rewrites that row's family_id to the TARGET family (not just
+// its blob/family_seq), allocating family_seq from the target family's own
+// counter. A member of the target family must then be able to pull the
+// migrated record via the normal sync/pull path, and the per-family
+// UNIQUE(family_id, family_seq) index must still hold afterwards.
+func TestMigrateSolo_RewritesRecordMetaFamily(t *testing.T) {
+	authpkg.ClearSessionCache()
+	env := testenv.New(t)
+	defer env.Close()
+
+	addToAllowlist(t, env.DB, "alice-rmf@example.com")
+	addToAllowlist(t, env.DB, "bob-rmf@example.com")
+
+	// Alice: init the target family and push one record of her own first, so
+	// the target family's family_seq counter is already advanced past 0.
+	// This way a bug that fails to allocate a seq from the TARGET family (or
+	// that accidentally reuses the source family's seq) is observable rather
+	// than accidentally matching by coincidence.
+	// Reuse clientA's existing session from initFamilyForUser for the push
+	// below — signing in again would create a second (pending) device for
+	// Alice and break /v1/sync/push, which requires an active device.
+	clientA := env.Client
+	targetFamilyID := initFamilyForUser(t, env, clientA, "alice-rmf@example.com", "sub-alice-rmf")
+
+	aliceRecordID := newUUIDStr(t)
+	alicePushResp := postJSON(t, clientA, env.Server.URL+"/v1/sync/push", map[string]any{
+		"records": []any{
+			map[string]any{
+				"recordId":           aliceRecordID,
+				"recordType":         "category",
+				"blob":               validSyncBlob(10),
+				"updatedAtMap":       map[string]string{"name": "2024-01-01T00:00:00.000Z"},
+				"parentVersion":      0,
+				"plaintextByteCount": int64(10),
+			},
+		},
+	})
+	alicePushBody := readBody(t, alicePushResp)
+	require.Equal(t, http.StatusOK, alicePushResp.StatusCode, "alice seed push: %s", alicePushBody)
+
+	// Alice invites Bob so he has a right to migrate into her family.
+	_ = sendInvite(t, env, clientA, "bob-rmf@example.com")
+
+	// Bob: sign in, init his own solo family, then push a record into it —
+	// this record_meta row (scoped to Bob's SOLO family) is the one whose
+	// ownership must be rewritten by migrate-solo.
+	authpkg.ClearSessionCache()
+	clientB := env.NewClient()
+	bobSoloFamilyID := initFamilyForUser(t, env, clientB, "bob-rmf@example.com", "sub-bob-rmf")
+	bobID := getUserIDByEmail(t, env.DB, "bob-rmf@example.com")
+
+	sharedRecordID := newUUIDStr(t)
+	bobPushResp := postJSON(t, clientB, env.Server.URL+"/v1/sync/push", map[string]any{
+		"records": []any{
+			map[string]any{
+				"recordId":           sharedRecordID,
+				"recordType":         "transaction",
+				"blob":               validSyncBlob(10),
+				"updatedAtMap":       map[string]string{"amount": "2024-01-01T00:00:00.000Z"},
+				"parentVersion":      0,
+				"plaintextByteCount": int64(10),
+			},
+		},
+	})
+	bobPushBody := readBody(t, bobPushResp)
+	require.Equal(t, http.StatusOK, bobPushResp.StatusCode, "bob seed push: %s", bobPushBody)
+
+	// Sanity-check: before migration, the record_meta row for sharedRecordID
+	// is scoped to Bob's solo family.
+	var preFamilyID string
+	var preFamilySeq int64
+	require.NoError(t, env.DB.QueryRowContext(context.Background(),
+		`SELECT family_id, family_seq FROM record_meta WHERE record_id = ?`, sharedRecordID).
+		Scan(&preFamilyID, &preFamilySeq))
+	require.Equal(t, bobSoloFamilyID, preFamilyID, "record must start out scoped to Bob's solo family")
+
+	// Bob migrates (reusing clientB's existing session), resending the SAME
+	// record id with an updated blob -- this must hit the "already exists in
+	// source family" UPDATE branch inside MigrateSolo.
+	newBlob := base64.RawURLEncoding.EncodeToString([]byte("bob-migrated-blob-bytes-not-real-ciphertext"))
+	migrateBody := map[string]any{
+		"migrationId":    newUUIDStr(t),
+		"targetFamilyId": targetFamilyID,
+		"records": []any{
+			map[string]any{
+				"recordId":           sharedRecordID,
+				"recordType":         "transaction",
+				"blob":               newBlob,
+				"updatedAtMap":       `{"amount":"2024-02-02T00:00:00.000Z"}`,
+				"addedByUser":        bobID,
+				"editedByUser":       bobID,
+				"deletedAt":          "",
+				"plaintextByteCount": int64(10),
+			},
+		},
+	}
+	migrateResp := postJSON(t, clientB, env.Server.URL+"/v1/family/migrate-solo", migrateBody)
+	migrateRespBody := readBody(t, migrateResp)
+	require.Equal(t, http.StatusOK, migrateResp.StatusCode, "migrate-solo: %s", migrateRespBody)
+
+	var migrateResult map[string]any
+	require.NoError(t, json.Unmarshal(migrateRespBody, &migrateResult))
+	assert.EqualValues(t, 1, migrateResult["recordCount"])
+
+	// The record_meta row must now be scoped to the TARGET family, with a
+	// family_seq allocated from the target family's counter (i.e. AFTER
+	// Alice's seed record's seq — not reusing Bob's old solo-family seq).
+	var postFamilyID string
+	var postFamilySeq int64
+	require.NoError(t, env.DB.QueryRowContext(context.Background(),
+		`SELECT family_id, family_seq FROM record_meta WHERE record_id = ?`, sharedRecordID).
+		Scan(&postFamilyID, &postFamilySeq))
+	assert.Equal(t, targetFamilyID, postFamilyID, "record_meta.family_id must be rewritten to the target family")
+	assert.NotEqual(t, bobSoloFamilyID, postFamilyID, "record must no longer be scoped to the old solo family")
+	assert.Greater(t, postFamilySeq, preFamilySeq,
+		"migrated seq must be a fresh allocation from the target family's counter, not the stale solo-family seq")
+
+	// The UNIQUE(family_id, family_seq) index must still hold: exactly one
+	// row in the target family owns this seq.
+	var seqOwners int
+	require.NoError(t, env.DB.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM record_meta WHERE family_id = ? AND family_seq = ?`,
+		targetFamilyID, postFamilySeq).Scan(&seqOwners))
+	assert.Equal(t, 1, seqOwners)
+
+	// No record_meta row must be left behind pointing at the old solo family.
+	var staleCount int
+	require.NoError(t, env.DB.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM record_meta WHERE record_id = ? AND family_id = ?`,
+		sharedRecordID, bobSoloFamilyID).Scan(&staleCount))
+	assert.Equal(t, 0, staleCount, "no record_meta row must remain scoped to the old solo family")
+
+	// Alice (a member of the target family) must be able to pull the
+	// migrated record via the normal sync/pull path.
+	pullResp := getJSON(t, clientA, env.Server.URL+"/v1/sync/pull?limit=500")
+	pullBody := readBody(t, pullResp)
+	require.Equal(t, http.StatusOK, pullResp.StatusCode, "alice pull: %s", pullBody)
+
+	var pullResult map[string]any
+	require.NoError(t, json.Unmarshal(pullBody, &pullResult))
+	pulledRecords, ok := pullResult["records"].([]any)
+	require.True(t, ok, "records field must be an array")
+
+	var found map[string]any
+	for _, r := range pulledRecords {
+		rec, _ := r.(map[string]any)
+		if rec["recordId"] == sharedRecordID {
+			found = rec
+			break
+		}
+	}
+	require.NotNil(t, found, "target-family member must see the migrated record via pull")
+	assert.Equal(t, newBlob, found["blob"], "pulled blob must be the migrated blob, not the pre-migration one")
+	assert.EqualValues(t, postFamilySeq, found["familySeq"])
+}
+
 // --------------------------------------------------------------------------
 // TestLeave
 // --------------------------------------------------------------------------
@@ -952,4 +1125,135 @@ func TestRemove_CoolDown(t *testing.T) {
 	var errBody map[string]any
 	_ = json.Unmarshal(body, &errBody)
 	assert.Contains(t, errBody["title"], "cool-down")
+}
+
+// --------------------------------------------------------------------------
+// TestInvite_AcceptPendingDeviceUntilEnvelope
+// --------------------------------------------------------------------------
+
+// acceptPushRecord builds a minimal, structurally-valid push record body
+// (mirrors sync_integration_test.go's validRecord/validBlob, duplicated here
+// since that helper lives in an internal test package we cannot import).
+func acceptPushRecord(t *testing.T) map[string]any {
+	t.Helper()
+	blob := make([]byte, 73) // blobOverheadBytes, zero plaintext payload
+	blob[0] = 0x01           // version
+	return map[string]any{
+		"recordId":           newUUIDStr(t),
+		"recordType":         "transaction",
+		"blob":               base64.RawURLEncoding.EncodeToString(blob),
+		"updatedAtMap":       map[string]string{"amount": "2024-01-01T00:00:00.000Z"},
+		"parentVersion":      0,
+		"plaintextByteCount": int64(0),
+	}
+}
+
+// TestInvite_AcceptPendingDeviceUntilEnvelope covers the full gap fix:
+//   - Bob is a solo (no-family) user with an existing device when he accepts
+//     Alice's invite into family Y.
+//   - His device must be set to 'pending' as part of the accept (so
+//     RequireActiveDevice blocks push/pull), a "device.joined" event must be
+//     published to family Y's SSE scope (so Alice sees the approval banner),
+//     and his supplied devicePubKey must be persisted on the device row.
+//   - Once Alice (an existing, active member of family Y) uploads the
+//     envelope for Bob's device via the existing endpoint, Bob's device
+//     becomes active and can pull.
+func TestInvite_AcceptPendingDeviceUntilEnvelope(t *testing.T) {
+	authpkg.ClearSessionCache()
+	env := testenv.New(t)
+	defer env.Close()
+
+	addToAllowlist(t, env.DB, "alice@example.com")
+	addToAllowlist(t, env.DB, "bob@example.com")
+
+	// Alice: init family Y.
+	clientA := env.Client
+	familyID := initFamilyForUser(t, env, clientA, "alice@example.com", "sub-alice-pending")
+
+	authpkg.ClearSessionCache()
+	env.Verifier.Claims = &authpkg.Claims{
+		Email: "alice@example.com", EmailVerified: true, Sub: "sub-alice-pending",
+	}
+	inviteID := sendInvite(t, env, clientA, "bob@example.com")
+
+	// Alice: open an SSE stream on family Y's scope so we can observe the
+	// device.joined event her existing device must receive.
+	evChA, closeA := openSSE(t, clientA, env.Server.URL+"/v1/sync/live")
+	defer closeA()
+	time.Sleep(50 * time.Millisecond)
+
+	// Bob: sign in as a solo user (no family yet) — his device is created
+	// 'active' since he has no family to await an envelope for.
+	authpkg.ClearSessionCache()
+	clientB := env.NewClient()
+	env.Verifier.Claims = &authpkg.Claims{
+		Email: "bob@example.com", EmailVerified: true, Sub: "sub-bob-pending",
+	}
+	signInBody := signInUser(t, env, clientB)
+	bobDeviceInfo, _ := signInBody["device"].(map[string]any)
+	bobDeviceID, _ := bobDeviceInfo["id"].(string)
+	require.NotEmpty(t, bobDeviceID)
+	require.Equal(t, false, signInBody["awaitingEnvelope"], "solo sign-in must not await an envelope")
+
+	// Bob: accept the invite, supplying a device pubkey for the first time
+	// (solo devices never generated/sent one before).
+	bobPubKey := make([]byte, 32)
+	for i := range bobPubKey {
+		bobPubKey[i] = byte(i + 1)
+	}
+	bobPubKeyB64 := base64.RawURLEncoding.EncodeToString(bobPubKey)
+	acceptResp := postJSON(t, clientB, env.Server.URL+"/v1/family/invites/"+inviteID+"/accept",
+		map[string]any{"devicePubKey": bobPubKeyB64})
+	acceptBody := readBody(t, acceptResp)
+	require.Equal(t, http.StatusNoContent, acceptResp.StatusCode, "accept: %s", acceptBody)
+
+	// Bob must now have an active family_members row in family Y.
+	bobUserID := getUserIDByEmail(t, env.DB, "bob@example.com")
+	q := gen.New(env.DB)
+	member, err := q.GetActiveFamilyMember(context.Background(), bobUserID)
+	require.NoError(t, err, "Bob must have an active family_members row")
+	assert.Equal(t, familyID, member.FamilyID)
+
+	// Bob's device must now be 'pending' with the supplied pubkey persisted.
+	bobDevice, err := q.GetDeviceByID(context.Background(), bobDeviceID)
+	require.NoError(t, err)
+	assert.Equal(t, "pending", bobDevice.Status, "accepting device must await an envelope")
+	assert.Equal(t, bobPubKey, bobDevice.PubKey, "supplied devicePubKey must be persisted")
+
+	// Alice's SSE stream must receive a "device.joined" event for Bob's device.
+	ev := receiveSSEEvent(t, evChA, "device.joined", 2*time.Second)
+	var joinedPayload map[string]any
+	require.NoError(t, json.Unmarshal([]byte(ev.Data), &joinedPayload))
+	assert.Equal(t, bobDeviceID, joinedPayload["deviceId"])
+	assert.Equal(t, bobPubKeyB64, joinedPayload["pubKey"])
+
+	// Bob's pending device: push must be rejected.
+	authpkg.ClearSessionCache()
+	pushResp := postJSON(t, clientB, env.Server.URL+"/v1/sync/push",
+		map[string]any{"records": []any{acceptPushRecord(t)}})
+	pushBody := readBody(t, pushResp)
+	assert.Equal(t, http.StatusForbidden, pushResp.StatusCode, "push body: %s", pushBody)
+
+	// Bob's pending device: pull must be rejected.
+	authpkg.ClearSessionCache()
+	pullResp := getJSON(t, clientB, env.Server.URL+"/v1/sync/pull")
+	pullBody := readBody(t, pullResp)
+	assert.Equal(t, http.StatusForbidden, pullResp.StatusCode, "pull body: %s", pullBody)
+
+	// Alice (existing, active family member) uploads the envelope for Bob's device.
+	authpkg.ClearSessionCache()
+	env.Verifier.Claims = &authpkg.Claims{
+		Email: "alice@example.com", EmailVerified: true, Sub: "sub-alice-pending",
+	}
+	envelope := make([]byte, 80)
+	envResp := postJSON(t, clientA, env.Server.URL+"/v1/family/devices/"+bobDeviceID+"/envelope",
+		map[string]any{"envelope": base64.RawURLEncoding.EncodeToString(envelope)})
+	envBody := readBody(t, envResp)
+	require.Equal(t, http.StatusNoContent, envResp.StatusCode, "envelope post: %s", envBody)
+
+	// Bob's device is now active — pull must succeed.
+	authpkg.ClearSessionCache()
+	pullResp2 := getJSON(t, clientB, env.Server.URL+"/v1/sync/pull")
+	pullBody2 := readBody(t, pullResp2)
+	assert.Equal(t, http.StatusOK, pullResp2.StatusCode, "pull after approval: %s", pullBody2)
 }

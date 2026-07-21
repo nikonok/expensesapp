@@ -294,7 +294,7 @@ describe("exportService.exportTransactions", () => {
   });
 
   describe("regular transfer handling", () => {
-    it("emits 1 Expenses row and 0 Incomes rows for a regular transfer pair", async () => {
+    it("emits 0 Expenses rows and 0 Incomes rows for a plain (non-debt) transfer pair", async () => {
       const groupId = "regular-transfer-uuid";
       mockTxQuery.sortBy.mockResolvedValue([
         makeTx({
@@ -323,43 +323,10 @@ describe("exportService.exportTransactions", () => {
 
       const expenseRows = (await getExpensesSheetData()).slice(1);
       const incomeRows = (await getIncomesSheetData()).slice(1);
-      // The IN leg is intentionally skipped: internal transfers are not income.
-      // Including it would double-count when summing the income column.
-      expect(expenseRows).toHaveLength(1);
-      expect(incomeRows).toHaveLength(0);
-    });
-
-    it('uses "Transfer" as category for the regular transfer OUT row', async () => {
-      const groupId = "regular-transfer-uuid-2";
-      mockTxQuery.sortBy.mockResolvedValue([
-        makeTx({
-          id: 50,
-          type: "TRANSFER",
-          transferGroupId: groupId,
-          transferDirection: "OUT",
-          amountMainCurrency: 5000,
-          accountId: 1,
-          toAccountId: null,
-          categoryId: null,
-        }),
-        makeTx({
-          id: 51,
-          type: "TRANSFER",
-          transferGroupId: groupId,
-          transferDirection: "IN",
-          amountMainCurrency: 5000,
-          accountId: 2,
-          toAccountId: null,
-          categoryId: null,
-        }),
-      ]);
-
-      await exportService.exportTransactions("2026-01-01", "2026-01-31", "USD");
-
-      const expenseRows = (await getExpensesSheetData()).slice(1);
-      const incomeRows = (await getIncomesSheetData()).slice(1);
-      // Only the OUT leg appears; IN leg is not emitted (not income)
-      expect(expenseRows[0][3]).toBe("Transfer");
+      // Plain internal transfers are neither an expense nor income — excluding
+      // both legs entirely matches isExpenseForReporting/isDebtPayment, which
+      // the in-app reporting (Overview/Budget) already follows.
+      expect(expenseRows).toHaveLength(0);
       expect(incomeRows).toHaveLength(0);
     });
   });
@@ -407,6 +374,18 @@ describe("exportService.exportTransactions", () => {
       const sheetData = await getExpensesSheetData();
       expect(sheetData[1][1]).toBe(1000);
     });
+
+    it("always divides by 100 (uniform minor-unit scale), even when the main currency is JPY (0 native decimal places)", async () => {
+      mockTxQuery.sortBy.mockResolvedValue([
+        makeTx({ type: "EXPENSE", amountMainCurrency: 50000, currency: "JPY" }),
+      ]);
+
+      await exportService.exportTransactions("2026-01-01", "2026-01-31", "JPY");
+
+      const sheetData = await getExpensesSheetData();
+      // Uniform ×100 storage scale: 50000 / 100 = 500, NOT 50000 / 1 = 50000.
+      expect(sheetData[1][1]).toBe(500);
+    });
   });
 
   describe("trashed transaction filtering", () => {
@@ -441,7 +420,7 @@ describe("exportService.exportTransactions", () => {
   });
 
   describe("transfer deduplication", () => {
-    it("emits exactly one Expenses row and zero Incomes rows for a regular transfer pair", async () => {
+    it("emits zero Expenses rows and zero Incomes rows for a plain regular transfer pair", async () => {
       const groupId = "dedup-group-uuid";
       mockTxQuery.sortBy.mockResolvedValue([
         makeTx({
@@ -468,8 +447,9 @@ describe("exportService.exportTransactions", () => {
 
       const expenseRows = (await getExpensesSheetData()).slice(1);
       const incomeRows = (await getIncomesSheetData()).slice(1);
-      // IN leg is intentionally skipped; only OUT leg appears as an outflow
-      expect(expenseRows).toHaveLength(1);
+      // The group is still deduplicated (processed once), but a plain
+      // transfer contributes no rows to either sheet.
+      expect(expenseRows).toHaveLength(0);
       expect(incomeRows).toHaveLength(0);
     });
   });

@@ -34,11 +34,11 @@ func seedUserAndDevice(t *testing.T, ctx context.Context, db *sql.DB) (userID, d
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	user, err := q.UpsertUserByEmail(ctx, gen.UpsertUserByEmailParams{
-		ID:          mustUUID(t),
-		Email:       "test@example.com",
-		GoogleSub:   sql.NullString{String: "sub123", Valid: true},
-		DisplayName: "Test User",
-		CreatedAt:   now,
+		ID:           mustUUID(t),
+		Email:        "test@example.com",
+		GoogleSub:    sql.NullString{String: "sub123", Valid: true},
+		DisplayName:  "Test User",
+		CreatedAt:    now,
 		LastSigninAt: sql.NullString{String: now, Valid: true},
 	})
 	require.NoError(t, err)
@@ -234,6 +234,55 @@ func TestTouchAndMaybeRotate_AboveThreshold(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, newInfo)
 	assert.Equal(t, info.UserID, newInfo.UserID)
+}
+
+// TestValidate_ClearsPreviousTokenAfterNewTokenUse verifies that once a
+// request authenticates via the NEW token (post-rotation), the grace-window
+// previous_token_hash is cleared, so the OLD token stops being tolerated on
+// the request after that.
+func TestValidate_ClearsPreviousTokenAfterNewTokenUse(t *testing.T) {
+	clearCache()
+	ctx := context.Background()
+	db := newTestDB(t)
+	_, deviceID := seedUserAndDevice(t, ctx, db)
+
+	now := time.Now().UTC()
+	oldCookie, _, err := Mint(ctx, db, deviceID, now)
+	require.NoError(t, err)
+
+	info, err := Validate(ctx, db, oldCookie, now)
+	require.NoError(t, err)
+
+	// Rotate (>24h later) and commit — previous_token_hash is now set to the
+	// old token's hash.
+	laterNow := now.Add(25 * time.Hour)
+	pending, err := TouchAndMaybeRotate(ctx, db, info, laterNow)
+	require.NoError(t, err)
+	require.True(t, pending.Rotated)
+	newCookie := pending.NewCookieValue
+	require.NoError(t, pending.Commit(ctx))
+
+	// Old token still tolerated once, immediately after rotation.
+	clearCache()
+	_, err = Validate(ctx, db, oldCookie, laterNow)
+	require.NoError(t, err, "old cookie must still be valid immediately after rotation")
+
+	// The client picks up the NEW cookie and uses it — this must clear
+	// previous_token_hash (best-effort, once).
+	clearCache()
+	_, err = Validate(ctx, db, newCookie, laterNow)
+	require.NoError(t, err)
+
+	// Now the OLD token must be rejected: previous_token_hash was cleared.
+	clearCache()
+	_, err = Validate(ctx, db, oldCookie, laterNow)
+	assert.ErrorIs(t, err, ErrInvalidSession, "old cookie must be rejected once previous_token_hash is cleared")
+
+	// The NEW token must remain valid.
+	clearCache()
+	newInfo, err := Validate(ctx, db, newCookie, laterNow)
+	require.NoError(t, err)
+	require.NotNil(t, newInfo)
 }
 
 func TestRevokeAll_RevokesAcrossDevices(t *testing.T) {

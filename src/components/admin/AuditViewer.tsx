@@ -4,24 +4,26 @@
 // Uses opaque cursor returned by the backend for pagination.
 
 import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useToast } from "@/components/shared/Toast";
 import { listAuditLog, type AuditLogEntry } from "@/services/admin/client";
 
 // ── Action formatting ──────────────────────────────────────────────────────────
 
-const ACTION_LABELS: Record<string, string> = {
-  "user.suspend": "Suspended user",
-  "user.unsuspend": "Unsuspended user",
-  "admin.promote": "Promoted to admin",
-  "admin.demote": "Demoted from admin",
-  "allowlist.add": "Added to allowlist",
-  "allowlist.remove": "Removed from allowlist",
-  "device.revoke.admin": "Revoked device",
-  "user.delete": "Deleted user",
+const ACTION_LABEL_KEYS: Record<string, string> = {
+  "user.suspend": "admin.audit.actions.userSuspend",
+  "user.unsuspend": "admin.audit.actions.userUnsuspend",
+  "admin.promote": "admin.audit.actions.adminPromote",
+  "admin.demote": "admin.audit.actions.adminDemote",
+  "allowlist.add": "admin.audit.actions.allowlistAdd",
+  "allowlist.remove": "admin.audit.actions.allowlistRemove",
+  "device.revoke.admin": "admin.audit.actions.deviceRevokeAdmin",
+  "user.delete": "admin.audit.actions.userDelete",
 };
 
-function formatAction(action: string): string {
-  return ACTION_LABELS[action] ?? action.replace(/_/g, " ");
+function formatAction(action: string, t: (key: string) => string): string {
+  const key = ACTION_LABEL_KEYS[action];
+  return key ? t(key) : action.replace(/_/g, " ");
 }
 
 function formatDetailJson(raw: string): string {
@@ -51,6 +53,7 @@ function actionColor(action: string): string {
 // ── AuditRow ───────────────────────────────────────────────────────────────────
 
 function AuditRow({ entry }: { entry: AuditLogEntry }) {
+  const { t } = useTranslation();
   const d = new Date(entry.createdAt);
   const dateStr = d.toLocaleDateString();
   const timeStr = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -76,7 +79,7 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
             color: actionColor(entry.action),
           }}
         >
-          {formatAction(entry.action)}
+          {formatAction(entry.action, t)}
         </span>
 
         {/* Actor */}
@@ -88,7 +91,7 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
               color: "var(--color-text-secondary)",
             }}
           >
-            by {entry.actorEmail}
+            {t("admin.audit.by", { email: entry.actorEmail })}
           </span>
         )}
 
@@ -164,6 +167,7 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
 // ── AuditViewer ────────────────────────────────────────────────────────────────
 
 export function AuditViewer() {
+  const { t } = useTranslation();
   const { show: showToast } = useToast();
 
   const [entries, setEntries] = useState<AuditLogEntry[]>([]);
@@ -178,11 +182,11 @@ export function AuditViewer() {
       setEntries(page.items);
       setNextCursor(page.nextCursor);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to load audit log", "error");
+      showToast(err instanceof Error ? err.message : t("admin.audit.loadFailed"), "error");
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, t]);
 
   useEffect(() => {
     loadInitial();
@@ -196,7 +200,7 @@ export function AuditViewer() {
       setEntries((prev) => [...prev, ...page.items]);
       setNextCursor(page.nextCursor);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to load more", "error");
+      showToast(err instanceof Error ? err.message : t("admin.loadMoreFailed"), "error");
     } finally {
       setLoadingMore(false);
     }
@@ -212,7 +216,7 @@ export function AuditViewer() {
           color: "var(--color-text-secondary)",
         }}
       >
-        Loading…
+        {t("common.loading")}
       </div>
     );
   }
@@ -227,7 +231,7 @@ export function AuditViewer() {
           color: "var(--color-text-secondary)",
         }}
       >
-        No audit events yet.
+        {t("admin.audit.empty")}
       </div>
     );
   }
@@ -243,7 +247,7 @@ export function AuditViewer() {
           borderBottom: "1px solid var(--color-border)",
         }}
       >
-        {entries.length} event{entries.length !== 1 ? "s" : ""} loaded
+        {t("admin.audit.countLabel", { count: entries.length })}
       </div>
 
       {entries.map((entry) => (
@@ -275,7 +279,7 @@ export function AuditViewer() {
               opacity: loadingMore ? 0.6 : 1,
             }}
           >
-            {loadingMore ? "Loading…" : "Load more"}
+            {loadingMore ? t("common.loading") : t("admin.loadMore")}
           </button>
         </div>
       )}

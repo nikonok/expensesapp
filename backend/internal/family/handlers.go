@@ -19,6 +19,7 @@ import (
 	"github.com/nikonok/expensesapp/backend/internal/db/gen"
 	"github.com/nikonok/expensesapp/backend/internal/httpx"
 	"github.com/nikonok/expensesapp/backend/internal/live"
+	"github.com/nikonok/expensesapp/backend/internal/records"
 )
 
 // errDeviceNotPending is returned when activating a device whose status is no
@@ -59,7 +60,15 @@ type initFamilyRequest struct {
 	FamilyID       string              `json:"familyId"`
 	DeviceEnvelope string              `json:"deviceEnvelope"`
 	Recovery       initRecoveryRequest `json:"recovery"`
+	// CreatedAt is an optional, opaque RFC3339 string the client binds into
+	// the recovery-envelope AAD at family-creation time. Stored verbatim
+	// (never parsed/reformatted); omitted by legacy clients.
+	CreatedAt string `json:"createdAt,omitempty"`
 }
+
+// maxRecoveryCreatedAtLen bounds the opaque createdAt string (it is never
+// parsed, only stored and echoed back verbatim).
+const maxRecoveryCreatedAtLen = 64
 
 // initFamilyResponse is the JSON body returned by a successful POST /v1/family/init.
 type initFamilyResponse struct {
@@ -135,15 +144,23 @@ func (h *Handler) PostInit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// createdAt is opaque (never parsed) but bounded and printable-ASCII-only
+	// as a minimal sanity check.
+	if !isPrintableASCII(req.CreatedAt, maxRecoveryCreatedAtLen) {
+		httpx.WriteError(w, r, http.StatusBadRequest, "bad-request", "createdAt must be a printable ASCII string of at most 64 characters")
+		return
+	}
+
 	// Call service.
 	initErr := h.svc.Init(ctx, InitParams{
-		FamilyID:     req.FamilyID,
-		DeviceID:     deviceID,
-		UserID:       userID,
-		WrappedKey:   wrappedKey,
-		RecoveryWrap: recoveryWrap,
-		PhraseCt:     phraseCt,
-		Salt:         salt,
+		FamilyID:          req.FamilyID,
+		DeviceID:          deviceID,
+		UserID:            userID,
+		WrappedKey:        wrappedKey,
+		RecoveryWrap:      recoveryWrap,
+		PhraseCt:          phraseCt,
+		Salt:              salt,
+		RecoveryCreatedAt: req.CreatedAt,
 	})
 	if errors.Is(initErr, ErrAlreadyInFamily) {
 		httpx.WriteError(w, r, http.StatusConflict, "already-in-family", "")
@@ -239,7 +256,10 @@ func (h *Handler) GetIncomingInvites(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nowStr := httpx.FormatTime(nowUTC())
-	invites, err := q.ListIncomingInvites(ctx, callerUser.Email, nowStr)
+	invites, err := q.ListIncomingInvites(ctx, gen.ListIncomingInvitesParams{
+		InviteeEmail: callerUser.Email,
+		ExpiresAt:    nowStr,
+	})
 	if err != nil {
 		slog.WarnContext(ctx, "family.invites.incoming: list", "err", err)
 		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
@@ -269,11 +289,43 @@ func (h *Handler) GetIncomingInvites(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"invites": items})
 }
 
+// acceptInviteRequest is the optional JSON body for
+// POST /v1/family/invites/{id}/accept.
+type acceptInviteRequest struct {
+	// DevicePubKey is an optional base64-encoded X25519 public key for the
+	// accepting device. Solo devices (never part of a family) may not have
+	// generated a keypair yet; the client can supply one here so an existing
+	// family member has something to wrap the family key against. Accepts
+	// both standard and raw-URL base64, same as POST /v1/auth/google.
+	DevicePubKey *string `json:"devicePubKey"`
+}
+
 // PostAcceptInvite handles POST /v1/family/invites/{id}/accept.
 func (h *Handler) PostAcceptInvite(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 4*1024)
+
 	ctx := r.Context()
 	userID := httpx.UserID(ctx)
+	deviceID := httpx.DeviceID(ctx)
 	inviteID := chi.URLParam(r, "id")
+
+	// The body is optional (legacy clients send none) — ignore decode errors,
+	// mirroring PostLeave's "body is optional" pattern.
+	var req acceptInviteRequest
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	var devicePubKey []byte
+	if req.DevicePubKey != nil && *req.DevicePubKey != "" {
+		decoded, err := base64.StdEncoding.DecodeString(*req.DevicePubKey)
+		if err != nil {
+			decoded, err = base64.RawURLEncoding.DecodeString(*req.DevicePubKey)
+		}
+		if err != nil {
+			httpx.WriteError(w, r, http.StatusBadRequest, "bad-request", "devicePubKey is not valid base64")
+			return
+		}
+		devicePubKey = decoded
+	}
 
 	q := gen.New(h.db)
 	callerUser, err := q.GetUserByID(ctx, userID)
@@ -283,10 +335,12 @@ func (h *Handler) PostAcceptInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	svcErr := h.svc.AcceptInvite(ctx, AcceptInviteParams{
-		InviteID:     inviteID,
-		CallerUserID: userID,
-		CallerEmail:  callerUser.Email,
+	result, svcErr := h.svc.AcceptInvite(ctx, AcceptInviteParams{
+		InviteID:       inviteID,
+		CallerUserID:   userID,
+		CallerEmail:    callerUser.Email,
+		CallerDeviceID: deviceID,
+		DevicePubKey:   devicePubKey,
 	})
 	if svcErr != nil {
 		switch {
@@ -309,11 +363,19 @@ func (h *Handler) PostAcceptInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Load the invite to get familyID for SSE publish.
 	if h.hub != nil {
-		inv, err := q.GetFamilyInvite(ctx, inviteID)
-		if err == nil {
-			h.publishFamilyChanged(inv.FamilyID, "member_joined", userID)
+		h.publishFamilyChanged(result.FamilyID, "member_joined", userID)
+
+		// Let existing members of the target family know the accepting
+		// device needs its envelope wrapped, mirroring the sign-in path's
+		// device.joined notification (see auth.PostGoogle).
+		if result.DeviceWentPending {
+			dev, devErr := q.GetDeviceByID(ctx, deviceID)
+			if devErr != nil {
+				slog.WarnContext(ctx, "family.accept: get device for device.joined publish", "err", devErr)
+			} else {
+				h.publishDeviceJoined(result.FamilyID, dev)
+			}
 		}
 	}
 
@@ -412,7 +474,7 @@ func (h *Handler) PostMigrateSolo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Decode blobs.
-	records := make([]MigrateSoloRecord, 0, len(req.Records))
+	migrateRecords := make([]MigrateSoloRecord, 0, len(req.Records))
 	for i, rec := range req.Records {
 		blobBytes, decErr := decodeBase64URL(rec.Blob)
 		if decErr != nil {
@@ -424,7 +486,7 @@ func (h *Handler) PostMigrateSolo(w http.ResponseWriter, r *http.Request) {
 		if rec.DeletedAt != "" {
 			deletedAt = sql.NullString{String: rec.DeletedAt, Valid: true}
 		}
-		records = append(records, MigrateSoloRecord{
+		migrateRecords = append(migrateRecords, MigrateSoloRecord{
 			RecordID:           rec.RecordID,
 			RecordType:         rec.RecordType,
 			Blob:               blobBytes,
@@ -442,7 +504,7 @@ func (h *Handler) PostMigrateSolo(w http.ResponseWriter, r *http.Request) {
 		CallerEmail:    callerUser.Email,
 		SourceFamilyID: sourceMember.FamilyID,
 		TargetFamilyID: req.TargetFamilyID,
-		Records:        records,
+		Records:        migrateRecords,
 	})
 	if svcErr != nil {
 		switch {
@@ -450,6 +512,8 @@ func (h *Handler) PostMigrateSolo(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteError(w, r, http.StatusForbidden, "not-in-target-family", "caller is not a member of the target family")
 		case errors.Is(svcErr, ErrSourceSameAsTarget):
 			httpx.WriteError(w, r, http.StatusConflict, "source-same-as-target", "source family is the same as target family")
+		case errors.Is(svcErr, records.ErrRecordIDConflict):
+			httpx.WriteError(w, r, http.StatusConflict, "record-id-conflict", "a record id in this migration already belongs to a different family")
 		default:
 			slog.WarnContext(ctx, "family.migrate-solo: migrate", "err", svcErr)
 			httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "")
@@ -596,6 +660,17 @@ type youRemovedPayload struct {
 	Reason   string `json:"reason"`
 }
 
+// deviceJoinedPayload is the JSON payload for the "device.joined" SSE event.
+// Field shape matches auth.PostGoogle's device.joined payload so the frontend
+// (device-join-store.ts) handles both sources identically.
+type deviceJoinedPayload struct {
+	DeviceID  string `json:"deviceId"`
+	Label     string `json:"label"`
+	CreatedAt string `json:"createdAt"`
+	PubKey    string `json:"pubKey,omitempty"`
+	UserAgent string `json:"userAgent,omitempty"`
+}
+
 // publishFamilyChanged emits a "family.changed" event to the family scope.
 func (h *Handler) publishFamilyChanged(familyID, kind, userID string) {
 	data, err := json.Marshal(familyChangedPayload{Kind: kind, UserID: userID})
@@ -616,9 +691,42 @@ func (h *Handler) publishYouRemoved(targetUserID, familyID, reason string) {
 	h.hub.Publish("user:"+targetUserID, live.Event{Type: "you.removed", Data: data})
 }
 
+// publishDeviceJoined emits a "device.joined" event to the target family's
+// scope, so every existing family member (not just the accepting user's own
+// other devices) can offer to wrap a key envelope for dev.
+func (h *Handler) publishDeviceJoined(familyID string, dev gen.Device) {
+	data, err := json.Marshal(deviceJoinedPayload{
+		DeviceID:  dev.ID,
+		Label:     dev.Label,
+		CreatedAt: dev.CreatedAt,
+		PubKey:    base64.RawURLEncoding.EncodeToString(dev.PubKey),
+		UserAgent: dev.UserAgent.String,
+	})
+	if err != nil {
+		slog.Warn("family: marshal device.joined payload failed", "err", err)
+		return
+	}
+	h.hub.Publish("family:"+familyID, live.Event{Type: "device.joined", Data: data})
+}
+
 // --------------------------------------------------------------------------
 // Helpers
 // --------------------------------------------------------------------------
+
+// isPrintableASCII reports whether s is empty or consists solely of
+// printable ASCII characters (0x20-0x7E) within maxLen. Used to sanity-check
+// opaque client-supplied strings that are stored verbatim, never parsed.
+func isPrintableASCII(s string, maxLen int) bool {
+	if len(s) > maxLen {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < 0x20 || s[i] > 0x7E {
+			return false
+		}
+	}
+	return true
+}
 
 // decodeBase64URL decodes a base64url string, trying raw (no padding) first,
 // then padded.
@@ -632,7 +740,13 @@ func decodeBase64URL(s string) ([]byte, error) {
 
 // insertAudit writes a single audit_log row. Errors are non-fatal.
 func insertAudit(ctx context.Context, db *sql.DB, actorUserID, actorEmail, action, targetKind, targetID, createdAt string) error {
-	q := gen.New(db)
+	return insertAuditTx(ctx, gen.New(db), actorUserID, actorEmail, action, targetKind, targetID, createdAt)
+}
+
+// insertAuditTx writes a single audit_log row using an already-open
+// *gen.Queries, so the audit entry commits atomically with the mutation it
+// records.
+func insertAuditTx(ctx context.Context, q *gen.Queries, actorUserID, actorEmail, action, targetKind, targetID, createdAt string) error {
 	id, err := uuid.NewV7()
 	if err != nil {
 		return err

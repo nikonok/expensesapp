@@ -48,6 +48,12 @@ func SessionMiddleware(db *sql.DB) func(http.Handler) http.Handler {
 				return
 			}
 
+			// Best-effort: update devices.last_seen_at at most once per hour.
+			// Never fails the request.
+			if touchErr := TouchDeviceIfStale(r.Context(), db, info, now); touchErr != nil {
+				slog.WarnContext(r.Context(), "touch device error", "err", touchErr)
+			}
+
 			// Prepare rotation (mints new token + queues a DB commit). The cookie
 			// is set on the response so it ships back to the client, but Commit
 			// is deferred until after next.ServeHTTP returns without panic.
@@ -61,6 +67,7 @@ func SessionMiddleware(db *sql.DB) func(http.Handler) http.Handler {
 			ctx := httpx.WithUserID(r.Context(), info.UserID)
 			ctx = httpx.WithDeviceID(ctx, info.DeviceID)
 			ctx = httpx.WithSessionID(ctx, info.SessionID)
+			ctx = httpx.WithDeviceStatus(ctx, info.DeviceStatus)
 			next.ServeHTTP(w, r.WithContext(ctx))
 
 			// Commit the rotation only after the handler returns. A panic above
@@ -130,6 +137,24 @@ func RequireAdmin(db *sql.DB) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// RequireActiveDevice rejects requests from a device whose status is not
+// "active" (e.g. "pending", awaiting an envelope from an existing device).
+// Pending devices can still authenticate (needed for /v1/sync/live and the
+// join/envelope endpoints), but must not read or write family ciphertext via
+// push/pull, nor list or trigger a snapshot restore, until they have the
+// family key.
+//
+// Requires SessionMiddleware to have run first (device status must be in ctx).
+func RequireActiveDevice(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if httpx.DeviceStatus(r.Context()) != "active" {
+			httpx.WriteError(w, r, http.StatusForbidden, "device-not-active", "device must be active to sync")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // RequireFamilyMembership loads the user's active family_members row and injects

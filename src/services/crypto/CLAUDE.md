@@ -30,9 +30,32 @@ Client-side end-to-end encryption: device keypairs, family-key envelopes, record
 - **The server NEVER sees plaintext financial fields.** Only `(blob, AAD inputs)` may leave the device for synced records.
 - **AAD vectors are golden between Go and TS.** Reference: `backend/internal/crypto/testdata/aad-vectors.json`. Any change to `aad.ts` requires synchronised change to `backend/internal/crypto/aad.go` plus refreshed vectors.
 - **Nonces MUST come from `sodium.randombytes_buf(24)`** — never reuse, never derive deterministically. See `record-cipher.ts:22`, `recovery.ts:58,93`.
-- **Never accept a raw `Uint8Array` familyKey as a parameter across postMessage** from outside the worker. The worker owns the key; main-thread RPCs must use the `*WithStoredKey` variants. The `encryptRecord` / `decryptRecord` RPCs that take a `familyKey` parameter are reserved for the migration path (`family/migrate.ts`) where the new family key is unwrapped client-side.
+- **Never accept a raw `Uint8Array` familyKey as a parameter across postMessage** from outside the worker. The worker owns the key; main-thread RPCs must use the `*WithStoredKey` variants. The migration path (`family/migrate.ts`) does NOT use the raw-key `encryptRecord`/`decryptRecord` RPCs either — it calls `migrateSoloRecords`, which unwraps the target key's sealed envelope _inside_ the worker and never lets it cross postMessage.
+- The raw-key RPCs `encryptRecord` / `decryptRecord` / `wrapKeyForDevice` / `unwrapKeyForDevice` (take or return a raw `familyKey`/`privKey`) exist only for the dev-only `CryptoDemoPage` sandbox. `worker.ts` refuses them outside dev builds (`import.meta.env.DEV` guard) — production code has no legitimate caller for these and must use the `*WithStoredKey` / `*StoredFamilyKey` / envelope-based RPCs instead.
 - Wrap blobs/envelopes as base64url **without padding** when crossing JSON boundaries (see `engine.ts` helpers).
 - libsodium uses the "sumo" build — never switch to the lite build.
+
+## Version bytes — two independent namespaces (do not conflate)
+
+There are two separate "version byte" concepts in this package; they are bound
+into different places and evolve independently. **Do not change either's
+current value** — this section documents the existing frozen behaviour so
+future agents don't "fix" what looks like a mismatch.
+
+- **AAD-schema `verByte`** (`aad.ts`'s `AadInput.verByte`, currently `1`
+  everywhere it's bound — `engine.ts`, `migrate.ts`) — versions the _shape_ of
+  the AAD serialization itself (field order/presence). It has never changed
+  since `aad.ts` was introduced, so every caller still binds `1`.
+- **Cipher-suite version** (`version.ts`'s `SUITE_VERSION_V1 = 0x01` /
+  `SUITE_VERSION_V2 = 0x02`, written as `blob[0]` by `record-cipher.ts`) —
+  versions the _cryptographic construction_ (e.g. V2 changed the commit-tag
+  derivation to a domain-separated `kCommit` — see B9). New records are
+  written with `SUITE_VERSION_V2`; `decryptRecord` still accepts both.
+
+These two bytes happening to differ (`1` vs `0x02`) is expected, not a bug —
+they are unrelated counters for unrelated things. `ENVELOPE_VERSION_V1 = 0x10`
+and `RECOVERY_VERSION_V1/V2 = 0x20/0x21` are a third, similarly independent
+range (per `version.ts`'s reserved-range comment).
 
 ## Gotchas
 

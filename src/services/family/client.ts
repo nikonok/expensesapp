@@ -5,6 +5,15 @@
 
 import { apiFetch, type ApiError } from "@/services/auth/client";
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Encode a Uint8Array to base64url (no padding) — matches how the app
+ *  encodes device pubkeys everywhere else (see auth/session.ts signIn()). */
+function toBase64Url(bytes: Uint8Array): string {
+  const b64 = btoa(String.fromCharCode(...bytes));
+  return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface FamilyMember {
@@ -61,13 +70,31 @@ export async function listIncomingInvites(): Promise<Invite[]> {
 /**
  * POST /api/v1/family/invites/{inviteId}/accept.
  *
+ * Includes this device's public key (base64url) in the body when available —
+ * the backend uses it to update the device's on-file pubkey and drive the
+ * device.joined approval flow (mirrors the sign-in path's devicePubKey). The
+ * field is optional server-side, so a device that can't produce a pubkey yet
+ * (e.g. crypto worker unavailable) still accepts the invite normally.
+ *
  * If the server returns 409 with problem.type "needs-migration-decision",
  * throws NeedsMigrationDecisionError so the caller can show the migration dialog.
  * The targetFamilyId is extracted from the problem detail field.
  */
 export async function acceptInvite(inviteId: string): Promise<void> {
+  let devicePubKey: string | undefined;
   try {
-    await apiFetch<void>(`/api/v1/family/invites/${inviteId}/accept`, { method: "POST" });
+    const { cryptoWorker } = await import("@/services/crypto/worker-client");
+    const pub = await cryptoWorker.getDevicePublicKey();
+    if (pub) devicePubKey = toBase64Url(pub);
+  } catch {
+    // Best-effort — proceed without a pubkey; the backend field is optional.
+  }
+
+  try {
+    await apiFetch<void>(`/api/v1/family/invites/${inviteId}/accept`, {
+      method: "POST",
+      body: JSON.stringify(devicePubKey ? { devicePubKey } : {}),
+    });
   } catch (err) {
     const apiErr = err as ApiError;
     if (

@@ -56,14 +56,13 @@ Backend is Go 1.26 — see `backend/go.mod`.
 
 ```
 db/
-  database.ts       Dexie DB definition, schema (v1 — all dev migrations collapsed for release), indexes
-  models.ts         TypeScript interfaces: Account, Category, Transaction, Budget, etc.
+  database.ts       Dexie DB definition, versioned schema (see src/db/CLAUDE.md for the current head version), indexes
+  models.ts         TypeScript interfaces: Account, Category, Transaction, Budget, RecordMapping, etc.
   seed.ts           Default category presets, currency list used during onboarding
-  sync-stub.ts      Legacy no-op stub kept for import-compat; live sync lives in services/sync/
 stores/
   ui-store.ts          Zustand: ephemeral UI state — filters, selection, edit mode
   settings-store.ts    Zustand: settings cache (reads DB on load, writes back on change)
-  sync-store.ts        Zustand: live sync status (connected, queued, last error)
+  sync-store.ts        Zustand: live sync status (isSyncing, lastSyncAt, lastError)
   device-join-store.ts Zustand: device-join handshake state for new family members
 services/
   account/          Backend account ops (delete, recovery, log export) used by Settings
@@ -105,7 +104,6 @@ pages/
   DeviceJoinWaiting.tsx  Pending-device screen shown after submitting a join code
   OnboardingPage.tsx     Wrapper for OnboardingFlow
   OverviewPage.tsx       Overview tab — lazy loaded
-  RecoveryCodePage.tsx   Standalone re-entry of a recovery code (e.g. for unlocking)
   SettingsPage.tsx       Full-screen settings page
   TransactionsPage.tsx   Transactions tab
 components/
@@ -246,7 +244,7 @@ See `backend/CLAUDE.md` for the backend layout, env vars, migrations, and how to
 - `exchangeRate` on a transaction = 1 unit of account currency = X units of main currency.
 - All balance mutations inside `db.transaction('rw', ...)` for atomicity.
 - `QuotaError` (from balance.service) is thrown when IndexedDB storage is full — callers should handle it.
-- DB is at schema version 1 (all development migrations collapsed for first release). Future schema changes append `db.version(2).stores({...})` in `src/db/database.ts`.
+- The Dexie schema is versioned in `src/db/database.ts` — check the current head version there and append `db.version(N+1).stores({...})` for schema changes (never edit an existing version block). `src/db/CLAUDE.md` documents each version.
 - **Server is zero-knowledge for financial data.** Encrypted records use AAD derived from stable IDs; plaintext fields (amount, note, names) never leave the device.
 
 ## State management
@@ -268,6 +266,7 @@ Full-screen views (no bottom nav):
 - `/settings` — settings
 - `/admin` — admin console (allowlist + audit) — backend-role-gated
 - `/onboarding` — first-run onboarding flow
+- `/signin` — re-auth / solo-to-cloud sign-in entry (reuses the onboarding sign-in step)
 - `/devices/waiting` — pending-device join screen
 - `/dev/crypto-demo` — dev-only crypto sandbox
 

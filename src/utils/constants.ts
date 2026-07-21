@@ -25,6 +25,12 @@ export const COLOR_PALETTE: Array<{ id: number; value: string; cssVar: string }>
   { id: 24, value: "oklch(48% 0.03 265)", cssVar: "--swatch-24" },
 ];
 
+/** Literal oklch value mirroring `--color-primary` in src/styles/index.css.
+ *  Kept as a plain string (not a `var(--...)` reference) so it can be stored
+ *  in records that are validated / synced across devices — CSS custom
+ *  properties are not resolvable outside a DOM context. */
+export const PRIMARY_ACCENT_COLOR = "oklch(72% 0.22 210)";
+
 export const CHAR_LIMITS = {
   name: 64,
   description: 255,

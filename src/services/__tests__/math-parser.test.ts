@@ -68,6 +68,20 @@ describe("evaluateExpression — default dp argument", () => {
   });
 });
 
+describe("evaluateExpression — U+2212 minus sign (Numpad's subtract key)", () => {
+  it("normalizes '200−75' (U+2212) to 12500 minor units", () => {
+    expect(evaluateExpression("200−75")).toBe(12500);
+  });
+
+  it("handles a chained expression using U+2212", () => {
+    expect(evaluateExpression("100−25−10")).toBe(6500);
+  });
+
+  it("still rejects a bare trailing U+2212", () => {
+    expect(evaluateExpression("100−")).toBe(10000);
+  });
+});
+
 describe("isAmountOverLimit — dp aware", () => {
   it("0dp: at the cap boundary returns false; one over returns true", () => {
     // MAX_AMOUNT = 99_999_999_999. With dp=0 the user types whole-unit values

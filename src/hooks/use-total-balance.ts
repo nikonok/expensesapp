@@ -4,21 +4,32 @@ import { db } from "../db/database";
 import { exchangeRateService } from "../services/exchange-rate.service";
 import { useSettingsStore } from "../stores/settings-store";
 
+export interface CurrencyGroup {
+  currency: string;
+  assets: number;
+  debts: number;
+}
+
 export function useTotalBalance(): {
   netWorth: number | null;
   mainCurrency: string;
   ratesAvailable: boolean;
+  groups: CurrencyGroup[];
+  grandAssets: number | null;
+  grandDebts: number | null;
 } {
   const mainCurrency = useSettingsStore((s) => s.mainCurrency);
 
   const accounts = useLiveQuery(() => db.accounts.filter((a) => !a.isTrashed).toArray(), []) ?? [];
 
   const [netWorth, setNetWorth] = useState<number | null>(null);
+  const [grandAssets, setGrandAssets] = useState<number | null>(null);
+  const [grandDebts, setGrandDebts] = useState<number | null>(null);
   const [ratesAvailable, setRatesAvailable] = useState(true);
 
   const groups = useMemo(() => {
-    const result: { currency: string; assets: number; debts: number }[] = [];
-    const grouped: Record<string, { currency: string; assets: number; debts: number }> = {};
+    const result: CurrencyGroup[] = [];
+    const grouped: Record<string, CurrencyGroup> = {};
     for (const acc of accounts) {
       if (!acc.includeInTotal) continue;
       if (!grouped[acc.currency]) {
@@ -37,6 +48,8 @@ export function useTotalBalance(): {
   useEffect(() => {
     if (groups.length === 0) {
       setNetWorth(null);
+      setGrandAssets(null);
+      setGrandDebts(null);
       return;
     }
     let cancelled = false;
@@ -62,6 +75,8 @@ export function useTotalBalance(): {
             if (!cancelled) {
               setRatesAvailable(false);
               setNetWorth(null);
+              setGrandAssets(null);
+              setGrandDebts(null);
             }
             return;
           }
@@ -73,7 +88,11 @@ export function useTotalBalance(): {
           totalDebts += Math.round(g.debts * r);
         }
       }
-      if (!cancelled) setNetWorth(totalAssets - totalDebts);
+      if (!cancelled) {
+        setNetWorth(totalAssets - totalDebts);
+        setGrandAssets(totalAssets);
+        setGrandDebts(totalDebts);
+      }
     }
     void calc();
     return () => {
@@ -81,5 +100,5 @@ export function useTotalBalance(): {
     };
   }, [groups, mainCurrency]);
 
-  return { netWorth, mainCurrency, ratesAvailable };
+  return { netWorth, mainCurrency, ratesAvailable, groups, grandAssets, grandDebts };
 }

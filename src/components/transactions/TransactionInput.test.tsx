@@ -1,14 +1,17 @@
 /* @vitest-environment jsdom */
 import React from "react";
 import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MemoryRouter } from "react-router";
-import type { Account, Category } from "@/db/models";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { MemoryRouter, Routes, Route } from "react-router";
+import type { Account, Category, Transaction } from "@/db/models";
 
 vi.mock("@/db/database", () => ({
   db: {
     transactions: { get: vi.fn().mockResolvedValue(null) },
-    accounts: { filter: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue([]) })) },
+    accounts: {
+      filter: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue([]) })),
+      get: vi.fn().mockResolvedValue(null),
+    },
   },
 }));
 vi.mock("dexie-react-hooks", () => ({ useLiveQuery: vi.fn(() => undefined) }));
@@ -92,6 +95,8 @@ vi.mock("@/services/debt-payment.service", () => ({
 import TransactionInput from "@/components/transactions/TransactionInput";
 import { useAccounts } from "@/hooks/use-accounts";
 import { useCategories } from "@/hooks/use-categories";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db } from "@/db/database";
 
 vi.spyOn(window.history, "pushState").mockImplementation(() => {});
 vi.spyOn(window.history, "replaceState").mockImplementation(() => {});
@@ -867,6 +872,47 @@ describe("cross-currency debt payment (Bug #2)", () => {
       expect(inTx.amount).toBe(85);
     });
   });
+
+  it("scales the interest/principal split into the destination currency for a cross-currency regular payment", async () => {
+    const { applyTransfer } = await import("@/services/balance.service");
+    const { exchangeRateService } = await import("@/services/exchange-rate.service");
+    const { getMonthlyRate, calculatePaymentSplit } =
+      await import("@/services/debt-payment.service");
+    vi.mocked(applyTransfer).mockClear();
+    vi.mocked(exchangeRateService.getRate).mockImplementation((from, to) => {
+      if (from === "EUR" && to === "GBP") return Promise.resolve(0.85);
+      return Promise.resolve(1);
+    });
+    vi.mocked(getMonthlyRate).mockReturnValue(0.05 / 12);
+    // OUT leg (EUR): interest 30, principal 70 (sums to the 100 EUR payment)
+    vi.mocked(calculatePaymentSplit).mockReturnValue({ interestAmount: 30, principalAmount: 70 });
+
+    const eurAccount = makeAccount({ id: 1, name: "EUR Wallet", currency: "EUR" });
+    const gbpDebt = makeAccount({ id: 2, name: "GBP Loan", type: "DEBT", currency: "GBP" });
+    vi.mocked(useAccounts).mockReturnValue([eurAccount, gbpDebt]);
+
+    await navigateToDebtPayment(eurAccount, gbpDebt);
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Save"));
+    });
+
+    await waitFor(() => {
+      expect(applyTransfer).toHaveBeenCalled();
+      const calls = vi.mocked(applyTransfer).mock.calls;
+      const [outTx, inTx] = calls[calls.length - 1];
+      expect(outTx.interestAmount).toBe(30);
+      expect(outTx.principalAmount).toBe(70);
+      // inAmount = 85 GBP (100 EUR × 0.85). Split scaled proportionally:
+      // interest = round(30 * 85 / 100) = 26, principal = 85 - 26 = 59
+      // (residual derivation keeps interest + principal exactly == inAmount).
+      expect(inTx.interestAmount).toBe(26);
+      expect(inTx.principalAmount).toBe(59);
+      expect(inTx.interestAmount! + inTx.principalAmount!).toBe(inTx.amount);
+    });
+
+    vi.mocked(calculatePaymentSplit).mockReturnValue({ interestAmount: 0, principalAmount: 0 });
+  });
 });
 
 // ── Bug #1: secondaryManual only resets on primary numpad edit ─────────────
@@ -1201,5 +1247,208 @@ describe("mortgage overpayment features", () => {
       expect(outTx.interestAmount).toBeNull();
       expect(outTx.principalAmount).toBeNull();
     });
+  });
+
+  it("inTx (the DEBT account leg) carries the same interest/principal split as outTx for a same-currency regular payment", async () => {
+    const { getMonthlyRate, calculatePaymentSplit } =
+      await import("@/services/debt-payment.service");
+    const { applyTransfer } = await import("@/services/balance.service");
+    vi.mocked(getMonthlyRate).mockReturnValue(0.05 / 12);
+    vi.mocked(calculatePaymentSplit).mockReturnValue({ interestAmount: 30, principalAmount: 70 });
+    vi.mocked(applyTransfer).mockClear();
+
+    await navigateToDebtPayment(sourceAccount, mortgageAccount);
+
+    // Stay in regular payment mode; save (Numpad mock calls onSave(100))
+    await act(async () => {
+      fireEvent.click(screen.getByText("Save"));
+    });
+
+    await waitFor(() => {
+      expect(applyTransfer).toHaveBeenCalled();
+      const calls = vi.mocked(applyTransfer).mock.calls;
+      const [outTx, inTx] = calls[calls.length - 1];
+      expect(outTx.interestAmount).toBe(30);
+      expect(outTx.principalAmount).toBe(70);
+      // getBalanceDelta reads principalAmount off the IN leg (the DEBT
+      // account side) — same currency here, so it carries over exactly.
+      expect(inTx.interestAmount).toBe(30);
+      expect(inTx.principalAmount).toBe(70);
+    });
+
+    vi.mocked(calculatePaymentSplit).mockReturnValue({ interestAmount: 0, principalAmount: 0 });
+  });
+});
+
+// ── Bug fix: debt-payment edit — Regular ↔ Overpayment toggle must not keep
+// the stale split ──────────────────────────────────────────────────────────
+
+describe("editing existing debt payment — payment type toggle", () => {
+  const sourceAccount = makeAccount({ id: 1, name: "Wallet", type: "REGULAR", currency: "USD" });
+  const mortgageAccount = makeAccount({
+    id: 2,
+    name: "Mortgage",
+    type: "DEBT",
+    currency: "USD",
+    balance: -38000000,
+    mortgageLoanAmount: 40000000,
+    mortgageTermYears: 25,
+    mortgageInterestRate: 0.05,
+    debtOriginalAmount: 40000000,
+  });
+
+  function makeExistingOutLeg(overrides: Partial<Transaction> = {}): Transaction {
+    return {
+      id: 99,
+      type: "TRANSFER",
+      date: "2024-01-10",
+      timestamp: "2024-01-10T00:00:00Z",
+      displayOrder: 0,
+      accountId: sourceAccount.id!,
+      categoryId: null,
+      currency: "USD",
+      // Matches the value the Numpad mock's Save button always passes
+      // (onSave(100)) so amount/destination are unchanged in these tests —
+      // only paymentType is toggled.
+      amount: 100,
+      amountMainCurrency: 100,
+      exchangeRate: 1,
+      note: "",
+      transferGroupId: "group-1",
+      transferDirection: "OUT",
+      toAccountId: mortgageAccount.id!,
+      interestAmount: null,
+      principalAmount: null,
+      isOverpayment: null,
+      createdAt: "2024-01-10T00:00:00Z",
+      updatedAt: "2024-01-10T00:00:00Z",
+      ...overrides,
+    };
+  }
+
+  async function navigateToEditDebtPayment(existingTx: Transaction) {
+    vi.mocked(useLiveQuery).mockImplementation((_querier: unknown, deps?: unknown[]) => {
+      // Of the three useLiveQuery call sites in the component, only the
+      // `existingTx` query has a single numeric dep (`[editId]`) — the
+      // other two (lastNote: `[category?.id]`, defaultAccount: `[]`) must
+      // NOT resolve to the transaction object.
+      if (deps && deps.length === 1 && typeof deps[0] === "number") return existingTx;
+      return undefined;
+    });
+    vi.mocked(db.accounts.get).mockResolvedValue(mortgageAccount);
+
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={[`/transactions/${existingTx.id}/edit`]}>
+          <Routes>
+            <Route path="/transactions/:id/edit" element={<TransactionInput />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Save")).toBeTruthy();
+    });
+  }
+
+  beforeEach(() => {
+    vi.mocked(useAccounts).mockReturnValue([sourceAccount, mortgageAccount]);
+    // The populate-on-load effect requires a non-empty categories array
+    // before it runs at all (guards against firing before data loads) —
+    // the actual category is irrelevant here since a debt payment's OUT
+    // leg never sets `category`.
+    vi.mocked(useCategories).mockReturnValue([makeCategory({ id: 10 })]);
+  });
+
+  afterEach(() => {
+    vi.mocked(useLiveQuery).mockReset();
+    vi.mocked(useLiveQuery).mockImplementation(() => undefined);
+    vi.mocked(db.accounts.get).mockResolvedValue(null);
+  });
+
+  it("Regular → Overpayment: toggling clears the stale interest/principal split and sets isOverpayment", async () => {
+    const { getMonthlyRate } = await import("@/services/debt-payment.service");
+    const { replaceTransfer } = await import("@/services/balance.service");
+    vi.mocked(getMonthlyRate).mockReturnValue(0.05 / 12);
+    vi.mocked(replaceTransfer).mockClear();
+
+    const existingTx = makeExistingOutLeg({
+      interestAmount: 30,
+      principalAmount: 70,
+      isOverpayment: null,
+    });
+    await navigateToEditDebtPayment(existingTx);
+
+    // Populated as Regular (interestAmount != null, isOverpayment !== true)
+    // — split preview is visible.
+    await waitFor(() => {
+      expect(screen.getByText("transactions.debtPayment.interest")).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("transactions.debtPayment.overpayment"));
+    });
+
+    // Save with the same amount (Numpad mock always calls onSave(100), which
+    // matches existingTx.amount) and the same destination account — only the
+    // payment type changed.
+    await act(async () => {
+      fireEvent.click(screen.getByText("Save"));
+    });
+
+    await waitFor(() => {
+      expect(replaceTransfer).toHaveBeenCalled();
+      const calls = vi.mocked(replaceTransfer).mock.calls;
+      const [, outTx] = calls[calls.length - 1];
+      expect(outTx.isOverpayment).toBe(true);
+      // Would contradict isOverpayment=true (and getBalanceDelta's
+      // principal-only-reduction rule) if the stale Regular split were kept.
+      expect(outTx.interestAmount).toBeNull();
+      expect(outTx.principalAmount).toBeNull();
+    });
+  });
+
+  it("Overpayment → Regular: toggling recomputes a fresh interest/principal split instead of leaving it null", async () => {
+    const { getMonthlyRate, calculatePaymentSplit } =
+      await import("@/services/debt-payment.service");
+    const { replaceTransfer } = await import("@/services/balance.service");
+    vi.mocked(getMonthlyRate).mockReturnValue(0.05 / 12);
+    vi.mocked(calculatePaymentSplit).mockReturnValue({ interestAmount: 30, principalAmount: 70 });
+    vi.mocked(replaceTransfer).mockClear();
+
+    const existingTx = makeExistingOutLeg({
+      interestAmount: null,
+      principalAmount: null,
+      isOverpayment: true,
+    });
+    await navigateToEditDebtPayment(existingTx);
+
+    // Populated as Overpayment (isOverpayment === true) — no split preview.
+    await waitFor(() => {
+      expect(screen.queryByText("transactions.debtPayment.interest")).toBeNull();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("transactions.debtPayment.regular"));
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Save"));
+    });
+
+    await waitFor(() => {
+      expect(replaceTransfer).toHaveBeenCalled();
+      const calls = vi.mocked(replaceTransfer).mock.calls;
+      const [, outTx] = calls[calls.length - 1];
+      expect(outTx.isOverpayment).toBeNull();
+      // Without the fix, this toggle direction left the split null, which
+      // makes getBalanceDelta reduce the debt by the FULL amount instead of
+      // the recomputed principal-only portion.
+      expect(outTx.interestAmount).toBe(30);
+      expect(outTx.principalAmount).toBe(70);
+    });
+
+    vi.mocked(calculatePaymentSplit).mockReturnValue({ interestAmount: 0, principalAmount: 0 });
   });
 });

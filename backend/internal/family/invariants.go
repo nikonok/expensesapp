@@ -21,9 +21,6 @@ const inviteCoolDownHours = 24
 // ErrFamilyFull is returned when a family has reached the member cap.
 var ErrFamilyFull = errors.New("family has reached the maximum member limit")
 
-// ErrNotInFamily is returned when the caller has no active family membership.
-var ErrNotInFamily = errors.New("caller has no active family membership")
-
 // ErrInviteNotFound is returned when the specified invite does not exist.
 var ErrInviteNotFound = errors.New("invite not found")
 

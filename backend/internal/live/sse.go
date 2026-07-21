@@ -76,6 +76,15 @@ func (h *Handler) GetLive(w http.ResponseWriter, r *http.Request) {
 			)
 			return
 
+		case <-h.hub.Done():
+			// Server is shutting down — return promptly instead of making
+			// graceful shutdown wait for the client to disconnect on its own.
+			slog.InfoContext(ctx, "live.SSE: hub shutting down, closing connection",
+				"user_id", userID,
+				"device_id", deviceID,
+			)
+			return
+
 		case ev := <-chFamily:
 			writeEvent(w, flusher, ev)
 

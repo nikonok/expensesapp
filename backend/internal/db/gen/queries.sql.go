@@ -76,6 +76,218 @@ func (q *Queries) ClaimReauthGrant(ctx context.Context, arg ClaimReauthGrantPara
 	return i, err
 }
 
+const clearPreviousSessionToken = `-- name: ClearPreviousSessionToken :exec
+UPDATE sessions SET previous_token_hash = NULL WHERE id = ? AND revoked_at IS NULL
+`
+
+// Drops the previous_token_hash once the new token has been observed in use.
+func (q *Queries) ClearPreviousSessionToken(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, clearPreviousSessionToken, id)
+	return err
+}
+
+const clearUserDeleteAfter = `-- name: ClearUserDeleteAfter :exec
+UPDATE users SET delete_after = NULL WHERE id = ?
+`
+
+func (q *Queries) ClearUserDeleteAfter(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, clearUserDeleteAfter, id)
+	return err
+}
+
+const countActiveFamilyMembers = `-- name: CountActiveFamilyMembers :one
+
+SELECT COUNT(*) FROM family_members WHERE family_id = ? AND left_at IS NULL
+`
+
+// ----- family member queries -----
+// Returns the count of active (left_at IS NULL) members for a family.
+func (q *Queries) CountActiveFamilyMembers(ctx context.Context, familyID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countActiveFamilyMembers, familyID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countRecentChangesForFamily = `-- name: CountRecentChangesForFamily :one
+SELECT COUNT(*) FROM record_meta
+WHERE family_id = ? AND last_modified_at >= ?
+`
+
+type CountRecentChangesForFamilyParams struct {
+	FamilyID       string
+	LastModifiedAt string
+}
+
+// Count records modified in the last 24h for digest purposes.
+func (q *Queries) CountRecentChangesForFamily(ctx context.Context, arg CountRecentChangesForFamilyParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countRecentChangesForFamily, arg.FamilyID, arg.LastModifiedAt)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countRecordMetaRefsForUser = `-- name: CountRecordMetaRefsForUser :one
+SELECT COUNT(*) FROM record_meta
+WHERE added_by_user = ?1 OR edited_by_user = ?1
+`
+
+// Counts record_meta rows (across all families) that still reference userID
+// as added_by_user or edited_by_user. record_meta has NO ON DELETE clause on
+// those FKs (RESTRICT), and rewriting them would break the AAD binding on the
+// referenced blob, so account purge uses this to decide hard-delete vs a
+// PII-scrubbed tombstone.
+func (q *Queries) CountRecordMetaRefsForUser(ctx context.Context, userID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countRecordMetaRefsForUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countSnapshotEntryRefsForUser = `-- name: CountSnapshotEntryRefsForUser :one
+SELECT COUNT(*) FROM snapshot_entries
+WHERE added_by_user = ?1 OR edited_by_user = ?1
+`
+
+// Counts snapshot_entries rows that still reference userID as added_by_user
+// or edited_by_user. Those columns have NO ON DELETE clause (see migration
+// 00005) and are captured verbatim from record_meta at snapshot time, bound
+// into the referenced blob's AAD (see InsertSnapshotEntry) -- rewriting them
+// would make the ciphertext undecryptable, same constraint as record_meta.
+// Expired snapshots are removed by DeleteExpiredSnapshots, which cascades to
+// their entries via snapshot_entries.snapshot_id ON DELETE CASCADE, so a
+// plain COUNT(*) here already reflects only live (non-expired) snapshots.
+// Account purge ORs this into the same hard-delete-vs-scrub decision as
+// CountRecordMetaRefsForUser.
+func (q *Queries) CountSnapshotEntryRefsForUser(ctx context.Context, userID sql.NullString) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countSnapshotEntryRefsForUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const deleteAllowlistByAddedBy = `-- name: DeleteAllowlistByAddedBy :exec
+
+DELETE FROM allowlist WHERE added_by = ?
+`
+
+// ----- pre-purge cleanup for non-CASCADE FKs -----
+// Removes allowlist entries added by the given user.
+// Called before HardDeleteUser to satisfy the RESTRICT FK.
+func (q *Queries) DeleteAllowlistByAddedBy(ctx context.Context, addedBy string) error {
+	_, err := q.db.ExecContext(ctx, deleteAllowlistByAddedBy, addedBy)
+	return err
+}
+
+const deleteDevicesByUser = `-- name: DeleteDevicesByUser :exec
+DELETE FROM devices WHERE user_id = ?
+`
+
+// Cascades sessions (-> reauth_challenges/reauth_grants), device_envelopes, and
+// push_subscriptions via their ON DELETE CASCADE FKs to devices(id)/sessions(id).
+// Used by account purge for both the hard-delete and the PII-scrub path.
+func (q *Queries) DeleteDevicesByUser(ctx context.Context, userID string) error {
+	_, err := q.db.ExecContext(ctx, deleteDevicesByUser, userID)
+	return err
+}
+
+const deleteExpiredSnapshots = `-- name: DeleteExpiredSnapshots :exec
+DELETE FROM snapshots WHERE expires_at < ?
+`
+
+// Cascading FK on snapshot_entries handles entry cleanup.
+func (q *Queries) DeleteExpiredSnapshots(ctx context.Context, expiresAt string) error {
+	_, err := q.db.ExecContext(ctx, deleteExpiredSnapshots, expiresAt)
+	return err
+}
+
+const deleteFamilyCascade = `-- name: DeleteFamilyCascade :exec
+DELETE FROM families WHERE id = ?
+`
+
+// Hard-delete a family row. FK ON DELETE CASCADE removes its members, invites,
+// device envelopes, recovery envelope, family_seq, blobs, record_meta, and
+// snapshots in one shot. Used by family.Leave when the last active member
+// leaves (B4f), and by account purge when a user's departure empties a family.
+func (q *Queries) DeleteFamilyCascade(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteFamilyCascade, id)
+	return err
+}
+
+const deleteFamilyInvitesByInvitedBy = `-- name: DeleteFamilyInvitesByInvitedBy :exec
+DELETE FROM family_invites WHERE invited_by = ?
+`
+
+// Removes pending invites created by the user.
+func (q *Queries) DeleteFamilyInvitesByInvitedBy(ctx context.Context, invitedBy string) error {
+	_, err := q.db.ExecContext(ctx, deleteFamilyInvitesByInvitedBy, invitedBy)
+	return err
+}
+
+const deleteHeldNotification = `-- name: DeleteHeldNotification :exec
+DELETE FROM held_notifications WHERE id = ?
+`
+
+func (q *Queries) DeleteHeldNotification(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteHeldNotification, id)
+	return err
+}
+
+const deleteMigrationsByUser = `-- name: DeleteMigrationsByUser :exec
+DELETE FROM migrations WHERE user_id = ?
+`
+
+// Removes solo-to-family migration idempotency records for the user. Called
+// during account purge (both hard-delete and PII-scrub paths); these rows
+// also have a NOT NULL FK to users(id) with no ON DELETE clause.
+func (q *Queries) DeleteMigrationsByUser(ctx context.Context, userID string) error {
+	_, err := q.db.ExecContext(ctx, deleteMigrationsByUser, userID)
+	return err
+}
+
+const deleteOldReauthChallenges = `-- name: DeleteOldReauthChallenges :exec
+DELETE FROM reauth_challenges WHERE expires_at < ?
+`
+
+// Periodic cleanup: reauth_challenges have a 60s TTL, but expired/used rows are
+// never otherwise removed. cutoff is normally "now - 24h".
+func (q *Queries) DeleteOldReauthChallenges(ctx context.Context, expiresAt string) error {
+	_, err := q.db.ExecContext(ctx, deleteOldReauthChallenges, expiresAt)
+	return err
+}
+
+const deleteOldReauthGrants = `-- name: DeleteOldReauthGrants :exec
+DELETE FROM reauth_grants WHERE expires_at < ?
+`
+
+// Periodic cleanup: reauth_grants have a 60s TTL, but expired/used rows are
+// never otherwise removed. cutoff is normally "now - 24h".
+func (q *Queries) DeleteOldReauthGrants(ctx context.Context, expiresAt string) error {
+	_, err := q.db.ExecContext(ctx, deleteOldReauthGrants, expiresAt)
+	return err
+}
+
+const deleteOrphanBlobs = `-- name: DeleteOrphanBlobs :exec
+DELETE FROM blobs
+WHERE id NOT IN (SELECT blob_id FROM record_meta)
+  AND id NOT IN (SELECT blob_id FROM snapshot_entries)
+`
+
+// Delete blobs not referenced by record_meta OR snapshot_entries.
+func (q *Queries) DeleteOrphanBlobs(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteOrphanBlobs)
+	return err
+}
+
+const deletePushSubscription = `-- name: DeletePushSubscription :exec
+DELETE FROM push_subscriptions WHERE id = ?
+`
+
+func (q *Queries) DeletePushSubscription(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deletePushSubscription, id)
+	return err
+}
+
 const demoteAdmin = `-- name: DemoteAdmin :exec
 UPDATE users SET is_admin = 0 WHERE id = ?
 `
@@ -188,30 +400,66 @@ func (q *Queries) GetDeviceByID(ctx context.Context, id string) (Device, error) 
 }
 
 const getFamilyByID = `-- name: GetFamilyByID :one
-SELECT id, created_at, usage_bytes FROM families WHERE id = ? LIMIT 1
+SELECT id, created_at, usage_bytes, recovery_created_at FROM families WHERE id = ? LIMIT 1
 `
 
 func (q *Queries) GetFamilyByID(ctx context.Context, id string) (Family, error) {
 	row := q.db.QueryRowContext(ctx, getFamilyByID, id)
 	var i Family
-	err := row.Scan(&i.ID, &i.CreatedAt, &i.UsageBytes)
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UsageBytes,
+		&i.RecoveryCreatedAt,
+	)
 	return i, err
 }
 
-const deleteFamilyCascade = `-- name: DeleteFamilyCascade :exec
-DELETE FROM families WHERE id = ?
+const getFamilyInvite = `-- name: GetFamilyInvite :one
+SELECT id, family_id, invited_by, invitee_email, created_at, expires_at, status, decided_at FROM family_invites WHERE id = ? LIMIT 1
 `
 
-// Hard-delete a family row. FK ON DELETE CASCADE removes its members, invites,
-// device envelopes, recovery envelope, family_seq, blobs, record_meta, and
-// snapshots in one shot. Used by family.Leave when the last active member
-// leaves (B4f).
-func (q *Queries) DeleteFamilyCascade(ctx context.Context, id string) error {
-	_, err := q.db.ExecContext(ctx, deleteFamilyCascade, id)
-	return err
+func (q *Queries) GetFamilyInvite(ctx context.Context, id string) (FamilyInvite, error) {
+	row := q.db.QueryRowContext(ctx, getFamilyInvite, id)
+	var i FamilyInvite
+	err := row.Scan(
+		&i.ID,
+		&i.FamilyID,
+		&i.InvitedBy,
+		&i.InviteeEmail,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.Status,
+		&i.DecidedAt,
+	)
+	return i, err
+}
+
+const getFamilyMemberByUserID = `-- name: GetFamilyMemberByUserID :one
+SELECT family_id, user_id, joined_at, left_at, last_removed_at FROM family_members WHERE family_id = ? AND user_id = ? AND left_at IS NULL LIMIT 1
+`
+
+type GetFamilyMemberByUserIDParams struct {
+	FamilyID string
+	UserID   string
+}
+
+// Returns an active (left_at IS NULL) family_members row for given family + user.
+func (q *Queries) GetFamilyMemberByUserID(ctx context.Context, arg GetFamilyMemberByUserIDParams) (FamilyMember, error) {
+	row := q.db.QueryRowContext(ctx, getFamilyMemberByUserID, arg.FamilyID, arg.UserID)
+	var i FamilyMember
+	err := row.Scan(
+		&i.FamilyID,
+		&i.UserID,
+		&i.JoinedAt,
+		&i.LeftAt,
+		&i.LastRemovedAt,
+	)
+	return i, err
 }
 
 const getFamilyRecoveryEnvelope = `-- name: GetFamilyRecoveryEnvelope :one
+
 SELECT family_id, recovery_wrap, phrase_ct, version, salt, created_at FROM family_recovery_envelopes
 WHERE family_id = ? LIMIT 1
 `
@@ -231,14 +479,96 @@ func (q *Queries) GetFamilyRecoveryEnvelope(ctx context.Context, familyID string
 	return i, err
 }
 
-const getRecordMeta = `-- name: GetRecordMeta :one
-
-SELECT record_id, family_id, record_type, blob_id, version, added_by_user, edited_by_user, updated_at_map, deleted_at, family_seq, created_at, last_modified_at FROM record_meta WHERE record_id = ? LIMIT 1
+const getMigrationRecord = `-- name: GetMigrationRecord :one
+SELECT id, user_id, source_family_id, target_family_id, record_count, committed_at FROM migrations WHERE id = ? LIMIT 1
 `
 
+func (q *Queries) GetMigrationRecord(ctx context.Context, id string) (Migration, error) {
+	row := q.db.QueryRowContext(ctx, getMigrationRecord, id)
+	var i Migration
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SourceFamilyID,
+		&i.TargetFamilyID,
+		&i.RecordCount,
+		&i.CommittedAt,
+	)
+	return i, err
+}
+
+const getNotificationSettings = `-- name: GetNotificationSettings :one
+
+SELECT user_id, tz, reminder_time, quiet_start, quiet_end,
+       daily_reminder, missed_day, family_digest, updated_at
+FROM notification_settings
+WHERE user_id = ?
+`
+
+// ----- notification_settings -----
+func (q *Queries) GetNotificationSettings(ctx context.Context, userID string) (NotificationSetting, error) {
+	row := q.db.QueryRowContext(ctx, getNotificationSettings, userID)
+	var i NotificationSetting
+	err := row.Scan(
+		&i.UserID,
+		&i.Tz,
+		&i.ReminderTime,
+		&i.QuietStart,
+		&i.QuietEnd,
+		&i.DailyReminder,
+		&i.MissedDay,
+		&i.FamilyDigest,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getPendingInviteForEmail = `-- name: GetPendingInviteForEmail :one
+SELECT id, family_id, invited_by, invitee_email, created_at, expires_at, status, decided_at FROM family_invites
+WHERE family_id = ? AND invitee_email = ? COLLATE NOCASE AND status = 'pending'
+LIMIT 1
+`
+
+type GetPendingInviteForEmailParams struct {
+	FamilyID     string
+	InviteeEmail string
+}
+
+// Returns an existing pending invite for this family + email combo (for duplicate check).
+func (q *Queries) GetPendingInviteForEmail(ctx context.Context, arg GetPendingInviteForEmailParams) (FamilyInvite, error) {
+	row := q.db.QueryRowContext(ctx, getPendingInviteForEmail, arg.FamilyID, arg.InviteeEmail)
+	var i FamilyInvite
+	err := row.Scan(
+		&i.ID,
+		&i.FamilyID,
+		&i.InvitedBy,
+		&i.InviteeEmail,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.Status,
+		&i.DecidedAt,
+	)
+	return i, err
+}
+
+const getRecordMeta = `-- name: GetRecordMeta :one
+
+SELECT record_id, family_id, record_type, blob_id, version, added_by_user, edited_by_user, updated_at_map, deleted_at, family_seq, created_at, last_modified_at FROM record_meta WHERE record_id = ? AND family_id = ? LIMIT 1
+`
+
+type GetRecordMetaParams struct {
+	RecordID string
+	FamilyID string
+}
+
 // ----- record_meta -----
-func (q *Queries) GetRecordMeta(ctx context.Context, recordID string) (RecordMetum, error) {
-	row := q.db.QueryRowContext(ctx, getRecordMeta, recordID)
+// Family-scoped: record_id is a client-supplied UUID and record_meta.record_id
+// is a global PRIMARY KEY, so a lookup that ignores family_id would let one
+// family read another family's record via a guessed/reused recordId. Always
+// scope by the caller's family_id; a record_id that exists but belongs to a
+// different family must look identical to "not found" here.
+func (q *Queries) GetRecordMeta(ctx context.Context, arg GetRecordMetaParams) (RecordMetum, error) {
+	row := q.db.QueryRowContext(ctx, getRecordMeta, arg.RecordID, arg.FamilyID)
 	var i RecordMetum
 	err := row.Scan(
 		&i.RecordID,
@@ -267,6 +597,7 @@ SELECT
     s.previous_token_hash,
     d.user_id,
     d.status AS device_status,
+    d.last_seen_at AS device_last_seen_at,
     u.email,
     u.display_name,
     u.is_admin,
@@ -275,7 +606,7 @@ SELECT
 FROM sessions s
 JOIN devices d ON d.id = s.device_id
 JOIN users u   ON u.id = d.user_id
-WHERE (s.token_hash = ? OR s.previous_token_hash = ?)
+WHERE (s.token_hash = ?1 OR s.previous_token_hash = ?1)
   AND s.revoked_at IS NULL
 LIMIT 1
 `
@@ -289,6 +620,7 @@ type GetSessionByTokenHashRow struct {
 	PreviousTokenHash []byte
 	UserID            string
 	DeviceStatus      string
+	DeviceLastSeenAt  sql.NullString
 	Email             string
 	DisplayName       string
 	IsAdmin           int64
@@ -300,7 +632,7 @@ type GetSessionByTokenHashRow struct {
 // Accepts both the current token_hash and the previous_token_hash so a rotated
 // session tolerates one in-flight request still presenting the old token (B4d).
 func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (GetSessionByTokenHashRow, error) {
-	row := q.db.QueryRowContext(ctx, getSessionByTokenHash, tokenHash, tokenHash)
+	row := q.db.QueryRowContext(ctx, getSessionByTokenHash, tokenHash)
 	var i GetSessionByTokenHashRow
 	err := row.Scan(
 		&i.SessionID,
@@ -311,11 +643,36 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (
 		&i.PreviousTokenHash,
 		&i.UserID,
 		&i.DeviceStatus,
+		&i.DeviceLastSeenAt,
 		&i.Email,
 		&i.DisplayName,
 		&i.IsAdmin,
 		&i.IsRoot,
 		&i.SuspendedAt,
+	)
+	return i, err
+}
+
+const getSnapshotByDate = `-- name: GetSnapshotByDate :one
+SELECT id, family_id, snapshot_date, created_at, expires_at FROM snapshots
+WHERE family_id = ? AND snapshot_date = ?
+LIMIT 1
+`
+
+type GetSnapshotByDateParams struct {
+	FamilyID     string
+	SnapshotDate string
+}
+
+func (q *Queries) GetSnapshotByDate(ctx context.Context, arg GetSnapshotByDateParams) (Snapshot, error) {
+	row := q.db.QueryRowContext(ctx, getSnapshotByDate, arg.FamilyID, arg.SnapshotDate)
+	var i Snapshot
+	err := row.Scan(
+		&i.ID,
+		&i.FamilyID,
+		&i.SnapshotDate,
+		&i.CreatedAt,
+		&i.ExpiresAt,
 	)
 	return i, err
 }
@@ -400,6 +757,29 @@ func (q *Queries) GetUserByID(ctx context.Context, id string) (User, error) {
 		&i.LastSigninAt,
 	)
 	return i, err
+}
+
+const getUserPromoterID = `-- name: GetUserPromoterID :one
+
+SELECT promoter_id FROM users WHERE id = ? LIMIT 1
+`
+
+// ----- admin: get promoter chain for subtree check -----
+// Returns the promoter_id for a user. Used for subtree walks.
+func (q *Queries) GetUserPromoterID(ctx context.Context, id string) (sql.NullString, error) {
+	row := q.db.QueryRowContext(ctx, getUserPromoterID, id)
+	var promoter_id sql.NullString
+	err := row.Scan(&promoter_id)
+	return promoter_id, err
+}
+
+const hardDeleteUser = `-- name: HardDeleteUser :exec
+DELETE FROM users WHERE id = ?
+`
+
+func (q *Queries) HardDeleteUser(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, hardDeleteUser, id)
+	return err
 }
 
 const incrementFamilyUsage = `-- name: IncrementFamilyUsage :exec
@@ -548,17 +928,49 @@ func (q *Queries) InsertDeviceEnvelope(ctx context.Context, arg InsertDeviceEnve
 
 const insertFamily = `-- name: InsertFamily :exec
 
-INSERT INTO families (id, created_at, usage_bytes) VALUES (?, ?, 0)
+INSERT INTO families (id, created_at, usage_bytes, recovery_created_at) VALUES (?, ?, 0, ?)
 `
 
 type InsertFamilyParams struct {
-	ID        string
-	CreatedAt string
+	ID                string
+	CreatedAt         string
+	RecoveryCreatedAt sql.NullString
 }
 
 // ----- families -----
+// recovery_created_at is the opaque, client-supplied createdAt bound into the
+// recovery-envelope AAD (B9/B10); NULL when the client did not supply one
+// (legacy clients), in which case callers fall back to families.created_at.
 func (q *Queries) InsertFamily(ctx context.Context, arg InsertFamilyParams) error {
-	_, err := q.db.ExecContext(ctx, insertFamily, arg.ID, arg.CreatedAt)
+	_, err := q.db.ExecContext(ctx, insertFamily, arg.ID, arg.CreatedAt, arg.RecoveryCreatedAt)
+	return err
+}
+
+const insertFamilyInvite = `-- name: InsertFamilyInvite :exec
+
+INSERT INTO family_invites (id, family_id, invited_by, invitee_email, created_at, expires_at, status, decided_at)
+VALUES (?, ?, ?, ?, ?, ?, 'pending', NULL)
+`
+
+type InsertFamilyInviteParams struct {
+	ID           string
+	FamilyID     string
+	InvitedBy    string
+	InviteeEmail string
+	CreatedAt    string
+	ExpiresAt    string
+}
+
+// ----- family_invites -----
+func (q *Queries) InsertFamilyInvite(ctx context.Context, arg InsertFamilyInviteParams) error {
+	_, err := q.db.ExecContext(ctx, insertFamilyInvite,
+		arg.ID,
+		arg.FamilyID,
+		arg.InvitedBy,
+		arg.InviteeEmail,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
 	return err
 }
 
@@ -610,6 +1022,88 @@ INSERT INTO family_seq (family_id, next_seq) VALUES (?, 1)
 
 func (q *Queries) InsertFamilySeq(ctx context.Context, familyID string) error {
 	_, err := q.db.ExecContext(ctx, insertFamilySeq, familyID)
+	return err
+}
+
+const insertHeldNotification = `-- name: InsertHeldNotification :exec
+
+INSERT INTO held_notifications (id, user_id, payload, deliver_after, created_at)
+VALUES (?, ?, ?, ?, ?)
+`
+
+type InsertHeldNotificationParams struct {
+	ID           string
+	UserID       string
+	Payload      []byte
+	DeliverAfter string
+	CreatedAt    string
+}
+
+// ----- held_notifications -----
+func (q *Queries) InsertHeldNotification(ctx context.Context, arg InsertHeldNotificationParams) error {
+	_, err := q.db.ExecContext(ctx, insertHeldNotification,
+		arg.ID,
+		arg.UserID,
+		arg.Payload,
+		arg.DeliverAfter,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const insertMigrationRecord = `-- name: InsertMigrationRecord :exec
+
+INSERT INTO migrations (id, user_id, source_family_id, target_family_id, record_count, committed_at)
+VALUES (?, ?, ?, ?, ?, ?)
+`
+
+type InsertMigrationRecordParams struct {
+	ID             string
+	UserID         string
+	SourceFamilyID sql.NullString
+	TargetFamilyID string
+	RecordCount    int64
+	CommittedAt    string
+}
+
+// ----- migrations (solo-to-family idempotency) -----
+func (q *Queries) InsertMigrationRecord(ctx context.Context, arg InsertMigrationRecordParams) error {
+	_, err := q.db.ExecContext(ctx, insertMigrationRecord,
+		arg.ID,
+		arg.UserID,
+		arg.SourceFamilyID,
+		arg.TargetFamilyID,
+		arg.RecordCount,
+		arg.CommittedAt,
+	)
+	return err
+}
+
+const insertPushSubscription = `-- name: InsertPushSubscription :exec
+
+INSERT INTO push_subscriptions (id, device_id, endpoint, p256dh, auth, created_at)
+VALUES (?, ?, ?, ?, ?, ?)
+`
+
+type InsertPushSubscriptionParams struct {
+	ID        string
+	DeviceID  string
+	Endpoint  string
+	P256dh    []byte
+	Auth      []byte
+	CreatedAt string
+}
+
+// ----- push_subscriptions -----
+func (q *Queries) InsertPushSubscription(ctx context.Context, arg InsertPushSubscriptionParams) error {
+	_, err := q.db.ExecContext(ctx, insertPushSubscription,
+		arg.ID,
+		arg.DeviceID,
+		arg.Endpoint,
+		arg.P256dh,
+		arg.Auth,
+		arg.CreatedAt,
+	)
 	return err
 }
 
@@ -727,6 +1221,89 @@ func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) er
 	return err
 }
 
+const insertSnapshot = `-- name: InsertSnapshot :exec
+
+INSERT INTO snapshots (id, family_id, snapshot_date, created_at, expires_at)
+VALUES (?, ?, ?, ?, ?)
+`
+
+type InsertSnapshotParams struct {
+	ID           string
+	FamilyID     string
+	SnapshotDate string
+	CreatedAt    string
+	ExpiresAt    string
+}
+
+// ----- snapshots -----
+func (q *Queries) InsertSnapshot(ctx context.Context, arg InsertSnapshotParams) error {
+	_, err := q.db.ExecContext(ctx, insertSnapshot,
+		arg.ID,
+		arg.FamilyID,
+		arg.SnapshotDate,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const insertSnapshotEntry = `-- name: InsertSnapshotEntry :exec
+INSERT INTO snapshot_entries (snapshot_id, record_id, blob_id, record_type, version, updated_at_map, added_by_user, edited_by_user)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type InsertSnapshotEntryParams struct {
+	SnapshotID   string
+	RecordID     string
+	BlobID       string
+	RecordType   string
+	Version      int64
+	UpdatedAtMap string
+	AddedByUser  sql.NullString
+	EditedByUser sql.NullString
+}
+
+// added_by_user/edited_by_user are captured verbatim from record_meta at
+// snapshot time so restore can reapply them (they are bound into the blob's
+// AAD; rewriting them to the restoring caller would make the ciphertext
+// undecryptable).
+func (q *Queries) InsertSnapshotEntry(ctx context.Context, arg InsertSnapshotEntryParams) error {
+	_, err := q.db.ExecContext(ctx, insertSnapshotEntry,
+		arg.SnapshotID,
+		arg.RecordID,
+		arg.BlobID,
+		arg.RecordType,
+		arg.Version,
+		arg.UpdatedAtMap,
+		arg.AddedByUser,
+		arg.EditedByUser,
+	)
+	return err
+}
+
+const insertSupportLog = `-- name: InsertSupportLog :exec
+
+INSERT INTO support_logs (id, user_id, payload, created_at) VALUES (?, ?, ?, ?)
+`
+
+type InsertSupportLogParams struct {
+	ID        string
+	UserID    string
+	Payload   []byte
+	CreatedAt string
+}
+
+// ----- support_logs -----
+func (q *Queries) InsertSupportLog(ctx context.Context, arg InsertSupportLogParams) error {
+	_, err := q.db.ExecContext(ctx, insertSupportLog,
+		arg.ID,
+		arg.UserID,
+		arg.Payload,
+		arg.CreatedAt,
+	)
+	return err
+}
+
 const isEmailAllowed = `-- name: IsEmailAllowed :one
 
 SELECT EXISTS(SELECT 1 FROM allowlist WHERE email = ? COLLATE NOCASE) AS allowed
@@ -738,6 +1315,225 @@ func (q *Queries) IsEmailAllowed(ctx context.Context, email string) (bool, error
 	var allowed bool
 	err := row.Scan(&allowed)
 	return allowed, err
+}
+
+const joinFamily = `-- name: JoinFamily :exec
+INSERT INTO family_members (family_id, user_id, joined_at, left_at, last_removed_at)
+VALUES (?, ?, ?, NULL, NULL)
+`
+
+type JoinFamilyParams struct {
+	FamilyID string
+	UserID   string
+	JoinedAt string
+}
+
+// Insert a new active family_members row. Used in invite-accept path.
+func (q *Queries) JoinFamily(ctx context.Context, arg JoinFamilyParams) error {
+	_, err := q.db.ExecContext(ctx, joinFamily, arg.FamilyID, arg.UserID, arg.JoinedAt)
+	return err
+}
+
+const listActiveFamilyIDsForUser = `-- name: ListActiveFamilyIDsForUser :many
+SELECT family_id FROM family_members WHERE user_id = ? AND left_at IS NULL
+`
+
+// Returns family_ids the user is currently an active member of. Used by
+// account purge to find families that may become empty once this user
+// soft-leaves, so they can be cascade-deleted (data-retention requirement).
+func (q *Queries) ListActiveFamilyIDsForUser(ctx context.Context, userID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveFamilyIDsForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var family_id string
+		if err := rows.Scan(&family_id); err != nil {
+			return nil, err
+		}
+		items = append(items, family_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveUserIDsForFamily = `-- name: ListActiveUserIDsForFamily :many
+
+SELECT user_id FROM family_members WHERE family_id = ? AND left_at IS NULL
+`
+
+// ----- family push helpers -----
+// Returns user IDs of all active family members (left_at IS NULL).
+func (q *Queries) ListActiveUserIDsForFamily(ctx context.Context, familyID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveUserIDsForFamily, familyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var user_id string
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAdminUsers = `-- name: ListAdminUsers :many
+
+SELECT
+    u.id,
+    u.email,
+    u.display_name,
+    u.last_signin_at,
+    u.suspended_at,
+    u.is_admin,
+    u.is_root,
+    u.promoter_id,
+    u.delete_after,
+    COALESCE(f.usage_bytes, 0)           AS usage_bytes,
+    COUNT(DISTINCT CASE WHEN fm.left_at IS NULL THEN fm.user_id END) AS family_member_count,
+    COUNT(DISTINCT d.id)                 AS device_count,
+    CASE WHEN fre.family_id IS NOT NULL THEN 1 ELSE 0 END AS has_recovery_code
+FROM users u
+LEFT JOIN family_members fm2 ON fm2.user_id = u.id AND fm2.left_at IS NULL
+LEFT JOIN families f          ON f.id = fm2.family_id
+LEFT JOIN family_members fm   ON fm.family_id = fm2.family_id AND fm.left_at IS NULL
+LEFT JOIN devices d            ON d.user_id = u.id AND d.status IN ('pending','active')
+LEFT JOIN family_recovery_envelopes fre ON fre.family_id = fm2.family_id
+GROUP BY u.id
+ORDER BY u.created_at DESC
+LIMIT ? OFFSET ?
+`
+
+type ListAdminUsersParams struct {
+	Limit  int64
+	Offset int64
+}
+
+type ListAdminUsersRow struct {
+	ID                string
+	Email             string
+	DisplayName       string
+	LastSigninAt      sql.NullString
+	SuspendedAt       sql.NullString
+	IsAdmin           int64
+	IsRoot            int64
+	PromoterID        sql.NullString
+	DeleteAfter       sql.NullString
+	UsageBytes        int64
+	FamilyMemberCount int64
+	DeviceCount       int64
+	HasRecoveryCode   int64
+}
+
+// ----- admin: user list -----
+func (q *Queries) ListAdminUsers(ctx context.Context, arg ListAdminUsersParams) ([]ListAdminUsersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAdminUsers, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAdminUsersRow{}
+	for rows.Next() {
+		var i ListAdminUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.LastSigninAt,
+			&i.SuspendedAt,
+			&i.IsAdmin,
+			&i.IsRoot,
+			&i.PromoterID,
+			&i.DeleteAfter,
+			&i.UsageBytes,
+			&i.FamilyMemberCount,
+			&i.DeviceCount,
+			&i.HasRecoveryCode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAllRecordMetaForFamily = `-- name: ListAllRecordMetaForFamily :many
+SELECT record_id, blob_id, record_type, version, updated_at_map,
+       deleted_at, added_by_user, edited_by_user, family_seq, created_at, last_modified_at
+FROM record_meta
+WHERE family_id = ?
+`
+
+type ListAllRecordMetaForFamilyRow struct {
+	RecordID       string
+	BlobID         string
+	RecordType     string
+	Version        int64
+	UpdatedAtMap   string
+	DeletedAt      sql.NullString
+	AddedByUser    string
+	EditedByUser   string
+	FamilySeq      int64
+	CreatedAt      string
+	LastModifiedAt string
+}
+
+func (q *Queries) ListAllRecordMetaForFamily(ctx context.Context, familyID string) ([]ListAllRecordMetaForFamilyRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAllRecordMetaForFamily, familyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAllRecordMetaForFamilyRow{}
+	for rows.Next() {
+		var i ListAllRecordMetaForFamilyRow
+		if err := rows.Scan(
+			&i.RecordID,
+			&i.BlobID,
+			&i.RecordType,
+			&i.Version,
+			&i.UpdatedAtMap,
+			&i.DeletedAt,
+			&i.AddedByUser,
+			&i.EditedByUser,
+			&i.FamilySeq,
+			&i.CreatedAt,
+			&i.LastModifiedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAllowlist = `-- name: ListAllowlist :many
@@ -758,6 +1554,335 @@ func (q *Queries) ListAllowlist(ctx context.Context) ([]Allowlist, error) {
 			&i.AddedBy,
 			&i.AddedAt,
 			&i.Note,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAuditLog = `-- name: ListAuditLog :many
+
+SELECT id, actor_user_id, actor_email, action, target_kind, target_id, detail_json, created_at
+FROM audit_log
+WHERE (id < ?1 OR ?1 IS NULL)
+ORDER BY id DESC
+LIMIT ?2
+`
+
+type ListAuditLogParams struct {
+	AfterID sql.NullString
+	Limit   int64
+}
+
+// ----- admin: audit log -----
+func (q *Queries) ListAuditLog(ctx context.Context, arg ListAuditLogParams) ([]AuditLog, error) {
+	rows, err := q.db.QueryContext(ctx, listAuditLog, arg.AfterID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AuditLog{}
+	for rows.Next() {
+		var i AuditLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.ActorUserID,
+			&i.ActorEmail,
+			&i.Action,
+			&i.TargetKind,
+			&i.TargetID,
+			&i.DetailJson,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDueHeldNotifications = `-- name: ListDueHeldNotifications :many
+SELECT id, user_id, payload, deliver_after, created_at
+FROM held_notifications
+WHERE deliver_after <= ?
+ORDER BY deliver_after ASC
+`
+
+func (q *Queries) ListDueHeldNotifications(ctx context.Context, deliverAfter string) ([]HeldNotification, error) {
+	rows, err := q.db.QueryContext(ctx, listDueHeldNotifications, deliverAfter)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []HeldNotification{}
+	for rows.Next() {
+		var i HeldNotification
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Payload,
+			&i.DeliverAfter,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFamilies = `-- name: ListFamilies :many
+SELECT id FROM families ORDER BY id
+`
+
+// Returns all family IDs (for the daily snapshot job).
+func (q *Queries) ListFamilies(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listFamilies)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIncomingInvites = `-- name: ListIncomingInvites :many
+SELECT id, family_id, invited_by, invitee_email, created_at, expires_at, status, decided_at FROM family_invites
+WHERE invitee_email = ? COLLATE NOCASE
+  AND status = 'pending'
+  AND expires_at > ?
+ORDER BY created_at DESC
+`
+
+type ListIncomingInvitesParams struct {
+	InviteeEmail string
+	ExpiresAt    string
+}
+
+// Returns pending, non-expired invites for the given invitee email.
+func (q *Queries) ListIncomingInvites(ctx context.Context, arg ListIncomingInvitesParams) ([]FamilyInvite, error) {
+	rows, err := q.db.QueryContext(ctx, listIncomingInvites, arg.InviteeEmail, arg.ExpiresAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FamilyInvite{}
+	for rows.Next() {
+		var i FamilyInvite
+		if err := rows.Scan(
+			&i.ID,
+			&i.FamilyID,
+			&i.InvitedBy,
+			&i.InviteeEmail,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.Status,
+			&i.DecidedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNonDeletedRecordMetaForFamily = `-- name: ListNonDeletedRecordMetaForFamily :many
+SELECT record_id, blob_id, record_type, version, updated_at_map, added_by_user, edited_by_user
+FROM record_meta
+WHERE family_id = ? AND deleted_at IS NULL
+`
+
+type ListNonDeletedRecordMetaForFamilyRow struct {
+	RecordID     string
+	BlobID       string
+	RecordType   string
+	Version      int64
+	UpdatedAtMap string
+	AddedByUser  string
+	EditedByUser string
+}
+
+func (q *Queries) ListNonDeletedRecordMetaForFamily(ctx context.Context, familyID string) ([]ListNonDeletedRecordMetaForFamilyRow, error) {
+	rows, err := q.db.QueryContext(ctx, listNonDeletedRecordMetaForFamily, familyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListNonDeletedRecordMetaForFamilyRow{}
+	for rows.Next() {
+		var i ListNonDeletedRecordMetaForFamilyRow
+		if err := rows.Scan(
+			&i.RecordID,
+			&i.BlobID,
+			&i.RecordType,
+			&i.Version,
+			&i.UpdatedAtMap,
+			&i.AddedByUser,
+			&i.EditedByUser,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNotificationSettingsForDigest = `-- name: ListNotificationSettingsForDigest :many
+SELECT user_id, tz, reminder_time, daily_reminder, family_digest
+FROM notification_settings
+WHERE (daily_reminder = 1 OR family_digest = 1)
+  AND reminder_time IS NOT NULL
+`
+
+type ListNotificationSettingsForDigestRow struct {
+	UserID        string
+	Tz            string
+	ReminderTime  sql.NullString
+	DailyReminder int64
+	FamilyDigest  int64
+}
+
+// Returns users with an eligible reminder configured, for the hourly digest-push job.
+func (q *Queries) ListNotificationSettingsForDigest(ctx context.Context) ([]ListNotificationSettingsForDigestRow, error) {
+	rows, err := q.db.QueryContext(ctx, listNotificationSettingsForDigest)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListNotificationSettingsForDigestRow{}
+	for rows.Next() {
+		var i ListNotificationSettingsForDigestRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Tz,
+			&i.ReminderTime,
+			&i.DailyReminder,
+			&i.FamilyDigest,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPushSubscriptionsForDevice = `-- name: ListPushSubscriptionsForDevice :many
+SELECT id, device_id, endpoint, p256dh, auth, created_at, last_success_at, last_failure_at
+FROM push_subscriptions
+WHERE device_id = ?
+`
+
+func (q *Queries) ListPushSubscriptionsForDevice(ctx context.Context, deviceID string) ([]PushSubscription, error) {
+	rows, err := q.db.QueryContext(ctx, listPushSubscriptionsForDevice, deviceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PushSubscription{}
+	for rows.Next() {
+		var i PushSubscription
+		if err := rows.Scan(
+			&i.ID,
+			&i.DeviceID,
+			&i.Endpoint,
+			&i.P256dh,
+			&i.Auth,
+			&i.CreatedAt,
+			&i.LastSuccessAt,
+			&i.LastFailureAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPushSubscriptionsForUser = `-- name: ListPushSubscriptionsForUser :many
+SELECT ps.id, ps.device_id, ps.endpoint, ps.p256dh, ps.auth,
+       ps.created_at, ps.last_success_at, ps.last_failure_at
+FROM push_subscriptions ps
+JOIN devices d ON d.id = ps.device_id
+WHERE d.user_id = ?
+  AND (ps.last_failure_at IS NULL OR ps.last_success_at > ps.last_failure_at)
+`
+
+// Returns active (non-deleted) push subscriptions for all devices owned by the user.
+func (q *Queries) ListPushSubscriptionsForUser(ctx context.Context, userID string) ([]PushSubscription, error) {
+	rows, err := q.db.QueryContext(ctx, listPushSubscriptionsForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PushSubscription{}
+	for rows.Next() {
+		var i PushSubscription
+		if err := rows.Scan(
+			&i.ID,
+			&i.DeviceID,
+			&i.Endpoint,
+			&i.P256dh,
+			&i.Auth,
+			&i.CreatedAt,
+			&i.LastSuccessAt,
+			&i.LastFailureAt,
 		); err != nil {
 			return nil, err
 		}
@@ -842,6 +1967,80 @@ func (q *Queries) ListRecordsSinceSeq(ctx context.Context, arg ListRecordsSinceS
 	return items, nil
 }
 
+const listSnapshotEntries = `-- name: ListSnapshotEntries :many
+SELECT snapshot_id, record_id, blob_id, record_type, version, updated_at_map, added_by_user, edited_by_user
+FROM snapshot_entries WHERE snapshot_id = ?
+`
+
+func (q *Queries) ListSnapshotEntries(ctx context.Context, snapshotID string) ([]SnapshotEntry, error) {
+	rows, err := q.db.QueryContext(ctx, listSnapshotEntries, snapshotID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SnapshotEntry{}
+	for rows.Next() {
+		var i SnapshotEntry
+		if err := rows.Scan(
+			&i.SnapshotID,
+			&i.RecordID,
+			&i.BlobID,
+			&i.RecordType,
+			&i.Version,
+			&i.UpdatedAtMap,
+			&i.AddedByUser,
+			&i.EditedByUser,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSnapshotsForFamily = `-- name: ListSnapshotsForFamily :many
+SELECT id, family_id, snapshot_date, created_at, expires_at FROM snapshots
+WHERE family_id = ?
+ORDER BY snapshot_date DESC
+LIMIT 30
+`
+
+// Returns up to 30 most recent snapshots for the family, ordered by snapshot_date DESC.
+func (q *Queries) ListSnapshotsForFamily(ctx context.Context, familyID string) ([]Snapshot, error) {
+	rows, err := q.db.QueryContext(ctx, listSnapshotsForFamily, familyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Snapshot{}
+	for rows.Next() {
+		var i Snapshot
+		if err := rows.Scan(
+			&i.ID,
+			&i.FamilyID,
+			&i.SnapshotDate,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserDevices = `-- name: ListUserDevices :many
 SELECT id, user_id, label, user_agent, pub_key, status, created_at, last_seen_at, revoked_at, revoke_reason FROM devices WHERE user_id = ? AND status IN ('pending','active') ORDER BY created_at DESC
 `
@@ -878,6 +2077,90 @@ func (q *Queries) ListUserDevices(ctx context.Context, userID string) ([]Device,
 		return nil, err
 	}
 	return items, nil
+}
+
+const listUsersPendingDeletion = `-- name: ListUsersPendingDeletion :many
+SELECT id, email, google_sub, display_name, is_admin, is_root, promoter_id, suspended_at, delete_after, created_at, last_signin_at FROM users WHERE delete_after IS NOT NULL AND delete_after <= ?
+`
+
+// Returns users whose 14-day grace period has elapsed.
+func (q *Queries) ListUsersPendingDeletion(ctx context.Context, deleteAfter sql.NullString) ([]User, error) {
+	rows, err := q.db.QueryContext(ctx, listUsersPendingDeletion, deleteAfter)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []User{}
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.GoogleSub,
+			&i.DisplayName,
+			&i.IsAdmin,
+			&i.IsRoot,
+			&i.PromoterID,
+			&i.SuspendedAt,
+			&i.DeleteAfter,
+			&i.CreatedAt,
+			&i.LastSigninAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markFamilyMemberLeft = `-- name: MarkFamilyMemberLeft :exec
+UPDATE family_members SET left_at = ? WHERE family_id = ? AND user_id = ? AND left_at IS NULL
+`
+
+type MarkFamilyMemberLeftParams struct {
+	LeftAt   sql.NullString
+	FamilyID string
+	UserID   string
+}
+
+// Soft-leave: set left_at for the given family + user.
+func (q *Queries) MarkFamilyMemberLeft(ctx context.Context, arg MarkFamilyMemberLeftParams) error {
+	_, err := q.db.ExecContext(ctx, markFamilyMemberLeft, arg.LeftAt, arg.FamilyID, arg.UserID)
+	return err
+}
+
+const markPushSubscriptionFailure = `-- name: MarkPushSubscriptionFailure :exec
+UPDATE push_subscriptions SET last_failure_at = ? WHERE id = ?
+`
+
+type MarkPushSubscriptionFailureParams struct {
+	LastFailureAt sql.NullString
+	ID            string
+}
+
+func (q *Queries) MarkPushSubscriptionFailure(ctx context.Context, arg MarkPushSubscriptionFailureParams) error {
+	_, err := q.db.ExecContext(ctx, markPushSubscriptionFailure, arg.LastFailureAt, arg.ID)
+	return err
+}
+
+const markPushSubscriptionSuccess = `-- name: MarkPushSubscriptionSuccess :exec
+UPDATE push_subscriptions SET last_success_at = ? WHERE id = ?
+`
+
+type MarkPushSubscriptionSuccessParams struct {
+	LastSuccessAt sql.NullString
+	ID            string
+}
+
+func (q *Queries) MarkPushSubscriptionSuccess(ctx context.Context, arg MarkPushSubscriptionSuccessParams) error {
+	_, err := q.db.ExecContext(ctx, markPushSubscriptionSuccess, arg.LastSuccessAt, arg.ID)
+	return err
 }
 
 const markReauthChallengeUsed = `-- name: MarkReauthChallengeUsed :exec
@@ -947,6 +2230,34 @@ type PromoteUserToAdminParams struct {
 func (q *Queries) PromoteUserToAdmin(ctx context.Context, arg PromoteUserToAdminParams) error {
 	_, err := q.db.ExecContext(ctx, promoteUserToAdmin, arg.PromoterID, arg.ID)
 	return err
+}
+
+const reconcileFamilyUsageBytes = `-- name: ReconcileFamilyUsageBytes :exec
+UPDATE families
+SET usage_bytes = COALESCE((SELECT SUM(b.byte_count) FROM blobs b WHERE b.family_id = families.id), 0)
+`
+
+// Recomputes usage_bytes for every family from the live sum of blobs.byte_count,
+// correcting any drift left by incremental updates (e.g. PruneOrphanBlobs
+// deletes rows without decrementing usage_bytes). Self-healing; safe to run
+// repeatedly on a schedule.
+func (q *Queries) ReconcileFamilyUsageBytes(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, reconcileFamilyUsageBytes)
+	return err
+}
+
+const recordIDExistsInAnyFamily = `-- name: RecordIDExistsInAnyFamily :one
+SELECT EXISTS(SELECT 1 FROM record_meta WHERE record_id = ?) AS record_exists
+`
+
+// Used to reject a cross-family record_id collision at insert time (before it
+// would otherwise hit the record_meta PRIMARY KEY(record_id) and surface as a
+// generic DB error). Deliberately does NOT reveal which family owns it.
+func (q *Queries) RecordIDExistsInAnyFamily(ctx context.Context, recordID string) (bool, error) {
+	row := q.db.QueryRowContext(ctx, recordIDExistsInAnyFamily, recordID)
+	var record_exists bool
+	err := row.Scan(&record_exists)
+	return record_exists, err
 }
 
 const removeAllowlistEntry = `-- name: RemoveAllowlistEntry :exec
@@ -1059,9 +2370,9 @@ func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) er
 const rotateSessionToken = `-- name: RotateSessionToken :exec
 UPDATE sessions
 SET previous_token_hash = token_hash,
-    token_hash          = ?,
-    last_used_at        = ?
-WHERE id = ? AND revoked_at IS NULL
+    token_hash          = ?1,
+    last_used_at        = ?2
+WHERE id = ?3 AND revoked_at IS NULL
 `
 
 type RotateSessionTokenParams struct {
@@ -1077,13 +2388,77 @@ func (q *Queries) RotateSessionToken(ctx context.Context, arg RotateSessionToken
 	return err
 }
 
-const clearPreviousSessionToken = `-- name: ClearPreviousSessionToken :exec
-UPDATE sessions SET previous_token_hash = NULL WHERE id = ? AND revoked_at IS NULL
+const scrubUserPII = `-- name: ScrubUserPII :exec
+UPDATE users
+SET email = ?, display_name = ?, google_sub = NULL, is_admin = 0, is_root = 0,
+    promoter_id = NULL, suspended_at = NULL, delete_after = NULL
+WHERE id = ?
 `
 
-// Drops the previous_token_hash once the new token has been observed in use (B4d).
-func (q *Queries) ClearPreviousSessionToken(ctx context.Context, id string) error {
-	_, err := q.db.ExecContext(ctx, clearPreviousSessionToken, id)
+type ScrubUserPIIParams struct {
+	Email       string
+	DisplayName string
+	ID          string
+}
+
+// Replaces PII on a user row without deleting it, for a user whose
+// record_meta references (added_by_user/edited_by_user) still survive in a
+// shared family; those FKs have no ON DELETE clause, and rewriting the
+// referenced record_meta rows would break their AAD binding. Keeps the row
+// (and its id) alive as a scrubbed tombstone instead of hard-deleting it.
+func (q *Queries) ScrubUserPII(ctx context.Context, arg ScrubUserPIIParams) error {
+	_, err := q.db.ExecContext(ctx, scrubUserPII, arg.Email, arg.DisplayName, arg.ID)
+	return err
+}
+
+const setDevicePendingByID = `-- name: SetDevicePendingByID :exec
+UPDATE devices SET status = 'pending' WHERE id = ? AND status = 'active'
+`
+
+// Moves an already-active device back to 'pending', requiring an existing
+// family member to wrap a fresh key envelope for it before it may sync
+// push/pull again. Used when a device gains membership in a family whose
+// key it does not yet hold (e.g. accepting a family invite).
+func (q *Queries) SetDevicePendingByID(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, setDevicePendingByID, id)
+	return err
+}
+
+const setFamilyRecoveryCreatedAt = `-- name: SetFamilyRecoveryCreatedAt :exec
+UPDATE families SET recovery_created_at = ? WHERE id = ?
+`
+
+type SetFamilyRecoveryCreatedAtParams struct {
+	RecoveryCreatedAt sql.NullString
+	ID                string
+}
+
+// Allows updating recovery_created_at when a new recovery envelope is stored
+// (regenerate path), if the request carries a createdAt value.
+func (q *Queries) SetFamilyRecoveryCreatedAt(ctx context.Context, arg SetFamilyRecoveryCreatedAtParams) error {
+	_, err := q.db.ExecContext(ctx, setFamilyRecoveryCreatedAt, arg.RecoveryCreatedAt, arg.ID)
+	return err
+}
+
+const setMemberLastRemoved = `-- name: SetMemberLastRemoved :exec
+UPDATE family_members SET left_at = ?, last_removed_at = ? WHERE family_id = ? AND user_id = ?
+`
+
+type SetMemberLastRemovedParams struct {
+	LeftAt        sql.NullString
+	LastRemovedAt sql.NullString
+	FamilyID      string
+	UserID        string
+}
+
+// Record the removal timestamp for cool-down tracking.
+func (q *Queries) SetMemberLastRemoved(ctx context.Context, arg SetMemberLastRemovedParams) error {
+	_, err := q.db.ExecContext(ctx, setMemberLastRemoved,
+		arg.LeftAt,
+		arg.LastRemovedAt,
+		arg.FamilyID,
+		arg.UserID,
+	)
 	return err
 }
 
@@ -1093,6 +2468,86 @@ UPDATE users SET is_root = 1, is_admin = 1, promoter_id = NULL WHERE id = ?
 
 func (q *Queries) SetUserAsRoot(ctx context.Context, id string) error {
 	_, err := q.db.ExecContext(ctx, setUserAsRoot, id)
+	return err
+}
+
+const setUserDeleteAfter = `-- name: SetUserDeleteAfter :one
+
+UPDATE users SET delete_after = ? WHERE id = ? RETURNING id, email, google_sub, display_name, is_admin, is_root, promoter_id, suspended_at, delete_after, created_at, last_signin_at
+`
+
+type SetUserDeleteAfterParams struct {
+	DeleteAfter sql.NullString
+	ID          string
+}
+
+// ----- account deletion -----
+// Set delete_after to 14 days from now. Returns the updated user row.
+func (q *Queries) SetUserDeleteAfter(ctx context.Context, arg SetUserDeleteAfterParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, setUserDeleteAfter, arg.DeleteAfter, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.GoogleSub,
+		&i.DisplayName,
+		&i.IsAdmin,
+		&i.IsRoot,
+		&i.PromoterID,
+		&i.SuspendedAt,
+		&i.DeleteAfter,
+		&i.CreatedAt,
+		&i.LastSigninAt,
+	)
+	return i, err
+}
+
+const setUserDeleteAfterIfNull = `-- name: SetUserDeleteAfterIfNull :one
+UPDATE users SET delete_after = ?
+WHERE id = ? AND delete_after IS NULL
+RETURNING id, email, google_sub, display_name, is_admin, is_root, promoter_id, suspended_at, delete_after, created_at, last_signin_at
+`
+
+type SetUserDeleteAfterIfNullParams struct {
+	DeleteAfter sql.NullString
+	ID          string
+}
+
+// Conditional UPDATE: only sets delete_after when it is currently NULL.
+// Returns the updated row; sql.ErrNoRows if already set (idempotent TOCTOU guard).
+func (q *Queries) SetUserDeleteAfterIfNull(ctx context.Context, arg SetUserDeleteAfterIfNullParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, setUserDeleteAfterIfNull, arg.DeleteAfter, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.GoogleSub,
+		&i.DisplayName,
+		&i.IsAdmin,
+		&i.IsRoot,
+		&i.PromoterID,
+		&i.SuspendedAt,
+		&i.DeleteAfter,
+		&i.CreatedAt,
+		&i.LastSigninAt,
+	)
+	return i, err
+}
+
+const softLeaveAllFamilies = `-- name: SoftLeaveAllFamilies :exec
+
+UPDATE family_members SET left_at = ? WHERE user_id = ? AND left_at IS NULL
+`
+
+type SoftLeaveAllFamiliesParams struct {
+	LeftAt sql.NullString
+	UserID string
+}
+
+// ----- family member soft-leave for purge -----
+// Soft-leave all active family memberships for a user before hard delete.
+func (q *Queries) SoftLeaveAllFamilies(ctx context.Context, arg SoftLeaveAllFamiliesParams) error {
+	_, err := q.db.ExecContext(ctx, softLeaveAllFamilies, arg.LeftAt, arg.UserID)
 	return err
 }
 
@@ -1133,12 +2588,44 @@ func (q *Queries) UnsuspendUser(ctx context.Context, id string) error {
 	return err
 }
 
+const updateDevicePubKey = `-- name: UpdateDevicePubKey :exec
+UPDATE devices SET pub_key = ? WHERE id = ?
+`
+
+type UpdateDevicePubKeyParams struct {
+	PubKey []byte
+	ID     string
+}
+
+// Overwrites a device's stored public key. Used when a solo device (created
+// without a family, hence no X25519 key) later joins a family and supplies
+// its keypair for the first time.
+func (q *Queries) UpdateDevicePubKey(ctx context.Context, arg UpdateDevicePubKeyParams) error {
+	_, err := q.db.ExecContext(ctx, updateDevicePubKey, arg.PubKey, arg.ID)
+	return err
+}
+
+const updateInviteStatus = `-- name: UpdateInviteStatus :exec
+UPDATE family_invites SET status = ?, decided_at = ? WHERE id = ?
+`
+
+type UpdateInviteStatusParams struct {
+	Status    string
+	DecidedAt sql.NullString
+	ID        string
+}
+
+func (q *Queries) UpdateInviteStatus(ctx context.Context, arg UpdateInviteStatusParams) error {
+	_, err := q.db.ExecContext(ctx, updateInviteStatus, arg.Status, arg.DecidedAt, arg.ID)
+	return err
+}
+
 const updateRecordMeta = `-- name: UpdateRecordMeta :exec
 UPDATE record_meta
 SET blob_id = ?, version = ?, edited_by_user = ?,
     updated_at_map = ?, deleted_at = ?,
     family_seq = ?, last_modified_at = ?
-WHERE record_id = ?
+WHERE record_id = ? AND family_id = ?
 `
 
 type UpdateRecordMetaParams struct {
@@ -1150,8 +2637,10 @@ type UpdateRecordMetaParams struct {
 	FamilySeq      int64
 	LastModifiedAt string
 	RecordID       string
+	FamilyID       string
 }
 
+// Family-scoped for the same reason as GetRecordMeta above.
 func (q *Queries) UpdateRecordMeta(ctx context.Context, arg UpdateRecordMetaParams) error {
 	_, err := q.db.ExecContext(ctx, updateRecordMeta,
 		arg.BlobID,
@@ -1162,6 +2651,57 @@ func (q *Queries) UpdateRecordMeta(ctx context.Context, arg UpdateRecordMetaPara
 		arg.FamilySeq,
 		arg.LastModifiedAt,
 		arg.RecordID,
+		arg.FamilyID,
+	)
+	return err
+}
+
+const updateRecordMetaFamily = `-- name: UpdateRecordMetaFamily :exec
+UPDATE record_meta
+SET family_id       = ?1,
+    blob_id         = ?2,
+    version         = ?3,
+    edited_by_user  = ?4,
+    updated_at_map  = ?5,
+    deleted_at      = ?6,
+    family_seq      = ?7,
+    last_modified_at = ?8
+WHERE record_id = ?9 AND family_id = ?10
+`
+
+type UpdateRecordMetaFamilyParams struct {
+	NewFamilyID    string
+	BlobID         string
+	Version        int64
+	EditedByUser   string
+	UpdatedAtMap   string
+	DeletedAt      sql.NullString
+	FamilySeq      int64
+	LastModifiedAt string
+	RecordID       string
+	OldFamilyID    string
+}
+
+// Same as UpdateRecordMeta, but also rewrites family_id. Used by MigrateSolo
+// to move an existing record's ownership row from the caller's solo
+// (source) family into the target family it is migrating into -- otherwise
+// the row would keep pointing at the old family_id even though its blob
+// and family_seq have already moved to the target. The WHERE clause still
+// scopes the lookup by the record's CURRENT (source) family_id for the same
+// anti-collision reason as GetRecordMeta above; sqlc.arg names disambiguate
+// the two family_id occurrences.
+func (q *Queries) UpdateRecordMetaFamily(ctx context.Context, arg UpdateRecordMetaFamilyParams) error {
+	_, err := q.db.ExecContext(ctx, updateRecordMetaFamily,
+		arg.NewFamilyID,
+		arg.BlobID,
+		arg.Version,
+		arg.EditedByUser,
+		arg.UpdatedAtMap,
+		arg.DeletedAt,
+		arg.FamilySeq,
+		arg.LastModifiedAt,
+		arg.RecordID,
+		arg.OldFamilyID,
 	)
 	return err
 }
@@ -1178,6 +2718,49 @@ type UpsertBootstrapStateParams struct {
 
 func (q *Queries) UpsertBootstrapState(ctx context.Context, arg UpsertBootstrapStateParams) error {
 	_, err := q.db.ExecContext(ctx, upsertBootstrapState, arg.BootstrapEmail, arg.AppliedAt)
+	return err
+}
+
+const upsertNotificationSettings = `-- name: UpsertNotificationSettings :exec
+INSERT INTO notification_settings
+    (user_id, tz, reminder_time, quiet_start, quiet_end,
+     daily_reminder, missed_day, family_digest, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(user_id) DO UPDATE SET
+    tz             = excluded.tz,
+    reminder_time  = excluded.reminder_time,
+    quiet_start    = excluded.quiet_start,
+    quiet_end      = excluded.quiet_end,
+    daily_reminder = excluded.daily_reminder,
+    missed_day     = excluded.missed_day,
+    family_digest  = excluded.family_digest,
+    updated_at     = excluded.updated_at
+`
+
+type UpsertNotificationSettingsParams struct {
+	UserID        string
+	Tz            string
+	ReminderTime  sql.NullString
+	QuietStart    string
+	QuietEnd      string
+	DailyReminder int64
+	MissedDay     int64
+	FamilyDigest  int64
+	UpdatedAt     string
+}
+
+func (q *Queries) UpsertNotificationSettings(ctx context.Context, arg UpsertNotificationSettingsParams) error {
+	_, err := q.db.ExecContext(ctx, upsertNotificationSettings,
+		arg.UserID,
+		arg.Tz,
+		arg.ReminderTime,
+		arg.QuietStart,
+		arg.QuietEnd,
+		arg.DailyReminder,
+		arg.MissedDay,
+		arg.FamilyDigest,
+		arg.UpdatedAt,
+	)
 	return err
 }
 
@@ -1228,542 +2811,4 @@ func (q *Queries) UpsertUserByEmail(ctx context.Context, arg UpsertUserByEmailPa
 		&i.LastSigninAt,
 	)
 	return i, err
-}
-
-// ----- family_invites -----
-
-const insertFamilyInvite = `-- name: InsertFamilyInvite :exec
-INSERT INTO family_invites (id, family_id, invited_by, invitee_email, created_at, expires_at, status, decided_at)
-VALUES (?, ?, ?, ?, ?, ?, 'pending', NULL)
-`
-
-type InsertFamilyInviteParams struct {
-	ID           string
-	FamilyID     string
-	InvitedBy    string
-	InviteeEmail string
-	CreatedAt    string
-	ExpiresAt    string
-}
-
-func (q *Queries) InsertFamilyInvite(ctx context.Context, arg InsertFamilyInviteParams) error {
-	_, err := q.db.ExecContext(ctx, insertFamilyInvite,
-		arg.ID,
-		arg.FamilyID,
-		arg.InvitedBy,
-		arg.InviteeEmail,
-		arg.CreatedAt,
-		arg.ExpiresAt,
-	)
-	return err
-}
-
-const getFamilyInvite = `-- name: GetFamilyInvite :one
-SELECT id, family_id, invited_by, invitee_email, created_at, expires_at, status, decided_at FROM family_invites WHERE id = ? LIMIT 1
-`
-
-func (q *Queries) GetFamilyInvite(ctx context.Context, id string) (FamilyInvite, error) {
-	row := q.db.QueryRowContext(ctx, getFamilyInvite, id)
-	var i FamilyInvite
-	err := row.Scan(
-		&i.ID,
-		&i.FamilyID,
-		&i.InvitedBy,
-		&i.InviteeEmail,
-		&i.CreatedAt,
-		&i.ExpiresAt,
-		&i.Status,
-		&i.DecidedAt,
-	)
-	return i, err
-}
-
-const listIncomingInvites = `-- name: ListIncomingInvites :many
-SELECT id, family_id, invited_by, invitee_email, created_at, expires_at, status, decided_at FROM family_invites
-WHERE invitee_email = ? COLLATE NOCASE
-  AND status = 'pending'
-  AND expires_at > ?
-ORDER BY created_at DESC
-`
-
-// Returns pending, non-expired invites for the given invitee email.
-func (q *Queries) ListIncomingInvites(ctx context.Context, inviteeEmail string, now string) ([]FamilyInvite, error) {
-	rows, err := q.db.QueryContext(ctx, listIncomingInvites, inviteeEmail, now)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []FamilyInvite{}
-	for rows.Next() {
-		var i FamilyInvite
-		if err := rows.Scan(
-			&i.ID,
-			&i.FamilyID,
-			&i.InvitedBy,
-			&i.InviteeEmail,
-			&i.CreatedAt,
-			&i.ExpiresAt,
-			&i.Status,
-			&i.DecidedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getPendingInviteForEmail = `-- name: GetPendingInviteForEmail :one
-SELECT id, family_id, invited_by, invitee_email, created_at, expires_at, status, decided_at FROM family_invites
-WHERE family_id = ? AND invitee_email = ? COLLATE NOCASE AND status = 'pending'
-LIMIT 1
-`
-
-// Returns an existing pending invite for this family + email combo (for duplicate check).
-func (q *Queries) GetPendingInviteForEmail(ctx context.Context, familyID string, inviteeEmail string) (FamilyInvite, error) {
-	row := q.db.QueryRowContext(ctx, getPendingInviteForEmail, familyID, inviteeEmail)
-	var i FamilyInvite
-	err := row.Scan(
-		&i.ID,
-		&i.FamilyID,
-		&i.InvitedBy,
-		&i.InviteeEmail,
-		&i.CreatedAt,
-		&i.ExpiresAt,
-		&i.Status,
-		&i.DecidedAt,
-	)
-	return i, err
-}
-
-const updateInviteStatus = `-- name: UpdateInviteStatus :exec
-UPDATE family_invites SET status = ?, decided_at = ? WHERE id = ?
-`
-
-type UpdateInviteStatusParams struct {
-	Status    string
-	DecidedAt sql.NullString
-	ID        string
-}
-
-func (q *Queries) UpdateInviteStatus(ctx context.Context, arg UpdateInviteStatusParams) error {
-	_, err := q.db.ExecContext(ctx, updateInviteStatus, arg.Status, arg.DecidedAt, arg.ID)
-	return err
-}
-
-// ----- family member queries -----
-
-const countActiveFamilyMembers = `-- name: CountActiveFamilyMembers :one
-SELECT COUNT(*) FROM family_members WHERE family_id = ? AND left_at IS NULL
-`
-
-// Returns the count of active (left_at IS NULL) members for a family.
-func (q *Queries) CountActiveFamilyMembers(ctx context.Context, familyID string) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countActiveFamilyMembers, familyID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const getFamilyMemberByUserID = `-- name: GetFamilyMemberByUserID :one
-SELECT family_id, user_id, joined_at, left_at, last_removed_at FROM family_members WHERE family_id = ? AND user_id = ? AND left_at IS NULL LIMIT 1
-`
-
-// Returns any family_members row (including left) for given family + user.
-func (q *Queries) GetFamilyMemberByUserID(ctx context.Context, familyID string, userID string) (FamilyMember, error) {
-	row := q.db.QueryRowContext(ctx, getFamilyMemberByUserID, familyID, userID)
-	var i FamilyMember
-	err := row.Scan(
-		&i.FamilyID,
-		&i.UserID,
-		&i.JoinedAt,
-		&i.LeftAt,
-		&i.LastRemovedAt,
-	)
-	return i, err
-}
-
-const joinFamily = `-- name: JoinFamily :exec
-INSERT INTO family_members (family_id, user_id, joined_at, left_at, last_removed_at)
-VALUES (?, ?, ?, NULL, NULL)
-`
-
-type JoinFamilyParams struct {
-	FamilyID string
-	UserID   string
-	JoinedAt string
-}
-
-// Insert a new active family_members row. Used in invite-accept path.
-func (q *Queries) JoinFamily(ctx context.Context, arg JoinFamilyParams) error {
-	_, err := q.db.ExecContext(ctx, joinFamily, arg.FamilyID, arg.UserID, arg.JoinedAt)
-	return err
-}
-
-const markFamilyMemberLeft = `-- name: MarkFamilyMemberLeft :exec
-UPDATE family_members SET left_at = ? WHERE family_id = ? AND user_id = ? AND left_at IS NULL
-`
-
-type MarkFamilyMemberLeftParams struct {
-	LeftAt   sql.NullString
-	FamilyID string
-	UserID   string
-}
-
-// Soft-leave: set left_at for the given family + user.
-func (q *Queries) MarkFamilyMemberLeft(ctx context.Context, arg MarkFamilyMemberLeftParams) error {
-	_, err := q.db.ExecContext(ctx, markFamilyMemberLeft, arg.LeftAt, arg.FamilyID, arg.UserID)
-	return err
-}
-
-const setMemberLastRemoved = `-- name: SetMemberLastRemoved :exec
-UPDATE family_members SET left_at = ?, last_removed_at = ? WHERE family_id = ? AND user_id = ?
-`
-
-type SetMemberLastRemovedParams struct {
-	LeftAt        sql.NullString
-	LastRemovedAt sql.NullString
-	FamilyID      string
-	UserID        string
-}
-
-// Record the removal timestamp for cool-down tracking.
-func (q *Queries) SetMemberLastRemoved(ctx context.Context, arg SetMemberLastRemovedParams) error {
-	_, err := q.db.ExecContext(ctx, setMemberLastRemoved,
-		arg.LeftAt,
-		arg.LastRemovedAt,
-		arg.FamilyID,
-		arg.UserID,
-	)
-	return err
-}
-
-// ----- migrations (solo-to-family idempotency) -----
-
-const insertMigrationRecord = `-- name: InsertMigrationRecord :exec
-INSERT INTO migrations (id, user_id, source_family_id, target_family_id, record_count, committed_at)
-VALUES (?, ?, ?, ?, ?, ?)
-`
-
-type InsertMigrationRecordParams struct {
-	ID             string
-	UserID         string
-	SourceFamilyID sql.NullString
-	TargetFamilyID string
-	RecordCount    int64
-	CommittedAt    string
-}
-
-func (q *Queries) InsertMigrationRecord(ctx context.Context, arg InsertMigrationRecordParams) error {
-	_, err := q.db.ExecContext(ctx, insertMigrationRecord,
-		arg.ID,
-		arg.UserID,
-		arg.SourceFamilyID,
-		arg.TargetFamilyID,
-		arg.RecordCount,
-		arg.CommittedAt,
-	)
-	return err
-}
-
-const getMigrationRecord = `-- name: GetMigrationRecord :one
-SELECT id, user_id, source_family_id, target_family_id, record_count, committed_at FROM migrations WHERE id = ? LIMIT 1
-`
-
-func (q *Queries) GetMigrationRecord(ctx context.Context, id string) (Migration, error) {
-	row := q.db.QueryRowContext(ctx, getMigrationRecord, id)
-	var i Migration
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.SourceFamilyID,
-		&i.TargetFamilyID,
-		&i.RecordCount,
-		&i.CommittedAt,
-	)
-	return i, err
-}
-
-// ----- snapshots -----
-
-const insertSnapshot = `-- name: InsertSnapshot :exec
-INSERT INTO snapshots (id, family_id, snapshot_date, created_at, expires_at)
-VALUES (?, ?, ?, ?, ?)
-`
-
-type InsertSnapshotParams struct {
-	ID           string
-	FamilyID     string
-	SnapshotDate string
-	CreatedAt    string
-	ExpiresAt    string
-}
-
-func (q *Queries) InsertSnapshot(ctx context.Context, arg InsertSnapshotParams) error {
-	_, err := q.db.ExecContext(ctx, insertSnapshot,
-		arg.ID,
-		arg.FamilyID,
-		arg.SnapshotDate,
-		arg.CreatedAt,
-		arg.ExpiresAt,
-	)
-	return err
-}
-
-const insertSnapshotEntry = `-- name: InsertSnapshotEntry :exec
-INSERT INTO snapshot_entries (snapshot_id, record_id, blob_id, record_type, version, updated_at_map)
-VALUES (?, ?, ?, ?, ?, ?)
-`
-
-type InsertSnapshotEntryParams struct {
-	SnapshotID   string
-	RecordID     string
-	BlobID       string
-	RecordType   string
-	Version      int64
-	UpdatedAtMap string
-}
-
-func (q *Queries) InsertSnapshotEntry(ctx context.Context, arg InsertSnapshotEntryParams) error {
-	_, err := q.db.ExecContext(ctx, insertSnapshotEntry,
-		arg.SnapshotID,
-		arg.RecordID,
-		arg.BlobID,
-		arg.RecordType,
-		arg.Version,
-		arg.UpdatedAtMap,
-	)
-	return err
-}
-
-const listSnapshotsForFamily = `-- name: ListSnapshotsForFamily :many
-SELECT id, family_id, snapshot_date, created_at, expires_at FROM snapshots
-WHERE family_id = ?
-ORDER BY snapshot_date DESC
-LIMIT 30
-`
-
-// Returns up to 30 most recent snapshots for the family, ordered by snapshot_date DESC.
-func (q *Queries) ListSnapshotsForFamily(ctx context.Context, familyID string) ([]Snapshot, error) {
-	rows, err := q.db.QueryContext(ctx, listSnapshotsForFamily, familyID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Snapshot{}
-	for rows.Next() {
-		var i Snapshot
-		if err := rows.Scan(
-			&i.ID,
-			&i.FamilyID,
-			&i.SnapshotDate,
-			&i.CreatedAt,
-			&i.ExpiresAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getSnapshotByDate = `-- name: GetSnapshotByDate :one
-SELECT id, family_id, snapshot_date, created_at, expires_at FROM snapshots
-WHERE family_id = ? AND snapshot_date = ?
-LIMIT 1
-`
-
-func (q *Queries) GetSnapshotByDate(ctx context.Context, familyID string, snapshotDate string) (Snapshot, error) {
-	row := q.db.QueryRowContext(ctx, getSnapshotByDate, familyID, snapshotDate)
-	var i Snapshot
-	err := row.Scan(
-		&i.ID,
-		&i.FamilyID,
-		&i.SnapshotDate,
-		&i.CreatedAt,
-		&i.ExpiresAt,
-	)
-	return i, err
-}
-
-const listSnapshotEntries = `-- name: ListSnapshotEntries :many
-SELECT snapshot_id, record_id, blob_id, record_type, version, updated_at_map
-FROM snapshot_entries WHERE snapshot_id = ?
-`
-
-func (q *Queries) ListSnapshotEntries(ctx context.Context, snapshotID string) ([]SnapshotEntry, error) {
-	rows, err := q.db.QueryContext(ctx, listSnapshotEntries, snapshotID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []SnapshotEntry{}
-	for rows.Next() {
-		var i SnapshotEntry
-		if err := rows.Scan(
-			&i.SnapshotID,
-			&i.RecordID,
-			&i.BlobID,
-			&i.RecordType,
-			&i.Version,
-			&i.UpdatedAtMap,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const deleteExpiredSnapshots = `-- name: DeleteExpiredSnapshots :exec
-DELETE FROM snapshots WHERE expires_at < ?
-`
-
-// Cascading FK on snapshot_entries handles entry cleanup.
-func (q *Queries) DeleteExpiredSnapshots(ctx context.Context, expiresAt string) error {
-	_, err := q.db.ExecContext(ctx, deleteExpiredSnapshots, expiresAt)
-	return err
-}
-
-const deleteOrphanBlobs = `-- name: DeleteOrphanBlobs :exec
-DELETE FROM blobs
-WHERE id NOT IN (SELECT blob_id FROM record_meta)
-  AND id NOT IN (SELECT blob_id FROM snapshot_entries)
-`
-
-// Delete blobs not referenced by record_meta OR snapshot_entries.
-func (q *Queries) DeleteOrphanBlobs(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, deleteOrphanBlobs)
-	return err
-}
-
-const listFamilies = `-- name: ListFamilies :many
-SELECT id FROM families ORDER BY id
-`
-
-// Returns all family IDs (for the daily snapshot job).
-func (q *Queries) ListFamilies(ctx context.Context) ([]string, error) {
-	rows, err := q.db.QueryContext(ctx, listFamilies)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []string{}
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listNonDeletedRecordMetaForFamily = `-- name: ListNonDeletedRecordMetaForFamily :many
-SELECT record_id, blob_id, record_type, version, updated_at_map
-FROM record_meta
-WHERE family_id = ? AND deleted_at IS NULL
-`
-
-type ListNonDeletedRecordMetaForFamilyRow struct {
-	RecordID     string
-	BlobID       string
-	RecordType   string
-	Version      int64
-	UpdatedAtMap string
-}
-
-func (q *Queries) ListNonDeletedRecordMetaForFamily(ctx context.Context, familyID string) ([]ListNonDeletedRecordMetaForFamilyRow, error) {
-	rows, err := q.db.QueryContext(ctx, listNonDeletedRecordMetaForFamily, familyID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListNonDeletedRecordMetaForFamilyRow{}
-	for rows.Next() {
-		var i ListNonDeletedRecordMetaForFamilyRow
-		if err := rows.Scan(
-			&i.RecordID,
-			&i.BlobID,
-			&i.RecordType,
-			&i.Version,
-			&i.UpdatedAtMap,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listAllRecordMetaForFamily = `-- name: ListAllRecordMetaForFamily :many
-SELECT record_id, blob_id, record_type, version, updated_at_map, deleted_at,
-       added_by_user, edited_by_user, family_seq, created_at, last_modified_at
-FROM record_meta
-WHERE family_id = ?
-`
-
-func (q *Queries) ListAllRecordMetaForFamily(ctx context.Context, familyID string) ([]RecordMetum, error) {
-	rows, err := q.db.QueryContext(ctx, listAllRecordMetaForFamily, familyID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []RecordMetum{}
-	for rows.Next() {
-		var i RecordMetum
-		if err := rows.Scan(
-			&i.RecordID,
-			&i.BlobID,
-			&i.RecordType,
-			&i.Version,
-			&i.UpdatedAtMap,
-			&i.DeletedAt,
-			&i.AddedByUser,
-			&i.EditedByUser,
-			&i.FamilySeq,
-			&i.CreatedAt,
-			&i.LastModifiedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }

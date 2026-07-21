@@ -12,8 +12,10 @@ import type { Account, Category } from "@/db/models";
 import {
   applyTransaction,
   applyTransfer,
+  QuotaError,
   replaceTransaction,
   replaceTransfer,
+  revertTransaction,
   revertTransfer,
 } from "@/services/balance.service";
 import { exchangeRateService } from "@/services/exchange-rate.service";
@@ -1038,7 +1040,7 @@ function Step3({
             align="right"
             style={{ flex: 1 }}
           />
-          {numpadValue && evaluatedAmount !== null && numpadValue.match(/[+\-×÷]/) && (
+          {numpadValue && evaluatedAmount !== null && numpadValue.match(/[+\-−×÷]/) && (
             <span
               style={{
                 fontFamily: '"JetBrains Mono", monospace',
@@ -1875,6 +1877,11 @@ export default function TransactionInput() {
   const [toSecondaryManual, setToSecondaryManual] = useState(false);
   const [noRateWarning, setNoRateWarning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  // The canonical OUT-leg record being edited (for TRANSFER/debt-payment
+  // edits). Equal to `existingTx` unless `existingTx` is actually the IN leg,
+  // in which case this is resolved to its OUT-leg sibling — see the
+  // populate-on-load effect below.
+  const [editOutLeg, setEditOutLeg] = useState<Transaction | null>(null);
   const isDebtPaymentMode =
     txType === "expense" && toAccount !== null && toAccount.type === "DEBT" && category === null;
   const historyDepthRef = useRef(0);
@@ -1996,49 +2003,75 @@ export default function TransactionInput() {
       EXPENSE: "expense",
       TRANSFER: "transfer",
     };
-    const foundAccount = allAccounts.find((a) => a.id === existingTx.accountId);
-    if (foundAccount) setAccount(foundAccount);
 
-    if (existingTx.type === "TRANSFER" && existingTx.toAccountId != null) {
-      // Debt payment — restore as expense + debt account mode
-      setTxType("expense");
-      // Look up dest account directly from DB so trashed accounts are found
-      db.accounts.get(existingTx.toAccountId).then((dest) => {
-        if (dest) setToAccount(dest);
-      });
-      setPaymentType(
-        existingTx.isOverpayment === true
-          ? "overpayment"
-          : existingTx.interestAmount != null
-            ? "regular"
-            : "overpayment",
-      );
-    } else if (existingTx.type === "TRANSFER" && existingTx.transferGroupId) {
-      setTxType("transfer");
-      // Load the other half of the transfer
+    const populate = (tx: Transaction) => {
+      setEditOutLeg(tx);
+      const foundAccount = allAccounts.find((a) => a.id === tx.accountId);
+      if (foundAccount) setAccount(foundAccount);
+
+      if (tx.type === "TRANSFER" && tx.toAccountId != null) {
+        // Debt payment — restore as expense + debt account mode
+        setTxType("expense");
+        // Look up dest account directly from DB so trashed accounts are found
+        db.accounts.get(tx.toAccountId).then((dest) => {
+          if (dest) setToAccount(dest);
+        });
+        setPaymentType(
+          tx.isOverpayment === true
+            ? "overpayment"
+            : tx.interestAmount != null
+              ? "regular"
+              : "overpayment",
+        );
+      } else if (tx.type === "TRANSFER" && tx.transferGroupId) {
+        setTxType("transfer");
+        // Load the other half of the transfer
+        db.transactions
+          .where("transferGroupId")
+          .equals(tx.transferGroupId)
+          .toArray()
+          .then((records) => {
+            const other = records.find((r) => r.id !== tx.id);
+            if (other) {
+              const dest = allAccounts.find((a) => a.id === other.accountId);
+              if (dest) setToAccount(dest);
+            }
+          });
+      } else {
+        setTxType(typeMap[tx.type]);
+        if (tx.categoryId) {
+          const foundCat = allCategories.find((c) => c.id === tx.categoryId);
+          if (foundCat) setCategory(foundCat);
+        }
+      }
+
+      setNumpadValue(String(tx.amount / 100));
+      setNote(tx.note ?? "");
+      setDate(tx.date);
+      setStep(3);
+    };
+
+    if (
+      existingTx.type === "TRANSFER" &&
+      existingTx.transferDirection === "IN" &&
+      existingTx.transferGroupId
+    ) {
+      // The loaded record is the IN leg of a transfer/debt payment — resolve
+      // and populate from the OUT leg instead, otherwise editing would flip
+      // the transfer direction (or, for debt payments, drop toAccountId,
+      // which — unlike interestAmount/principalAmount — is only ever set on
+      // the OUT leg and is what identifies debt-payment mode on populate).
       db.transactions
         .where("transferGroupId")
         .equals(existingTx.transferGroupId)
         .toArray()
         .then((records) => {
-          const other = records.find((r) => r.id !== existingTx.id);
-          if (other) {
-            const dest = allAccounts.find((a) => a.id === other.accountId);
-            if (dest) setToAccount(dest);
-          }
+          const outLeg = records.find((r) => r.transferDirection === "OUT") ?? existingTx;
+          populate(outLeg);
         });
     } else {
-      setTxType(typeMap[existingTx.type]);
-      if (existingTx.categoryId) {
-        const foundCat = allCategories.find((c) => c.id === existingTx.categoryId);
-        if (foundCat) setCategory(foundCat);
-      }
+      populate(existingTx);
     }
-
-    setNumpadValue(String(existingTx.amount / 100));
-    setNote(existingTx.note ?? "");
-    setDate(existingTx.date);
-    setStep(3);
   }, [isEdit, existingTx, allAccounts, allCategories]);
 
   // Auto-calc secondary amount when numpad changes (income/expense foreign currency)
@@ -2393,14 +2426,45 @@ export default function TransactionInput() {
               .catch(() => 1);
           }
 
-          // Compute split metadata
-          const monthlyRate = getMonthlyRate(toAccount!);
+          // Compute split metadata. When editing an existing payment and
+          // neither the amount, the destination account, nor the payment
+          // type changed, preserve the original interest/principal split
+          // instead of recomputing it against today's (already-updated)
+          // account balance. The payment-type check matters: flipping
+          // Regular ↔ Overpayment with the same amount/destination must
+          // still recompute (or clear) the split — see populate() above for
+          // the equivalent isOverpayment/interestAmount-based type inference.
+          const editOutLegPaymentType: "regular" | "overpayment" =
+            editOutLeg != null
+              ? editOutLeg.isOverpayment === true
+                ? "overpayment"
+                : editOutLeg.interestAmount != null
+                  ? "regular"
+                  : "overpayment"
+              : "overpayment";
+          const isUnchangedEditOfDebtPayment =
+            isEdit &&
+            editOutLeg != null &&
+            editOutLeg.toAccountId === toAccount!.id &&
+            editOutLeg.amount === amount &&
+            editOutLegPaymentType === paymentType;
+
           let interestAmt: number | null = null;
           let principalAmt: number | null = null;
-          if (monthlyRate !== null && paymentType === "regular") {
-            const split = calculatePaymentSplit(Math.abs(toAccount!.balance), monthlyRate, amount);
-            interestAmt = split.interestAmount;
-            principalAmt = split.principalAmount;
+          if (isUnchangedEditOfDebtPayment) {
+            interestAmt = editOutLeg!.interestAmount ?? null;
+            principalAmt = editOutLeg!.principalAmount ?? null;
+          } else {
+            const monthlyRate = getMonthlyRate(toAccount!);
+            if (monthlyRate !== null && paymentType === "regular") {
+              const split = calculatePaymentSplit(
+                Math.abs(toAccount!.balance),
+                monthlyRate,
+                amount,
+              );
+              interestAmt = split.interestAmount;
+              principalAmt = split.principalAmount;
+            }
           }
 
           const groupId = crypto.randomUUID();
@@ -2441,6 +2505,31 @@ export default function TransactionInput() {
             inAmountMain = Math.round(inAmount * inRate);
           }
 
+          // getBalanceDelta reduces a DEBT account's balance by the IN leg's
+          // own `principalAmount` (interest is a pure expense that doesn't
+          // shrink the debt) — that field must live on the IN leg itself,
+          // in the destination (DEBT) account's currency/units. When the
+          // source and destination currencies match (the common case) the
+          // split carries over exactly; when they differ, scale it
+          // proportionally against `inAmount` and derive the residual from
+          // the already-rounded leg, mirroring the amountMainCurrency
+          // derivation above so interest + principal still sum to inAmount.
+          let inInterestAmt: number | null = null;
+          let inPrincipalAmt: number | null = null;
+          if (interestAmt != null && principalAmt != null) {
+            if (toAccount!.currency === account.currency) {
+              inInterestAmt = interestAmt;
+              inPrincipalAmt = principalAmt;
+            } else {
+              inInterestAmt = Math.round((interestAmt * inAmount) / amount);
+              inPrincipalAmt = inAmount - inInterestAmt;
+            }
+          } else {
+            // No split computed (overpayment / non-mortgage debt): the full
+            // IN-leg amount is principal by definition.
+            inPrincipalAmt = inAmount;
+          }
+
           const inTx: Transaction = {
             type: "TRANSFER",
             date,
@@ -2455,6 +2544,8 @@ export default function TransactionInput() {
             note: note.trim(),
             transferGroupId: groupId,
             transferDirection: "IN",
+            interestAmount: inInterestAmt,
+            principalAmount: inPrincipalAmt,
             createdAt: now,
             updatedAt: now,
           };
@@ -2462,6 +2553,12 @@ export default function TransactionInput() {
           if (isEdit && existingTx?.transferGroupId) {
             await replaceTransfer(existingTx.transferGroupId, outTx, inTx);
           } else {
+            if (isEdit && existingTx && !existingTx.transferGroupId) {
+              // Editing a single-leg (EXPENSE/INCOME) transaction into a debt
+              // payment — revert its balance effect first, otherwise applying
+              // the new transfer pair on top double-counts the money.
+              await revertTransaction(existingTx);
+            }
             await applyTransfer(outTx, inTx);
           }
         } else if (txType === "transfer") {
@@ -2554,6 +2651,12 @@ export default function TransactionInput() {
           if (isEdit && existingTx?.transferGroupId) {
             await replaceTransfer(existingTx.transferGroupId, outTx, inTx);
           } else {
+            if (isEdit && existingTx && !existingTx.transferGroupId) {
+              // Editing a single-leg (EXPENSE/INCOME) transaction into a
+              // transfer — revert its balance effect first, otherwise
+              // applying the new transfer pair on top double-counts the money.
+              await revertTransaction(existingTx);
+            }
             await applyTransfer(outTx, inTx);
           }
         } else {
@@ -2611,7 +2714,10 @@ export default function TransactionInput() {
         // isSavingRef stays true — component unmounts after navigate, no cleanup needed
       } catch (err) {
         console.error(err);
-        showToast(t("errors.generic"), "error");
+        showToast(
+          err instanceof QuotaError ? t("errors.quotaExceeded") : t("errors.generic"),
+          "error",
+        );
         isSavingRef.current = false;
       } finally {
         setIsSaving(false);

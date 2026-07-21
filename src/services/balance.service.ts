@@ -23,7 +23,14 @@ function wrapQuotaError<T>(promise: Promise<T>): Promise<T> {
   });
 }
 
-function getBalanceDelta(account: Account, tx: Transaction): number {
+/**
+ * Computes the signed effect a transaction has on its account's stored
+ * balance. Exported so the sync engine's pull path (`services/sync/engine.ts`)
+ * can apply/revert the exact same delta for records that arrive from other
+ * devices, instead of duplicating this logic — the DEBT principal-only rule
+ * for TRANSFER IN legs (see below) MUST stay identical between both call sites.
+ */
+export function getBalanceDelta(account: Account, tx: Transaction): number {
   if (tx.type === "INCOME") {
     return account.type === "DEBT" ? -tx.amount : tx.amount;
   }
@@ -32,7 +39,13 @@ function getBalanceDelta(account: Account, tx: Transaction): number {
   }
   // TRANSFER
   if (tx.transferDirection === "IN") {
-    return account.type === "DEBT" ? -tx.amount : tx.amount;
+    // A debt payment's IN leg reduces the DEBT account's balance by the
+    // PRINCIPAL portion only — the interest portion is a pure expense that
+    // leaves the source account but does not shrink the debt (no
+    // interest-accrual engine). Extra/overpayments with no split
+    // (principalAmount == null) keep full-amount reduction: they're all
+    // principal by definition.
+    return account.type === "DEBT" ? -(tx.principalAmount ?? tx.amount) : tx.amount;
   }
   // TRANSFER OUT
   return account.type === "DEBT" ? tx.amount : -tx.amount;
@@ -336,10 +349,8 @@ export async function revertTransfer(transferGroupId: string): Promise<void> {
           .equals(transferGroupId)
           .toArray();
 
-        if (records.length !== 2) {
-          throw new Error(
-            `Expected 2 transfer records for group ${transferGroupId}, found ${records.length}`,
-          );
+        if (records.length === 0) {
+          throw new Error(`Expected 1 or 2 transfer records for group ${transferGroupId}, found 0`);
         }
 
         const now = new Date().toISOString();
@@ -364,7 +375,7 @@ export async function revertTransfer(transferGroupId: string): Promise<void> {
         }
       }),
     );
-    logger.info("tx.transfer.delete", { transferGroupId });
+    logger.info("tx.transfer.delete", { transferGroupId, legCount: removedRecords.length });
     for (const r of removedRecords) {
       await pushTransactionTombstone(r);
     }
@@ -404,6 +415,8 @@ export async function replaceTransfer(
         }
 
         const now = new Date().toISOString();
+        const oldOutRecord = records.find((r) => r.transferDirection === "OUT");
+        const oldInRecord = records.find((r) => r.transferDirection === "IN");
 
         // Revert old records
         for (const record of records) {
@@ -478,7 +491,7 @@ export async function replaceTransfer(
         const outRecord: Transaction = {
           ...outTx,
           displayOrder: outMinOrder - 1,
-          createdAt: now,
+          createdAt: oldOutRecord?.createdAt ?? now,
           updatedAt: now,
         };
         const outId = (await db.transactions.add(outRecord)) as number;
@@ -488,7 +501,7 @@ export async function replaceTransfer(
         const inRecord: Transaction = {
           ...inTx,
           displayOrder: inMinOrder - 1,
-          createdAt: now,
+          createdAt: oldInRecord?.createdAt ?? now,
           updatedAt: now,
         };
         const inId = (await db.transactions.add(inRecord)) as number;

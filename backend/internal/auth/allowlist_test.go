@@ -77,31 +77,3 @@ func TestCheckEmailAllowed_CaseInsensitive(t *testing.T) {
 	err := CheckEmailAllowed(ctx, db, "alice@example.com")
 	assert.NoError(t, err)
 }
-
-func TestCheckUserNotSuspended_NotSuspended(t *testing.T) {
-	db := openTestDB(t)
-	ctx := context.Background()
-
-	insertTestUser(t, db, "user-3", "bob@example.com", "")
-
-	err := CheckUserNotSuspended(ctx, db, "user-3")
-	assert.NoError(t, err)
-}
-
-func TestCheckUserNotSuspended_Suspended(t *testing.T) {
-	db := openTestDB(t)
-	ctx := context.Background()
-
-	insertTestUser(t, db, "user-4", "carol@example.com", "2026-01-01T00:00:00Z")
-
-	err := CheckUserNotSuspended(ctx, db, "user-4")
-	assert.ErrorIs(t, err, ErrUserSuspended)
-}
-
-func TestCheckUserNotSuspended_NotFound(t *testing.T) {
-	db := openTestDB(t)
-	ctx := context.Background()
-
-	err := CheckUserNotSuspended(ctx, db, "nonexistent-id")
-	assert.ErrorIs(t, err, sql.ErrNoRows)
-}

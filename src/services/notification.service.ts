@@ -32,6 +32,7 @@ class NotificationService {
   }
 
   async requestPermission(): Promise<boolean> {
+    if (typeof Notification === "undefined") return false;
     const result = await Notification.requestPermission();
     return result === "granted";
   }

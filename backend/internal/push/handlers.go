@@ -18,10 +18,10 @@ import (
 
 // Handler holds dependencies for push + notification HTTP endpoints.
 type Handler struct {
-	db       *sql.DB
-	subSvc   *SubscriptionService
-	qhSvc    *QuietHoursService
-	hub      *live.Hub // optional; nil disables notification.dismiss SSE
+	db     *sql.DB
+	subSvc *SubscriptionService
+	qhSvc  *QuietHoursService
+	hub    *live.Hub // optional; nil disables notification.dismiss SSE
 }
 
 // NewHandler constructs a push Handler.
@@ -49,7 +49,7 @@ func (h *Handler) PostSubscribe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	deviceID := httpx.DeviceID(ctx)
 	if deviceID == "" {
-		httpx.WriteError(w, r, http.StatusUnauthorized, "unauthorized", "missing device context")
+		httpx.WriteError(w, r, http.StatusUnauthorized, "unauthenticated", "missing device context")
 		return
 	}
 

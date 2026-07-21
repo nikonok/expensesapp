@@ -96,13 +96,32 @@ export function connectSSE(opts: ConnectSSEOptions): SSEConnectionHandle {
   let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
   let stopped = false;
 
-  // Per-event-type last seen seq to drop duplicates.
+  // Per-event-type last seen seq to drop duplicates. Bounded (FIFO eviction)
+  // so a long-lived connection can't grow this unboundedly — see
+  // `rememberSeenSeq`.
   const lastSeenSeq = new Map<string, number>();
+  const MAX_LAST_SEEN_ENTRIES = 500;
+
+  function rememberSeenSeq(key: string, seq: number) {
+    lastSeenSeq.set(key, seq);
+    if (lastSeenSeq.size > MAX_LAST_SEEN_ENTRIES) {
+      // Map preserves insertion order — the first key is the oldest.
+      const oldestKey = lastSeenSeq.keys().next().value;
+      if (oldestKey !== undefined) lastSeenSeq.delete(oldestKey);
+    }
+  }
 
   function resetHeartbeat() {
     if (heartbeatTimer !== null) clearTimeout(heartbeatTimer);
     heartbeatTimer = setTimeout(() => {
-      logger.warn("sse.heartbeat.lost: no message in 60s");
+      // The server keepalives every 25s — 60s of total silence means the
+      // connection is dead (browsers don't always notice a half-open TCP
+      // connection on their own). Force-close and reconnect rather than just
+      // logging: leaving `es` open would silently miss every event forever.
+      logger.warn("sse.heartbeat.lost: no message in 60s, forcing reconnect");
+      es?.close();
+      es = null;
+      scheduleReconnect();
     }, 60_000);
   }
 
@@ -149,7 +168,7 @@ export function connectSSE(opts: ConnectSSEOptions): SSEConnectionHandle {
             logger.debug("sse.dedup: dropping duplicate event", { eventType, seq: p.seq });
             return;
           }
-          lastSeenSeq.set(key, p.seq);
+          rememberSeenSeq(key, p.seq);
         }
 
         logger.debug("sse.event", { eventType });

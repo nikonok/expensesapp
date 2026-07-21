@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import Dexie from "dexie";
 import { listBackups, restoreFromBackup, importFromFile } from "../../services/backup.service";
+import { DB_NAME } from "../../db/database";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { useToast } from "./Toast";
 
@@ -12,6 +14,10 @@ export function IntegrityErrorScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [fileConfirmOpen, setFileConfirmOpen] = useState(false);
+  // Last-resort escape hatch: shown once a restore attempt (from backup or
+  // file) has failed, in case the database itself won't open at all.
+  const [restoreFailed, setRestoreFailed] = useState(false);
+  const [deleteDbConfirmOpen, setDeleteDbConfirmOpen] = useState(false);
 
   async function handleRestoreFromBackup() {
     setIsLoading(true);
@@ -19,6 +25,7 @@ export function IntegrityErrorScreen() {
       const backups = await listBackups();
       if (backups.length === 0) {
         show(t("settings.backup.noBackup"), "error");
+        setRestoreFailed(true);
         return;
       }
       await restoreFromBackup(backups[0].id!);
@@ -26,7 +33,21 @@ export function IntegrityErrorScreen() {
     } catch (err) {
       console.error("[IntegrityErrorScreen] restoreFromBackup failed:", err);
       show(err instanceof Error ? err.message : t("errors.restoreFailed"), "error");
+      setRestoreFailed(true);
     } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleDeleteDatabaseConfirm() {
+    setDeleteDbConfirmOpen(false);
+    setIsLoading(true);
+    try {
+      await Dexie.delete(DB_NAME);
+      window.location.reload();
+    } catch (err) {
+      console.error("[IntegrityErrorScreen] delete database failed:", err);
+      show(err instanceof Error ? err.message : t("errors.deleteDatabaseFailed"), "error");
       setIsLoading(false);
     }
   }
@@ -54,6 +75,7 @@ export function IntegrityErrorScreen() {
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
       show(message || t("errors.invalidFile"), "error");
+      setRestoreFailed(true);
     } finally {
       setIsLoading(false);
       setPendingFile(null);
@@ -201,6 +223,33 @@ export function IntegrityErrorScreen() {
           >
             {t("settings.backup.restoreFile")}
           </button>
+
+          {/* Last-resort destructive action — only shown once a restore attempt has failed */}
+          {restoreFailed && (
+            <button
+              onClick={() => setDeleteDbConfirmOpen(true)}
+              disabled={isLoading}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                minHeight: "52px",
+                width: "100%",
+                padding: "0 var(--space-4)",
+                background: "var(--color-expense-dim)",
+                border: "1px solid oklch(62% 0.28 18 / 50%)",
+                borderRadius: "var(--space-2)",
+                cursor: isLoading ? "not-allowed" : "pointer",
+                opacity: isLoading ? 0.5 : 1,
+                color: "var(--color-expense)",
+                fontFamily: '"DM Sans", sans-serif',
+                fontWeight: 500,
+                fontSize: "var(--text-body)",
+              }}
+            >
+              {t("errors.deleteDatabase")}
+            </button>
+          )}
         </div>
       </div>
 
@@ -221,6 +270,18 @@ export function IntegrityErrorScreen() {
         confirmLabel={t("common.restore")}
         onConfirm={handleFileConfirm}
         onCancel={handleFileCancel}
+        variant="destructive"
+      />
+
+      {/* Confirm dialog for last-resort database deletion */}
+      <ConfirmDialog
+        isOpen={deleteDbConfirmOpen}
+        title={t("errors.deleteDatabase")}
+        body={t("errors.deleteDatabaseConfirm")}
+        confirmLabel={t("errors.deleteDatabase")}
+        onConfirm={() => void handleDeleteDatabaseConfirm()}
+        onCancel={() => setDeleteDbConfirmOpen(false)}
+        confirmDisabled={isLoading}
         variant="destructive"
       />
     </div>

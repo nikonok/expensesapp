@@ -1,31 +1,12 @@
 // Shared types for the sync engine (Phase 4e, architecture §6.2 + §7.6).
 
-export type RecordType = "transaction" | "account" | "category" | "budget" | "settings";
-
-// ── Outbox (pending uploads) ──────────────────────────────────────────────────
-
-/** A record waiting to be pushed to the server. */
-export interface PendingUpload {
-  /** Auto-incremented primary key. */
-  id?: number;
-  /** UUIDv7 stable across retries. */
-  recordId: string;
-  recordType: RecordType;
-  /** base64url encoded blob. */
-  blob: string;
-  updatedAtMap: Record<string, string>;
-  deletedAt?: string;
-  parentVersion: number;
-  plaintextByteCount: number;
-  /** Number of failed push attempts (excluding conflicts). */
-  attempts: number;
-  /** ISO-8601 UTC; null if not yet failed. */
-  lastFailedAt: string | null;
-  /** familyId associated with this record (for key lookup). */
-  familyId: string;
-  /** B8 — set when the server returned a terminal status (e.g. 413). */
-  terminal?: boolean;
-}
+// NOTE: `PendingUpload` lives in `@/db/models` (it's a Dexie table row) — the
+// engine imports it from there. Re-exported here for callers that only know
+// about this module; do not redeclare it (see WORK_PLAN.md brief B — the two
+// copies had drifted before this cleanup).
+import type { SyncRecordType } from "@/db/models";
+export type { PendingUpload } from "@/db/models";
+export type RecordType = SyncRecordType;
 
 // ── Sync cursor ───────────────────────────────────────────────────────────────
 
@@ -66,6 +47,21 @@ export interface ConflictRecord {
   currentBlob: string;
   currentVersion: number;
   currentUpdatedAtMap: Record<string, string>;
+  /** The server's current addedByUser/editedByUser — used to build the AAD
+   *  meta for decrypting `currentBlob` (never derive these from the local
+   *  outbox row, which may have stale/wrong values for a record edited by
+   *  someone else). Absent when `currentBlob` is empty (nothing to decrypt). */
+  currentAddedByUser?: string;
+  currentEditedByUser?: string;
+  /** Non-empty when the server's current version of this record is a
+   *  tombstone (soft/hard deleted server-side). No blob is meaningful to
+   *  decrypt in that case — apply the tombstone locally by identity. */
+  currentDeletedAt?: string;
+  /** Distinguishes a genuine version conflict ("version") from a synthetic
+   *  conflict entry produced when the batch hit the family's storage quota
+   *  ("quota") — the client must not treat quota rejections as data
+   *  conflicts (no merge, no re-encrypt; the row stays queued for retry). */
+  reason?: "version" | "quota";
 }
 
 export interface PushResponse {

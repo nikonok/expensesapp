@@ -39,15 +39,34 @@ type subscriber struct {
 // Hub maintains in-process maps of subscribers per scope and dispatches events.
 // All methods are goroutine-safe.
 type Hub struct {
-	mu   sync.RWMutex
-	subs map[string][]*subscriber // scope → subscribers
+	mu        sync.RWMutex
+	subs      map[string][]*subscriber // scope → subscribers
+	closed    chan struct{}
+	closeOnce sync.Once
 }
 
 // NewHub constructs an empty Hub.
 func NewHub() *Hub {
 	return &Hub{
-		subs: make(map[string][]*subscriber),
+		subs:   make(map[string][]*subscriber),
+		closed: make(chan struct{}),
 	}
+}
+
+// Done returns a channel that is closed when Shutdown is called. SSE handlers
+// select on this alongside their event channels so they return promptly
+// during graceful server shutdown instead of blocking until the client
+// disconnects on its own.
+func (h *Hub) Done() <-chan struct{} {
+	return h.closed
+}
+
+// Shutdown signals all active SSE handlers (via Done) to stop. Safe to call
+// more than once; only the first call has effect.
+func (h *Hub) Shutdown() {
+	h.closeOnce.Do(func() {
+		close(h.closed)
+	})
 }
 
 // Register adds a new subscriber for the given scope and returns a receive-only

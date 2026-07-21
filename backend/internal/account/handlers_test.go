@@ -103,8 +103,46 @@ func TestGetMe(t *testing.T) {
 	device, _ := resp["device"].(map[string]any)
 	assert.Equal(t, deviceID, device["id"])
 
-	assert.Nil(t, resp["family"])
+	assert.Nil(t, resp["family"], "family must be null when the user has no active family")
 	assert.Nil(t, resp["notificationSettings"])
+}
+
+// --------------------------------------------------------------------------
+// TestGetMe_WithActiveFamily
+// --------------------------------------------------------------------------
+
+func TestGetMe_WithActiveFamily(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	userID, deviceID := seedUserDevice(t, ctx, db, "family-member@example.com")
+
+	q := gen.New(db)
+	now := time.Now().UTC().Format(time.RFC3339)
+	familyID := mustUUID(t)
+	require.NoError(t, q.InsertFamily(ctx, gen.InsertFamilyParams{
+		ID:        familyID,
+		CreatedAt: now,
+	}))
+	require.NoError(t, q.InsertFamilyMember(ctx, gen.InsertFamilyMemberParams{
+		FamilyID: familyID,
+		UserID:   userID,
+		JoinedAt: now,
+	}))
+
+	h := NewHandler(db)
+	req := authedGet(t, "/v1/me", userID, deviceID)
+	rr := httptest.NewRecorder()
+	h.GetMe(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+
+	family, ok := resp["family"].(map[string]any)
+	require.True(t, ok, "family must be populated for an active member")
+	assert.Equal(t, familyID, family["id"])
+	assert.Equal(t, "member", family["role"])
 }
 
 // --------------------------------------------------------------------------
@@ -119,7 +157,7 @@ func TestGetMe_WithDeleteAfter(t *testing.T) {
 	// Set a pending deletion directly in the DB.
 	q := gen.New(db)
 	_, err := q.SetUserDeleteAfter(ctx, gen.SetUserDeleteAfterParams{
-		DeleteAfter: "2099-01-01T00:00:00Z",
+		DeleteAfter: sql.NullString{String: "2099-01-01T00:00:00Z", Valid: true},
 		ID:          userID,
 	})
 	require.NoError(t, err)

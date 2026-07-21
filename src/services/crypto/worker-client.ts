@@ -9,6 +9,15 @@ let worker: Worker | null = null;
 let nextId = 1;
 const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
 
+/** Default per-RPC timeout for fast operations (record encrypt/decrypt, envelope
+ *  wrap/unwrap, key generation — none of these touch Argon2id). */
+const DEFAULT_TIMEOUT_MS = 10_000;
+/** Timeout for RPCs that derive kRecovery via Argon2id (64MiB, ~1 iteration).
+ *  Generous headroom for slow/low-end devices — this can legitimately take
+ *  10-30s. Applies to wrapAndPersistFamilyKey, wrap/unwrapRecoveryEnvelope,
+ *  regenerateRecoveryEnvelopes, and unwrapRecoveryEnvelopeAndPersist. */
+const ARGON2_TIMEOUT_MS = 60_000;
+
 function ensureWorker(): Worker {
   if (worker) return worker;
   worker = new CryptoWorker();
@@ -36,11 +45,28 @@ function ensureWorker(): Worker {
   return worker;
 }
 
-function call<T>(req: { type: string; [k: string]: unknown }): Promise<T> {
+function call<T>(
+  req: { type: string; [k: string]: unknown },
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): Promise<T> {
   const w = ensureWorker();
   const id = nextId++;
   return new Promise<T>((resolve, reject) => {
-    pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
+    const timer = setTimeout(() => {
+      if (pending.delete(id)) {
+        reject(new Error(`crypto worker RPC "${req.type}" timed out after ${timeoutMs}ms`));
+      }
+    }, timeoutMs);
+    pending.set(id, {
+      resolve: (v) => {
+        clearTimeout(timer);
+        resolve(v as T);
+      },
+      reject: (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    });
     w.postMessage({ id, ...req });
   });
 }
@@ -70,13 +96,16 @@ export const cryptoWorker = {
     familyId: string,
     createdAt: string,
   ) =>
-    call<{ deviceEnvelope: Uint8Array; wrapBytes: Uint8Array; phraseCt: Uint8Array }>({
-      type: "wrapAndPersistFamilyKey",
-      devicePubKey,
-      phrase,
-      familyId,
-      createdAt,
-    }),
+    call<{ deviceEnvelope: Uint8Array; wrapBytes: Uint8Array; phraseCt: Uint8Array }>(
+      {
+        type: "wrapAndPersistFamilyKey",
+        devicePubKey,
+        phrase,
+        familyId,
+        createdAt,
+      },
+      ARGON2_TIMEOUT_MS,
+    ),
 
   encryptRecord: (plaintext: Uint8Array, familyKey: Uint8Array, meta: RecordMeta) =>
     call<EncryptedRecord>({ type: "encryptRecord", plaintext, familyKey, meta }),
@@ -95,14 +124,22 @@ export const cryptoWorker = {
     phrase: string,
     familyId: string,
     createdAt: string,
-  ) => call<Uint8Array>({ type: "wrapRecoveryEnvelope", familyKey, phrase, familyId, createdAt }),
+  ) =>
+    call<Uint8Array>(
+      { type: "wrapRecoveryEnvelope", familyKey, phrase, familyId, createdAt },
+      ARGON2_TIMEOUT_MS,
+    ),
 
   unwrapRecoveryEnvelope: (
     envelope: Uint8Array,
     phrase: string,
     familyId: string,
     createdAt: string,
-  ) => call<Uint8Array>({ type: "unwrapRecoveryEnvelope", envelope, phrase, familyId, createdAt }),
+  ) =>
+    call<Uint8Array>(
+      { type: "unwrapRecoveryEnvelope", envelope, phrase, familyId, createdAt },
+      ARGON2_TIMEOUT_MS,
+    ),
 
   wrapPhraseForReveal: (
     phrase: string,
@@ -159,12 +196,15 @@ export const cryptoWorker = {
    * Throws "NoStoredFamilyKey:" if no familyKey is stored.
    */
   regenerateRecoveryEnvelopes: (phrase: string, familyId: string, createdAt: string) =>
-    call<{ wrapBytes: Uint8Array; phraseCt: Uint8Array }>({
-      type: "regenerateRecoveryEnvelopes",
-      phrase,
-      familyId,
-      createdAt,
-    }),
+    call<{ wrapBytes: Uint8Array; phraseCt: Uint8Array }>(
+      {
+        type: "regenerateRecoveryEnvelopes",
+        phrase,
+        familyId,
+        createdAt,
+      },
+      ARGON2_TIMEOUT_MS,
+    ),
 
   /**
    * Reads the stored familyKey and decrypts the Envelope B (phrase ciphertext)
@@ -179,13 +219,6 @@ export const cryptoWorker = {
     call<string>({ type: "unwrapStoredPhraseForReveal", phraseCt, familyId, createdAt }),
 
   /**
-   * Derives a 32-byte kRecovery from the BIP39 phrase and familyId via Argon2id.
-   * The key is returned to the caller (it does NOT persist to IndexedDB here).
-   */
-  deriveRecoveryKey: (phrase: string, familyId: string) =>
-    call<Uint8Array>({ type: "deriveRecoveryKey", phrase, familyId }),
-
-  /**
    * Unwraps Envelope A (cold recovery) using kRecovery derived from phrase + familyId,
    * then persists the resulting familyKey to worker IndexedDB.
    * The raw familyKey never crosses the postMessage boundary.
@@ -196,13 +229,16 @@ export const cryptoWorker = {
     familyId: string,
     createdAt: string,
   ) =>
-    call<void>({
-      type: "unwrapRecoveryEnvelopeAndPersist",
-      recoveryWrap,
-      phrase,
-      familyId,
-      createdAt,
-    }),
+    call<void>(
+      {
+        type: "unwrapRecoveryEnvelopeAndPersist",
+        recoveryWrap,
+        phrase,
+        familyId,
+        createdAt,
+      },
+      ARGON2_TIMEOUT_MS,
+    ),
 
   /**
    * Clears all key material in the worker-owned IndexedDB (`expenses-app-keys`).

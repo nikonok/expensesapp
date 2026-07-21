@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { ArrowLeft, Users, Shield, List, FileText } from "lucide-react";
 import { UsersList } from "@/components/admin/UsersList";
 import { AllowlistEditor } from "@/components/admin/AllowlistEditor";
@@ -17,15 +18,15 @@ type AdminSection = "users" | "allowlist" | "admins" | "audit";
 
 interface NavEntry {
   id: AdminSection;
-  label: string;
+  labelKey: string;
   icon: React.ReactNode;
 }
 
 const NAV_ENTRIES: NavEntry[] = [
-  { id: "users", label: "Users", icon: <Users size={16} strokeWidth={1.5} /> },
-  { id: "allowlist", label: "Allowlist", icon: <List size={16} strokeWidth={1.5} /> },
-  { id: "admins", label: "Admins", icon: <Shield size={16} strokeWidth={1.5} /> },
-  { id: "audit", label: "Audit", icon: <FileText size={16} strokeWidth={1.5} /> },
+  { id: "users", labelKey: "admin.nav.users", icon: <Users size={16} strokeWidth={1.5} /> },
+  { id: "allowlist", labelKey: "admin.nav.allowlist", icon: <List size={16} strokeWidth={1.5} /> },
+  { id: "admins", labelKey: "admin.nav.admins", icon: <Shield size={16} strokeWidth={1.5} /> },
+  { id: "audit", labelKey: "admin.nav.audit", icon: <FileText size={16} strokeWidth={1.5} /> },
 ];
 
 interface NavItemProps {
@@ -125,6 +126,7 @@ function SectionTitle({ label }: { label: string }) {
 }
 
 export default function AdminPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [section, setSection] = useState<AdminSection>("users");
   const isMobile = useIsMobile();
@@ -134,28 +136,28 @@ export default function AdminPage() {
       case "users":
         return (
           <>
-            <SectionTitle label="Users" />
+            <SectionTitle label={t("admin.nav.users")} />
             <UsersList filter="all" />
           </>
         );
       case "allowlist":
         return (
           <>
-            <SectionTitle label="Allowlist" />
+            <SectionTitle label={t("admin.nav.allowlist")} />
             <AllowlistEditor />
           </>
         );
       case "admins":
         return (
           <>
-            <SectionTitle label="Admins" />
+            <SectionTitle label={t("admin.nav.admins")} />
             <UsersList filter="admins" />
           </>
         );
       case "audit":
         return (
           <>
-            <SectionTitle label="Audit Log" />
+            <SectionTitle label={t("admin.sectionTitle.auditLog")} />
             <AuditViewer />
           </>
         );
@@ -188,7 +190,7 @@ export default function AdminPage() {
         }}
       >
         <button
-          aria-label="Go back"
+          aria-label={t("admin.goBack")}
           onClick={() => navigate(-1)}
           style={{
             minWidth: "44px",
@@ -215,7 +217,7 @@ export default function AdminPage() {
             margin: 0,
           }}
         >
-          Admin
+          {t("admin.title")}
         </h1>
 
         {/* Admin badge — hidden on very narrow viewports to free header space. */}
@@ -232,7 +234,7 @@ export default function AdminPage() {
               color: "var(--color-primary)",
             }}
           >
-            Admin panel
+            {t("settings.admin.openLabel")}
           </span>
         )}
       </header>
@@ -249,7 +251,7 @@ export default function AdminPage() {
         >
           <nav
             role="tablist"
-            aria-label="Admin sections"
+            aria-label={t("admin.sectionsAriaLabel")}
             style={{
               display: "flex",
               flexDirection: "row",
@@ -266,7 +268,7 @@ export default function AdminPage() {
               <TabChip
                 key={entry.id}
                 icon={entry.icon}
-                label={entry.label}
+                label={t(entry.labelKey)}
                 active={section === entry.id}
                 onClick={() => setSection(entry.id)}
               />
@@ -293,7 +295,7 @@ export default function AdminPage() {
               <SidebarNavItem
                 key={entry.id}
                 icon={entry.icon}
-                label={entry.label}
+                label={t(entry.labelKey)}
                 active={section === entry.id}
                 onClick={() => setSection(entry.id)}
               />

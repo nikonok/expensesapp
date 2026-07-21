@@ -1,5 +1,4 @@
 import { db } from "../db/database";
-import { getCurrencyDecimalPlaces } from "../utils/currency-utils";
 import { formatDate } from "../utils/date-utils";
 import { isDebtPayment } from "../utils/transaction-utils";
 import { logger } from "./log.service";
@@ -31,12 +30,10 @@ async function exportTransactions(
     const expenseRows: (string | number)[][] = [];
     const incomeRows: (string | number)[][] = [];
 
-    // amountMainCurrency is stored as integer minor units of the main currency.
-    // To export a human-readable major-unit number, divide by 10^dp where dp
-    // is the main currency's native decimal-place count (e.g. JPY → 0 places,
-    // USD → 2, KWD → 3). Hard-coding /100 produced wrong values for users
-    // whose main currency was not a 2-decimal currency.
-    const mainCurrencyScale = Math.pow(10, getCurrencyDecimalPlaces(mainCurrency));
+    // amountMainCurrency is stored as an integer using the app-wide uniform
+    // minor-unit scale (value × 100) regardless of the currency's native
+    // decimal-place count, so divide by 100 to get a human-readable number.
+    const mainCurrencyScale = 100;
 
     const emittedTransferGroups = new Set<string>();
 
@@ -52,7 +49,6 @@ async function exportTransactions(
         );
 
         const outTx = tx.transferDirection === "OUT" ? tx : partner;
-        const inTx = tx.transferDirection === "IN" ? tx : partner;
 
         if (outTx && isDebtPayment(outTx)) {
           const debtAccount = accounts.find((a) => a.id === outTx.toAccountId);
@@ -62,19 +58,10 @@ async function exportTransactions(
             sanitizeCell(outTx.note ?? ""),
             sanitizeCell(debtAccount?.name ?? ""),
           ] as (string | number)[]);
-        } else {
-          // Emit only the OUT leg as an outflow; the IN leg is skipped because
-          // internal transfers are not income — including it would double-count
-          // the amount when summing the income column.
-          if (outTx && outTx.transferDirection === "OUT") {
-            expenseRows.push([
-              sanitizeCell(formatDate(outTx.date)),
-              outTx.amountMainCurrency / mainCurrencyScale,
-              sanitizeCell(outTx.note ?? ""),
-              "Transfer",
-            ] as (string | number)[]);
-          }
         }
+        // Plain (non-debt) internal transfers are excluded entirely: neither
+        // leg is an expense or income, matching in-app reporting
+        // (isExpenseForReporting / isDebtPayment).
       } else {
         const category = categories.find((c) => c.id === tx.categoryId);
 

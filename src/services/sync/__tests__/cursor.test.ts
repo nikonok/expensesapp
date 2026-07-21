@@ -3,7 +3,7 @@
 import "fake-indexeddb/auto";
 import { describe, it, expect, beforeEach } from "vitest";
 import { db } from "@/db/database";
-import { getCursor, setCursor } from "../cursor";
+import { getCursor, setCursor, encodeCursor, decodeCursor } from "../cursor";
 
 beforeEach(async () => {
   // Clear the syncCursors table before each test for isolation.
@@ -55,5 +55,23 @@ describe("getCursor / setCursor", () => {
     const ts = new Date(row!.updatedAt).getTime();
     expect(ts).toBeGreaterThanOrEqual(before);
     expect(ts).toBeLessThanOrEqual(after);
+  });
+});
+
+describe("decodeCursor", () => {
+  it("round-trips through encodeCursor for a range of seqs", () => {
+    for (const seq of [0, 1, 9, 42, 1000, 123456789]) {
+      expect(decodeCursor(encodeCursor(seq))).toBe(seq);
+    }
+  });
+
+  it("decodes an undefined/empty cursor as 0 (pull-from-beginning)", () => {
+    expect(decodeCursor(undefined)).toBe(0);
+    expect(decodeCursor("")).toBe(0);
+  });
+
+  it("decodes a malformed cursor defensively as 0 rather than throwing", () => {
+    expect(decodeCursor("not-valid-base64url!!!")).toBe(0);
+    expect(decodeCursor("QQ")).toBe(0); // valid base64url, wrong byte length
   });
 });

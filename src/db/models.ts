@@ -129,10 +129,13 @@ export interface Setting {
 // - "startupScreen"          : string (tab name, default "transactions")
 // - "notificationEnabled"    : boolean (default false)
 // - "notificationTime"       : string ("HH:MM", default "20:00")
+// - "hapticFeedbackEnabled"  : boolean (default false)
 // - "lastUsedAccountId"      : number | null
 // - "autoBackupIntervalHours": number | null (null = disabled)
 // - "lastAutoBackupAt"       : string | null (ISO-8601 UTC)
 // - "hasCompletedOnboarding" : boolean (default false)
+// - "logLevel"               : "all" | "errors" (default "errors")
+// - "pushSubscriptionId"     : string | null — backend-issued Web Push subscription id
 
 // ── Backups ──
 
@@ -207,4 +210,30 @@ export interface SyncCursor {
   cursor: string | undefined;
   /** ISO-8601 UTC of when this cursor was last updated. */
   updatedAt: string;
+}
+
+// ── Record mappings (v8 — canonical local↔server record identity) ───────────
+
+/**
+ * Maps a local Dexie row to its server-facing UUID identity. This is the
+ * ONE canonical mapping table shared by the live sync engine (`services/sync/`)
+ * and the solo→family migration path (`services/family/migrate.ts`).
+ *
+ * `localId` is `String(dexie auto-increment id)` for transactions/accounts/
+ * categories/budgets, or the settings key string for `recordType: "settings"`
+ * (settings keys are already stable strings — no id-collision risk there).
+ *
+ * Primary key is the compound `[recordType+localId]`; `uuid` is separately
+ * unique-indexed so the pull path can translate server recordId → local row.
+ */
+export interface RecordMapping {
+  recordType: SyncRecordType;
+  /** Local identity: `String(id)` for domain tables, or the raw settings key. */
+  localId: string;
+  /** Server-facing UUID identity (the wire `recordId`). Stable for the life of the row. */
+  uuid: string;
+  /** Last server `version` seen for this record (via push-accept or pull); 0 if never synced. */
+  lastServerVersion: number;
+  /** userId of the record's ORIGINAL creator — preserved across edits by other users/devices. */
+  creatorUserId: string;
 }
