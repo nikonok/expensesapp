@@ -69,7 +69,6 @@ jobs:
             --arg app "$APP_HOSTNAME" --arg ssh "$SSH_HOSTNAME" \
             '{config:{ingress:[
                {hostname:$ssh, service:"ssh://host-gateway:22"},
-               {hostname:$app, path:"^/api/", service:"http://api:8080"},
                {hostname:$app, service:"http://app:80"},
                {service:"http_status:404"}
              ]}}')
