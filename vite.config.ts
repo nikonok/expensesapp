@@ -102,6 +102,12 @@ export default defineConfig({
       strategies: "injectManifest",
       srcDir: "src",
       filename: "sw.ts",
+      // Emit crossorigin="use-credentials" on the manifest <link> so the browser
+      // sends cookies when fetching /manifest.webmanifest. Without this the fetch
+      // is credential-less; behind Cloudflare Access that gets redirected to the
+      // Access login page and blocked by CSP. With credentials, the Access
+      // session cookie rides along and the real manifest loads.
+      useCredentials: true,
       manifest: {
         name: "Expenses",
         short_name: "Expenses",
