@@ -21,6 +21,12 @@ jobs:
       # (not CF_ACCESS_CLIENT_ID / CF_ACCESS_CLIENT_SECRET — those are for backend apps only)
       TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
       TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+      # The `secrets` context is NOT available in step `if:` conditionals — referencing
+      # it there fails workflow validation ("Unrecognized named-value: 'secrets'"), which
+      # aborts the whole run before any job starts. Hoist the gating secrets into env vars
+      # here so the steps below can guard on `env.*` (which IS allowed in `if:`).
+      CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+      APP_HOSTNAME: ${{ secrets.APP_HOSTNAME }}
 
     steps:
       - name: Load SSH key
@@ -52,9 +58,8 @@ jobs:
           echo "${{ secrets.SSH_KNOWN_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Ensure Cloudflare tunnel ingress
-        if: ${{ secrets.CF_API_TOKEN != '' }}
+        if: ${{ env.CF_API_TOKEN != '' }}
         env:
-          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           CF_TUNNEL_ID: ${{ secrets.CF_TUNNEL_ID }}
           APP_HOSTNAME: ${{ secrets.APP_HOSTNAME }}
@@ -120,9 +125,7 @@ jobs:
           ENDSSH
 
       - name: Health check
-        if: ${{ secrets.APP_HOSTNAME != '' }}
-        env:
-          APP_HOSTNAME: ${{ secrets.APP_HOSTNAME }}
+        if: ${{ env.APP_HOSTNAME != '' }}
         run: |
           set -e
           url="https://$APP_HOSTNAME/v1/health"
