@@ -118,8 +118,8 @@ services:
   # See docs/backend/operator-runbook.md for first-boot instructions.
   api:
     build:
-      context: .
-      dockerfile: backend/Dockerfile
+      context: backend
+      dockerfile: Dockerfile
     image: expensesapp-api:local
     container_name: expensesapp-api
     restart: unless-stopped
