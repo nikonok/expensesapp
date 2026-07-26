@@ -5,6 +5,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Baked into the Vite bundle at build time. The frontend Google client ID
+        # is the same Web OAuth client ID the backend verifies against, and the
+        # frontend VAPID key is the same public key — so both reuse the existing
+        # server .env values rather than needing separate secrets.
+        VITE_GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:?GOOGLE_OAUTH_CLIENT_ID must be set}
+        VITE_VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
     image: expensesapp:local
     container_name: expensesapp-app
     user: "101:101" # nginx uid/gid — explicit here so it cannot be overridden at runtime

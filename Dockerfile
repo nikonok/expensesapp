@@ -11,6 +11,16 @@ RUN npm ci --legacy-peer-deps
 
 COPY . .
 
+# Frontend build-time config, baked into the Vite bundle. Without these the
+# deployed app has no Google client ID (sign-in throws "VITE_GOOGLE_OAUTH_CLIENT_ID
+# not set") and no VAPID key (push disabled). Supplied via build args from
+# docker-compose (sourced from the server .env). Written to .env.production so
+# Vite picks them up deterministically regardless of process-env handling.
+ARG VITE_GOOGLE_OAUTH_CLIENT_ID
+ARG VITE_VAPID_PUBLIC_KEY
+RUN printf 'VITE_GOOGLE_OAUTH_CLIENT_ID=%s\nVITE_VAPID_PUBLIC_KEY=%s\n' \
+      "$VITE_GOOGLE_OAUTH_CLIENT_ID" "$VITE_VAPID_PUBLIC_KEY" > .env.production
+
 # TypeScript check + Vite build → dist/
 RUN npm run build
 
