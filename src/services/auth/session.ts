@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import { apiFetch, type ApiError } from "./client";
-import { signInWithGoogle } from "./google";
 
 export interface AuthUser {
   id: string;
@@ -49,7 +48,7 @@ interface AuthState {
   /** Ephemeral device public key stashed after sign-in; consumed by onboarding init step.
    *  The private key is persisted inside the crypto worker and never exposed here. */
   pendingDevicePubKey: Uint8Array | null;
-  signIn: () => Promise<void>;
+  signIn: (idToken: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshMe: () => Promise<void>;
   clearPendingKeypair: () => void;
@@ -69,13 +68,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   family: null,
   pendingDevicePubKey: null,
 
-  signIn: async () => {
+  signIn: async (idToken: string) => {
     set({ isSigningIn: true, error: null, errorStatus: null });
     try {
-      const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
-      if (!clientId) throw new Error("VITE_GOOGLE_OAUTH_CLIENT_ID not set");
-      const { idToken } = await signInWithGoogle({ clientId });
-
       // Dynamic import keeps the Web Worker bundle out of the initial chunk.
       // The worker is only materialised on sign-in, matching the existing pattern
       // used by CryptoDemoPage (which also dynamic-imports worker-client).

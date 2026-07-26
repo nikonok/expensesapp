@@ -46,3 +46,38 @@ export async function signInWithGoogle(opts: {
     });
   });
 }
+
+/**
+ * Renders Google's official "Sign in with Google" button into `container` and
+ * invokes `onCredential` with the ID token when the user completes sign-in.
+ *
+ * This is used instead of `id.prompt()` (One Tap) for the primary sign-in entry
+ * point, because One Tap is unreliable on mobile browsers (FedCM requirements,
+ * third-party-cookie restrictions, and One Tap cooldown routinely suppress it,
+ * which surfaces as "Sign-in failed"). The rendered button works consistently
+ * across desktop and mobile. The onboarding UI overlays this (invisibly) on top
+ * of the styled app button so the tap is captured by Google's element.
+ */
+export async function renderGoogleSignInButton(opts: {
+  container: HTMLElement;
+  clientId: string;
+  width: number;
+  onCredential: (idToken: string) => void;
+}): Promise<void> {
+  await loadGisScript();
+  window.google.accounts.id.initialize({
+    client_id: opts.clientId,
+    callback: (resp: { credential: string }) => opts.onCredential(resp.credential),
+    auto_select: false,
+    ux_mode: "popup",
+  });
+  window.google.accounts.id.renderButton(opts.container, {
+    type: "standard",
+    theme: "filled_blue",
+    size: "large",
+    text: "continue_with",
+    shape: "pill",
+    logo_alignment: "center",
+    width: opts.width,
+  });
+}

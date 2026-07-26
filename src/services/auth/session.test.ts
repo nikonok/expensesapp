@@ -5,11 +5,6 @@ vi.mock("./client", () => ({
   apiFetch: vi.fn(),
 }));
 
-// Mock signInWithGoogle
-vi.mock("./google", () => ({
-  signInWithGoogle: vi.fn(),
-}));
-
 // Mock the crypto worker client — session.ts dynamic-imports it.
 const mockGetDevicePublicKey = vi.fn();
 const mockGenerateAndPersistDeviceKey = vi.fn();
@@ -21,11 +16,9 @@ vi.mock("../crypto/worker-client", () => ({
 }));
 
 import { apiFetch } from "./client";
-import { signInWithGoogle } from "./google";
 import { useAuthStore } from "./session";
 
 const mockFetch = apiFetch as ReturnType<typeof vi.fn>;
-const mockSignInWithGoogle = signInWithGoogle as ReturnType<typeof vi.fn>;
 
 function resetStore() {
   useAuthStore.setState({
@@ -47,7 +40,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv("VITE_GOOGLE_OAUTH_CLIENT_ID", "test-client-id");
   resetStore();
-  mockSignInWithGoogle.mockResolvedValue({ idToken: "id-token" });
 });
 
 describe("useAuthStore.signIn — device key reuse (B: strand-on-resign-in fix)", () => {
@@ -60,7 +52,7 @@ describe("useAuthStore.signIn — device key reuse (B: strand-on-resign-in fix)"
       awaitingEnvelope: false,
     });
 
-    await useAuthStore.getState().signIn();
+    await useAuthStore.getState().signIn("id-token");
 
     expect(mockGenerateAndPersistDeviceKey).not.toHaveBeenCalled();
     expect(useAuthStore.getState().pendingDevicePubKey).toBe(existingKey);
@@ -78,7 +70,7 @@ describe("useAuthStore.signIn — device key reuse (B: strand-on-resign-in fix)"
       awaitingEnvelope: false,
     });
 
-    await useAuthStore.getState().signIn();
+    await useAuthStore.getState().signIn("id-token");
 
     expect(mockGenerateAndPersistDeviceKey).toHaveBeenCalledTimes(1);
     expect(useAuthStore.getState().pendingDevicePubKey).toBe(freshKey);
@@ -92,7 +84,7 @@ describe("useAuthStore.signIn — errorStatus (allowlist-rejection branching)", 
     err.status = 403;
     mockFetch.mockRejectedValue(err);
 
-    await useAuthStore.getState().signIn();
+    await useAuthStore.getState().signIn("id-token");
 
     expect(useAuthStore.getState().isSignedIn).toBe(false);
     expect(useAuthStore.getState().errorStatus).toBe(403);
@@ -107,7 +99,7 @@ describe("useAuthStore.signIn — errorStatus (allowlist-rejection branching)", 
       awaitingEnvelope: false,
     });
 
-    await useAuthStore.getState().signIn();
+    await useAuthStore.getState().signIn("id-token");
 
     expect(useAuthStore.getState().errorStatus).toBeNull();
   });
