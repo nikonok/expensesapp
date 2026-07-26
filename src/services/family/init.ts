@@ -11,8 +11,8 @@ import { setLocalFamilyId } from "./active-family";
 /**
  * Derive the 16-byte Argon2 salt via HKDF-SHA256.
  * IKM = UTF-8 bytes of familyId, Info = "argon2-recovery-v1", empty extract-salt.
- * Duplicates the logic from argon-init.ts (not imported to avoid pulling argon2-browser
- * into the main bundle — argon2 WASM must remain worker-only).
+ * Duplicates the logic from argon-init.ts (not imported to avoid pulling libsodium
+ * into the main bundle — the Argon2id KDF must remain worker-only).
  */
 async function deriveArgon2Salt(familyId: string): Promise<Uint8Array> {
   const enc = new TextEncoder();

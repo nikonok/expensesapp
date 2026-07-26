@@ -15,7 +15,7 @@ Client-side end-to-end encryption: device keypairs, family-key envelopes, record
 - `recovery.ts` — Envelope A (BIP39 recovery wrap) and Envelope B (phrase ciphertext for reveal).
 - `aad.ts` — canonical AAD serializer. MUST stay byte-identical to `backend/internal/crypto/aad.go`.
 - `commit.ts` — `commit` payload helper (Argon2id-based recovery key derivation).
-- `argon-init.ts`, `sodium-init.ts` — lazy WASM init for argon2 and libsodium.
+- `argon-init.ts` — Argon2id recovery-key derivation via libsodium `crypto_pwhash` (parameters frozen; pinned reference vector in `__tests__/argon.test.ts`). `sodium-init.ts` — lazy libsodium WASM init.
 - `version.ts` — current AAD/format `verByte` constant.
 - `__tests__/` — vector tests for AAD, record-cipher, envelope, recovery.
 

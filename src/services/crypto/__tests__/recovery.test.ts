@@ -1,28 +1,10 @@
 // @vitest-environment node
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 
-// Mock argon2-browser — same pattern as argon.test.ts.
-// WASM loads via fetch() which fails in Vitest's Node environment.
-vi.mock("argon2-browser", () => {
-  return {
-    hash: vi.fn((params: { pass: string | Uint8Array; salt: Uint8Array; hashLen?: number }) => {
-      const passBytes = new TextEncoder().encode(
-        params.pass instanceof Uint8Array
-          ? new TextDecoder().decode(params.pass)
-          : (params.pass as string),
-      );
-      const salt = params.salt;
-      const hashLen = params.hashLen ?? 32;
-      const hash = new Uint8Array(hashLen);
-      for (let i = 0; i < hashLen; i++) {
-        hash[i] = (passBytes[i % passBytes.length] ?? 0) ^ (salt[i % salt.length] ?? 0);
-      }
-      return Promise.resolve({ hash, hashHex: "", encoded: "" });
-    }),
-    ArgonType: { Argon2d: 0, Argon2i: 1, Argon2id: 2 },
-  };
-});
+// These tests run the REAL Argon2id KDF (libsodium crypto_pwhash) inside
+// wrapRecoveryEnvelope/unwrapRecoveryEnvelope — each Envelope A test costs a
+// couple of real 64 MiB derivations by design.
 
 import {
   wrapRecoveryEnvelope,

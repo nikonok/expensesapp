@@ -1,43 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { Argon2BrowserHashOptions } from "argon2-browser";
-
-// argon2-browser loads WASM via fetch() at module init time which fails in
-// Vitest's Node environment (Emscripten env-detection picks browser path; no
-// valid base URL for relative fetch in test runners).
-// Argon2 WASM only runs in browser-like environments; Phase 2.demo exercises the full path.
-vi.mock("argon2-browser", () => {
-  return {
-    hash: vi.fn((params: Argon2BrowserHashOptions) => {
-      // Deterministic fake: XOR phrase bytes with salt bytes → hashLen-byte output.
-      // Sufficient to verify determinism and familyId isolation in unit tests.
-      const passBytes = new TextEncoder().encode(
-        params.pass instanceof Uint8Array
-          ? new TextDecoder().decode(params.pass)
-          : (params.pass as string),
-      );
-      const salt =
-        params.salt instanceof Uint8Array
-          ? params.salt
-          : new TextEncoder().encode(params.salt as string);
-      const hashLen = params.hashLen ?? 24;
-      const hash = new Uint8Array(hashLen);
-      for (let i = 0; i < hashLen; i++) {
-        hash[i] = (passBytes[i % passBytes.length] ?? 0) ^ (salt[i % salt.length] ?? 0);
-      }
-      return Promise.resolve({ hash, hashHex: "", encoded: "" });
-    }),
-    ArgonType: { Argon2d: 0, Argon2i: 1, Argon2id: 2 },
-  };
-});
-
+import { describe, it, expect } from "vitest";
 import { deriveRecoveryKey } from "../argon-init";
-import { hash as argonHash } from "argon2-browser";
 
+// These run the REAL Argon2id KDF (libsodium crypto_pwhash, 64 MiB / t=3) —
+// each derivation takes a noticeable fraction of a second by design.
 describe("deriveRecoveryKey", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it("produces a deterministic 32-byte key for fixed input", async () => {
     const phrase =
       "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -56,18 +22,19 @@ describe("deriveRecoveryKey", () => {
     expect(Array.from(k1)).not.toEqual(Array.from(k2));
   });
 
-  it("calls hash with Argon2id type=2 and correct parameters", async () => {
-    const hashMock = argonHash as ReturnType<typeof vi.fn>;
-    await deriveRecoveryKey(
-      "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-      "00000000-0000-7000-8000-000000000001",
-    );
-    expect(hashMock).toHaveBeenCalledOnce();
-    const callParams = hashMock.mock.calls[0][0] as Argon2BrowserHashOptions;
-    expect(callParams.type).toBe(2); // Argon2id
-    expect(callParams.mem).toBe(65536); // 64 MiB in KiB
-    expect(callParams.time).toBe(3);
-    expect(callParams.hashLen).toBe(32);
-    expect(callParams.parallelism).toBe(1);
+  it("matches the pinned Argon2id reference vector", async () => {
+    // Pinned output for phrase+familyId below, independently computed with Go's
+    // golang.org/x/crypto/argon2 IDKey(pass, hkdfSalt, t=3, m=65536 KiB, p=1,
+    // len=32). Guards the frozen KDF parameters AND the HKDF salt derivation:
+    // any change to either breaks all existing recovery envelopes, so this
+    // test failing means STOP — do not update the vector, revert the change.
+    const phrase =
+      "legal winner thank year wave sausage worth useful legal winner thank yellow legal winner thank year wave sausage worth useful legal winner thank yes";
+    const familyId = "01890000-aaaa-7bbb-8ccc-0123456789ab";
+    const key = await deriveRecoveryKey(phrase, familyId);
+    const hex = Array.from(key)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    expect(hex).toBe("5cfb74bd05d874187d44945c41938ce6ede3612e029184a322ef4112e3e1924e");
   });
 });
