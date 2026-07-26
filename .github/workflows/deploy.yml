@@ -117,6 +117,15 @@ jobs:
         # for a password. Every compose invocation below therefore always
         # carries an argument: the default (cached) path rebuilds via
         # `up -d --build`; the no_cache path runs an explicit `build --no-cache`.
+        #
+        # This SSH session is tunnelled through the cloudflared container, so
+        # recreating cloudflared here would sever our own connection (exit 255).
+        # cloudflared depends_on app + api, so a plain `up -d` recreates it as a
+        # dependent whenever their images change. We therefore recreate ONLY the
+        # app and api services and never recreate a running cloudflared — it only
+        # needs restarting on a tunnel-config change, which must be done
+        # out-of-band. `up -d --no-recreate cloudflared` still starts it if it
+        # happens to be stopped, without disturbing a running tunnel.
         env:
           NO_CACHE: ${{ inputs.no_cache && '--no-cache' || '' }}
         run: |
@@ -126,10 +135,11 @@ jobs:
             git -C "${{ secrets.APP_DIR }}" pull origin main
             if [ -n "${NO_CACHE}" ]; then
               \$COMPOSE build --no-cache
-              \$COMPOSE up -d
+              \$COMPOSE up -d --no-deps app api
             else
-              \$COMPOSE up -d --build
+              \$COMPOSE up -d --build --no-deps app api
             fi
+            \$COMPOSE up -d --no-recreate cloudflared
             \$COMPOSE ps
           ENDSSH
 
