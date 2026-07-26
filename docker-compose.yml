@@ -80,11 +80,12 @@ services:
       - "host-gateway:host-gateway" # resolves to the Docker host IP so the tunnel can reach sshd on the host
     networks:
       - tunnel # reaches app via http://app:80; outbound to CF edge via bridge default route
-    depends_on:
-      app:
-        condition: service_healthy
-      api:
-        condition: service_healthy
+    # NOTE: cloudflared intentionally does NOT depend_on app/api. This tunnel
+    # also carries the SSH ingress used for deploys, so it must come up as
+    # independent infrastructure — a crash-looping api must never be able to
+    # block the tunnel and lock out SSH recovery. If app/api aren't ready yet,
+    # their HTTP routes simply return 502 until they become healthy; SSH stays
+    # available throughout.
 
   # ── Future: PostgreSQL ──────────────────────────────────────────────────────
   # Uncomment this service when a backend is added to the project.
