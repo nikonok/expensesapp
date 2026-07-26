@@ -35,7 +35,7 @@ Domain services and infrastructure used by pages, hooks, and components. Everyth
 
 ## Gotchas
 
-- `balance.service.ts` is the only file that should mutate `Account.balance`. New write paths must funnel through it. See WORK_PLAN.md brief B1 for outstanding sync-engine wiring.
+- `balance.service.ts` is the only file that should mutate `Account.balance`. New write paths must funnel through it.
 - `exchange-rate.service.ts` caches by `[baseCurrency+date]` — if you bypass the cache (e.g. force refresh) keep the schema constraint in mind.
 - `integrity.service.ts` runs **before** settings load; do not import the settings store from it.
 

@@ -21,10 +21,10 @@ Initial planning specs live in `docs/archive/` and `docs/backend/` (may be outda
 - `docs/archive/spec.md` — original business logic / feature requirements
 - `docs/archive/design_spec.md` — visual design tokens, typography, component specs
 - `docs/archive/architect_spec.md` — technical architecture, data model, module contracts
-- `docs/backend/architecture.md` — backend service architecture (sync, snapshots, push, admin)
-- `docs/backend/business-requirements.md` — backend product requirements
+- `ARCHITECTURE.md` (repo root) — current full-stack architecture reference (backend + frontend)
+- `docs/backend/architecture.md` — superseded by `ARCHITECTURE.md`; kept as a stub for historical citations
+- `docs/archive/backend-business-requirements.md` — backend product requirements
 - `docs/backend/operator-runbook.md` — operator playbook for the deployed backend
-- `WORK_PLAN.md` (repo root) — the live engineering plan / open work tracker
 
 ## Manual testing
 

@@ -24,8 +24,8 @@ over any text here.
 The frontend is a Vite-built PWA served as static assets behind nginx. The
 backend is a Go service exposing a versioned REST/SSE API. Both run as
 containers on a single home Ubuntu server. Cloudflare Tunnel terminates TLS
-at the edge and forwards path-routed traffic over an outbound tunnel — the
-server has no public IP. Web Push fans out from the backend through the
+at the edge and forwards app traffic to nginx over an outbound tunnel — the
+server has no public IP; nginx proxies `/api/` to the Go API. Web Push fans out from the backend through the
 browser's push service (FCM/APNS) and is delivered by the PWA's service
 worker.
 
@@ -35,7 +35,7 @@ flowchart LR
     direction TB
     UI[React UI]
     SW[Service Worker<br/>sw.ts + Workbox]
-    Dexie[(Dexie / IndexedDB<br/>expenses-app-db v6)]
+    Dexie[(Dexie / IndexedDB<br/>expenses-app-db v9)]
     Worker[Crypto Worker<br/>libsodium + argon2id]
     Outbox[(pendingUploads<br/>outbox)]
     UI <--> Dexie
@@ -65,7 +65,7 @@ flowchart LR
   UI -- SSE / EventSource --> CFE
   CFE -- HTTP --> CFT
   CFT -- http://app:80 --> Nginx
-  CFT -- http://api:8080 --> API
+  Nginx -- proxies /api/ --> API
   Nginx --> UI
   API <--> DB
   API --- Hub
@@ -107,8 +107,8 @@ tab page mounts.
 
 ```
 /onboarding                           OnboardingFlow (sign-in → recovery → welcome → currency → account → categories)
+/signin                               OnboardingPage (re-auth / solo-to-cloud sign-in entry, reuses SignInStep)
 /devices/waiting                      DeviceJoinWaiting (post-sign-in, awaiting envelope from peer device)
-/recovery-code                        RecoveryCodePage (re-enter recovery phrase to unlock)
 /dev/crypto-demo                      CryptoDemoPage (dev-only sandbox)
 
 /                                     TabLayout
@@ -297,6 +297,9 @@ Goose migrations run synchronously inside `Open`:
 - `00003_support_logs.sql` — `support_logs` (client log uploads).
 - `00004_session_previous_token_hash.sql` — adds the rotation grace window
   for session tokens (B4d).
+- `00005_recovery_created_at_and_snapshot_authorship.sql` — adds
+  `families.recovery_created_at` and snapshot authorship columns
+  (`snapshot_entries.added_by_user` / `edited_by_user`).
 
 All writes funnel through `WithTx(ctx, db, fn)` (begin / commit / rollback).
 All queries are sqlc-generated from `internal/db/queries.sql` — hand-written
@@ -317,15 +320,18 @@ runner. See [backend/internal/jobs/CLAUDE.md](./backend/internal/jobs/CLAUDE.md)
 
 | Job              | Schedule        | Owner               |
 | ---------------- | --------------- | ------------------- |
-| `snapshot_daily` | 03:00 UTC daily | `internal/snapshot` |
-| `deletion_purge` | daily           | `internal/account`  |
-| `digest_push`    | per-minute drip | `internal/push`     |
-| `held_drainer`   | per-minute      | `internal/push`     |
+| `daily-snapshot` | 03:00 UTC daily | `internal/snapshot` |
+| `deletion-purge` | 04:00 UTC daily | `internal/account`  |
+| `digest-push`    | hourly          | `internal/push`     |
+| `held-drainer`   | per-minute      | `internal/push`     |
+| `reauth-cleanup` | 05:00 UTC daily | `internal/auth`     |
 
 Daily snapshots are idempotent on `(family_id, snapshot_date)`. Deletion
 purge hard-deletes user rows whose `delete_after` has elapsed (14 day grace
 window). Digest push coalesces `record.changed` notifications per-family.
-Held drainer flushes notifications queued during quiet hours.
+Held drainer flushes notifications queued during quiet hours. Reauth
+cleanup deletes expired `reauth_challenges`/`reauth_grants` rows past their
+retention window.
 
 ### 3.5 SSE hub
 
@@ -346,16 +352,17 @@ records. The frontend stores fully-decrypted domain objects keyed by their
 own UUIDs; the backend stores opaque ciphertext blobs keyed by `record_id`
 plus a small AAD digest.
 
-### 4.1 Dexie schema (frontend, currently at version 6)
+### 4.1 Dexie schema (frontend, currently at version 9)
 
 [src/db/CLAUDE.md](./src/db/CLAUDE.md) is the source of truth. Current
-tables (after B1's outbox + cursor and B5d's worker-only key storage):
+tables (v7 dropped several unqueried indexes including the boolean
+`isTrashed` indexes; v8 added `recordMappings`; v9 restored the
+`pendingUploads.recordId` index for outbox coalescing):
 
 ```
-accounts        ++id, type, name, isTrashed, currency
-categories      ++id, type, name, isTrashed, displayOrder
-transactions    ++id, date, accountId, categoryId, type, isTrashed,
-                [date+displayOrder], [accountId+date], transferGroupId, toAccountId
+accounts        ++id, type
+categories      ++id, type, displayOrder
+transactions    ++id, date, accountId, categoryId, type, transferGroupId
 budgets         ++id, categoryId, accountId, month,
                 [categoryId+month], [accountId+month]
 exchangeRates   ++id, baseCurrency, &[baseCurrency+date]
@@ -363,8 +370,9 @@ settings        key
 backups         ++id, createdAt
 logs            ++id, timestamp, level
 cipherKeys      name           (legacy; main thread no longer reads/writes — see B5d)
-pendingUploads  ++id, recordId, attempts
+pendingUploads  ++id, recordId
 syncCursors     &familyId
+recordMappings  uuid, &[recordType+localId]  (local↔server record-identity map; v8+)
 ```
 
 All monetary amounts (`Account.balance`, `Transaction.amount`,
@@ -469,7 +477,7 @@ bumping `verByte`.
 
 ## 5. End-to-end encryption
 
-The PWA derives a hierarchy of keys from a single 12-word BIP39 recovery
+The PWA derives a hierarchy of keys from a single 24-word BIP39 recovery
 phrase. All raw key material is held by the crypto Worker (see §2.4) — the
 main thread can request encrypt/decrypt RPCs but never sees the keys.
 
@@ -477,7 +485,7 @@ main thread can request encrypt/decrypt RPCs but never sees the keys.
 
 ```mermaid
 flowchart TB
-  Phrase["BIP39 recovery phrase<br/>(12 words; user holds the only copy)"]
+  Phrase["BIP39 recovery phrase<br/>(24 words; user holds the only copy)"]
   Phrase -- Argon2id<br/>16B salt --> KRec[kRecovery]
   KRec -- crypto_secretbox<br/>Envelope A --> FK[familyKey<br/>32 bytes random]
   FK -- crypto_secretbox<br/>Envelope B --> PhraseCt["phrase ciphertext<br/>(stored server-side<br/>for warm reveal)"]
@@ -530,7 +538,7 @@ Two distinct paths exist:
 - **Warm reveal** — user is signed in and has the family key in their
   worker. They must complete a reauth ceremony (60 s grant). The backend
   returns `phrase_ct`; the worker decrypts with the stored `familyKey` and
-  reveals the 12 words.
+  reveals the 24 words.
 - **Cold recovery** — user has lost all devices but holds the phrase. They
   sign in on a fresh device, type the phrase, the worker derives `kRecovery`
   via Argon2id, fetches `recovery_wrap` from the backend, and unwraps the
@@ -1041,17 +1049,20 @@ flowchart LR
   CFE -- HTTPS expenses.example.com --> CFD
   CFE -- SSH ssh-expenses.example.com --> CFD
   CFD -- http://app:80 --> APP
-  CFD -- http://api:8080 --> API
+  APP -- proxies /api/ --> API
   CFD -- host-gateway:22 --> Host
 
   GH[GitHub Actions] -- cloudflared access ssh --> CFE
   CFE -. Service Auth policy .- AccessApp[Access app: expensesapp SSH]
 ```
 
-Path routing is configured on the tunnel: `/api/*` → `http://api:8080`,
-everything else → `http://app:80`. The `/api/*` rule must precede the
-catch-all (the deploy workflow can rewrite this automatically if
-`CF_API_TOKEN`+`CF_ACCOUNT_ID`+`CF_TUNNEL_ID` secrets are present).
+The tunnel sends all app-hostname traffic to `http://app:80`; there is no
+`/api/*` tunnel rule. nginx inside the app container proxies `/api/` to
+`http://api:8080` (stripping the `/api` prefix — see `nginx/nginx.conf`).
+The deploy workflow's ingress step (enabled when
+`CF_API_TOKEN`+`CF_ACCOUNT_ID`+`CF_TUNNEL_ID` secrets are present) writes
+exactly three rules: SSH hostname, app hostname → `http://app:80`, and a
+catch-all 404 — wiping any manually added rules on every deploy.
 
 The app container's nginx serves the precompiled `dist/`. The api container
 runs the Go binary built from `backend/Dockerfile` (multi-stage; final
@@ -1067,7 +1078,7 @@ boots from `CLOUDFLARE_TUNNEL_TOKEN`.
    using `CF_API_TOKEN`.
 3. Write `.env` to the server from the secret set.
 4. `git pull` + `docker compose build` + `docker compose up -d`.
-5. Health-check `https://$APP_HOSTNAME/v1/health` up to 6 times with 5s
+5. Health-check `https://$APP_HOSTNAME/api/v1/health` up to 6 times with 5s
    backoffs.
 
 ### 11.3 Secret matrix
@@ -1087,12 +1098,14 @@ CLOUDFLARE_TUNNEL_TOKEN   boots cloudflared
 CF_ACCESS_CLIENT_ID       service-token id (Access)
 CF_ACCESS_CLIENT_SECRET   service-token secret (Access)
 BOOTSTRAP_ADMIN_EMAIL     first sign-in promoted to root
-GOOGLE_OAUTH_CLIENT_ID    backend ID token verification
-VITE_GOOGLE_OAUTH_CLIENT_ID same value, baked into bundle
-VAPID_PUBLIC_KEY          push server signing
+GOOGLE_OAUTH_CLIENT_ID    backend ID token verification; also derived by
+                          docker-compose.yml into the app image's
+                          VITE_GOOGLE_OAUTH_CLIENT_ID build arg
+VAPID_PUBLIC_KEY          push server signing; also derived by
+                          docker-compose.yml into the app image's
+                          VITE_VAPID_PUBLIC_KEY build arg
 VAPID_PRIVATE_KEY         push server signing
 VAPID_SUBJECT             "mailto:" URL
-VITE_VAPID_PUBLIC_KEY     same public key, baked into bundle
 APP_HOSTNAME              public PWA hostname
 ```
 

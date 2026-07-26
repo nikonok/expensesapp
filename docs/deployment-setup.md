@@ -11,7 +11,7 @@ flowchart LR
   B[Browser] -->|HTTPS| CFE[Cloudflare Edge]
   CFE -->|outbound tunnel| CFD[cloudflared container]
   CFD -->|http://app:80| APP[app container - nginx + PWA]
-  CFD -->|http://api:8080| API[api container - Go]
+  APP -->|proxies /api/ to api:8080| API[api container - Go]
   CFD -->|host-gateway:22| SSHD[host sshd 127.0.0.1:22]
 
   GH[GitHub Actions runner] -->|cloudflared access ssh| CFE
@@ -22,8 +22,8 @@ flowchart LR
 Key properties:
 
 - **No public IP, no inbound ports.** The server only makes outbound connections.
-- **Cloudflare terminates TLS** at the edge. The tunnel speaks plain HTTP to `app:80` and `api:8080` over the internal Docker `tunnel` network.
-- **Path-based routing.** `https://<APP_HOSTNAME>/api/*` reaches the Go backend; everything else reaches the static PWA. Routing is configured in the tunnel's public hostname rules (manually or via the workflow's API step).
+- **Cloudflare terminates TLS** at the edge. The tunnel speaks plain HTTP to `app:80` over the internal Docker `tunnel` network only — it never talks to the `api` container directly.
+- **Path-based routing happens inside the `app` container, not in the tunnel.** cloudflared forwards everything for `APP_HOSTNAME` to `http://app:80`; nginx inside that container proxies `/api/` to `http://api:8080` (stripping the prefix) and serves the SPA for everything else. See `nginx/nginx.conf`.
 - **SSH for deploys** goes through `cloudflared access ssh`, gated by a Cloudflare Access service token. The host's sshd listens on loopback only.
 
 ---
@@ -150,13 +150,7 @@ In Cloudflare DNS, the public hostnames (`expenses.example.com` and `ssh-expense
 
 6. **Save tunnel.**
 
-**`/api/*` routing.** If you provide `CF_API_TOKEN` (plus `CF_ACCOUNT_ID` and `CF_TUNNEL_ID`) as GitHub Secrets, the workflow's `Ensure Cloudflare tunnel ingress` step rewrites the full ingress list on every deploy — so `/api/*` is routed to `http://api:8080` automatically and you can ignore the next paragraph. If you do **not** provide `CF_API_TOKEN`, add the following route manually in the tunnel's **Public Hostname** tab before the catch-all:
-
-| Subdomain  | Domain    | Path     | Service type | URL               |
-| ---------- | --------- | -------- | ------------ | ----------------- |
-| `expenses` | your zone | `^/api/` | `HTTP`       | `http://api:8080` |
-
-Order matters: the `/api/*` rule must precede the catch-all `http://app:80` rule, otherwise the API is unreachable.
+**There is no `/api/*` tunnel rule, and you do not need one.** If you provide `CF_API_TOKEN` (plus `CF_ACCOUNT_ID` and `CF_TUNNEL_ID`) as GitHub Secrets, the workflow's `Ensure Cloudflare tunnel ingress` step PUTs the **entire** ingress config on every deploy — always exactly three rules: the SSH hostname → `ssh://host-gateway:22`, the app hostname → `http://app:80`, and a catch-all `http_status:404`. It never adds an `/api/*` rule, and any rule you add by hand in the dashboard is silently wiped on the next deploy that runs this step. `/api/*` still works because nginx inside the `app` container proxies `/api/` to `http://api:8080` (see §1) — the tunnel only ever needs to know about `app:80`.
 
 ### 3c. SSL/TLS mode
 
@@ -200,7 +194,7 @@ The single-line output (e.g. `ssh-expenses.example.com ssh-ed25519 AAAAC3Nz...`)
 
 ## 4. One-time Google OAuth setup
 
-The app authenticates users via Google Sign-In. The same OAuth **Client ID** is used by both the frontend (`VITE_GOOGLE_OAUTH_CLIENT_ID`, baked into the Vite bundle) and the backend (`GOOGLE_OAUTH_CLIENT_ID`, used to verify ID tokens). There is no client secret — only the public Client ID.
+The app authenticates users via Google Sign-In. The same OAuth **Client ID** is used by both the frontend (baked into the Vite bundle as `VITE_GOOGLE_OAUTH_CLIENT_ID`, a Docker build arg `docker-compose.yml` derives from `GOOGLE_OAUTH_CLIENT_ID`) and the backend (`GOOGLE_OAUTH_CLIENT_ID`, used to verify ID tokens). There is no client secret — only the public Client ID, and only one GitHub Secret to set.
 
 1. Go to https://console.cloud.google.com and create a new project (e.g. `expensesapp`).
 2. **APIs & Services** → **OAuth consent screen**:
@@ -215,14 +209,13 @@ The app authenticates users via Google Sign-In. The same OAuth **Client ID** is 
    - **Authorized JavaScript origins**: `https://expenses.example.com` (your `APP_HOSTNAME`). For local development add `http://localhost:5173`.
    - **Authorized redirect URIs**: leave empty — Google Sign-In with the JS library uses popup/postMessage, not redirects.
 4. **Create.** Copy the **Client ID** (it ends in `.apps.googleusercontent.com`).
-5. Set both GitHub Secrets to the same value:
+5. Set the GitHub Secret:
 
    ```bash
-   gh secret set GOOGLE_OAUTH_CLIENT_ID      --body "1234-abc.apps.googleusercontent.com"
-   gh secret set VITE_GOOGLE_OAUTH_CLIENT_ID --body "1234-abc.apps.googleusercontent.com"
+   gh secret set GOOGLE_OAUTH_CLIENT_ID --body "1234-abc.apps.googleusercontent.com"
    ```
 
-   The `VITE_*` variant is read at build time and baked into the static JS bundle. The non-prefixed variant is read at runtime by the Go backend to verify Google ID tokens.
+   There is no separate `VITE_GOOGLE_OAUTH_CLIENT_ID` secret. `docker-compose.yml` passes this same value as the `app` service's `VITE_GOOGLE_OAUTH_CLIENT_ID` Docker build arg (derived from the server `.env`'s `GOOGLE_OAUTH_CLIENT_ID`), baking it into the Vite bundle at image build time. The non-prefixed value is also read at runtime by the Go backend to verify Google ID tokens.
 
 > While the OAuth consent screen is in **Testing** mode, only accounts listed under **Test users** can sign in. For a personal/family app you can stay in Testing mode indefinitely. Publishing to Production triggers Google's verification process — only needed if you want strangers to sign in.
 
@@ -237,13 +230,14 @@ Run on your local laptop (the keys never need to live on the server filesystem o
 ```bash
 docker run --rm node:alpine npx -y web-push generate-vapid-keys --json > vapid.json
 
-gh secret set VAPID_PUBLIC_KEY      --body "$(jq -r .publicKey  vapid.json)"
-gh secret set VAPID_PRIVATE_KEY     --body "$(jq -r .privateKey vapid.json)"
-gh secret set VAPID_SUBJECT         --body "mailto:you@example.com"
-gh secret set VITE_VAPID_PUBLIC_KEY --body "$(jq -r .publicKey  vapid.json)"
+gh secret set VAPID_PUBLIC_KEY  --body "$(jq -r .publicKey  vapid.json)"
+gh secret set VAPID_PRIVATE_KEY --body "$(jq -r .privateKey vapid.json)"
+gh secret set VAPID_SUBJECT     --body "mailto:you@example.com"
 
 shred -u vapid.json
 ```
+
+There is no separate `VITE_VAPID_PUBLIC_KEY` secret. `docker-compose.yml` passes `VAPID_PUBLIC_KEY` (from the server `.env`) as the `app` service's `VITE_VAPID_PUBLIC_KEY` Docker build arg, baking it into the Vite bundle at image build time.
 
 `VAPID_SUBJECT` must be a `mailto:` URL (or an `https://` URL); push providers may use it to contact you about abuse.
 
@@ -257,28 +251,26 @@ All secrets live under **Settings** → **Secrets and variables** → **Actions*
 
 ### Required secrets
 
-| Name                          | Purpose                                                                | How to obtain                                   | Example (redacted)                                                          |
-| ----------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------- |
-| `SSH_HOST`                    | Cloudflare SSH hostname the workflow connects to                       | The `ssh-expenses` subdomain from §3b           | `ssh-expenses.example.com`                                                  |
-| `SSH_USER`                    | Server user the workflow logs in as                                    | The user created in §2b                         | `deploy`                                                                    |
-| `SSH_KEY`                     | Private key for the deploy user (full PEM, including BEGIN/END lines)  | `cat ~/.ssh/expensesapp_deploy` (from §2c)      | `-----BEGIN OPENSSH PRIVATE KEY-----\n…\n-----END OPENSSH PRIVATE KEY-----` |
-| `SSH_KNOWN_HOST`              | Pinned server host key — defeats SSH MITM                              | The single-line output from §3f                 | `ssh-expenses.example.com ssh-ed25519 AAAA…`                                |
-| `APP_DIR`                     | Absolute path to the repo on the server                                | The clone target from §2f                       | `/home/deploy/expensesapp`                                                  |
-| `CLOUDFLARE_TUNNEL_TOKEN`     | Long-lived tunnel credential — boots cloudflared on the server         | The `eyJhIjoiY…` token shown once at §3b step 3 | `eyJhIjoiY2…`                                                               |
-| `CF_ACCESS_CLIENT_ID`         | Service-token ID — Access lets the workflow's SSH ProxyCommand through | Client ID from §3e                              | `abcd1234.access`                                                           |
-| `CF_ACCESS_CLIENT_SECRET`     | Service-token secret — same purpose as above                           | Client Secret from §3e (shown once)             | `f00bar…`                                                                   |
-| `BOOTSTRAP_ADMIN_EMAIL`       | First Google account allowed to sign in; gets promoted to root         | Your Google account email                       | `you@example.com`                                                           |
-| `GOOGLE_OAUTH_CLIENT_ID`      | Backend-side OAuth Client ID — verifies Google ID tokens               | Client ID from §4 step 4                        | `1234-abc.apps.googleusercontent.com`                                       |
-| `VITE_GOOGLE_OAUTH_CLIENT_ID` | Same value — baked into the Vite bundle at build time                  | Same as `GOOGLE_OAUTH_CLIENT_ID`                | `1234-abc.apps.googleusercontent.com`                                       |
-| `VAPID_PUBLIC_KEY`            | Backend-side public key — surfaced via `/v1/push/key`                  | From §5 (`jq -r .publicKey`)                    | `BMyP…` (base64url, 65 bytes)                                               |
-| `VAPID_PRIVATE_KEY`           | Signs push messages — server-only                                      | From §5 (`jq -r .privateKey`)                   | `_kS…` (base64url, 32 bytes)                                                |
-| `VAPID_SUBJECT`               | `mailto:` or `https:` contact for push abuse reports                   | Your support email                              | `mailto:you@example.com`                                                    |
-| `VITE_VAPID_PUBLIC_KEY`       | Same public key as `VAPID_PUBLIC_KEY` — baked into the Vite bundle     | Same as `VAPID_PUBLIC_KEY`                      | `BMyP…`                                                                     |
-| `APP_HOSTNAME`                | Public PWA hostname — used by the workflow's health-check              | The `expenses` subdomain from §3b               | `expenses.example.com`                                                      |
+| Name                      | Purpose                                                                                                                                                       | How to obtain                                   | Example (redacted)                                                          |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------- |
+| `SSH_HOST`                | Cloudflare SSH hostname the workflow connects to                                                                                                              | The `ssh-expenses` subdomain from §3b           | `ssh-expenses.example.com`                                                  |
+| `SSH_USER`                | Server user the workflow logs in as                                                                                                                           | The user created in §2b                         | `deploy`                                                                    |
+| `SSH_KEY`                 | Private key for the deploy user (full PEM, including BEGIN/END lines)                                                                                         | `cat ~/.ssh/expensesapp_deploy` (from §2c)      | `-----BEGIN OPENSSH PRIVATE KEY-----\n…\n-----END OPENSSH PRIVATE KEY-----` |
+| `SSH_KNOWN_HOST`          | Pinned server host key — defeats SSH MITM                                                                                                                     | The single-line output from §3f                 | `ssh-expenses.example.com ssh-ed25519 AAAA…`                                |
+| `APP_DIR`                 | Absolute path to the repo on the server                                                                                                                       | The clone target from §2f                       | `/home/deploy/expensesapp`                                                  |
+| `CLOUDFLARE_TUNNEL_TOKEN` | Long-lived tunnel credential — boots cloudflared on the server                                                                                                | The `eyJhIjoiY…` token shown once at §3b step 3 | `eyJhIjoiY2…`                                                               |
+| `CF_ACCESS_CLIENT_ID`     | Service-token ID — Access lets the workflow's SSH ProxyCommand through                                                                                        | Client ID from §3e                              | `abcd1234.access`                                                           |
+| `CF_ACCESS_CLIENT_SECRET` | Service-token secret — same purpose as above                                                                                                                  | Client Secret from §3e (shown once)             | `f00bar…`                                                                   |
+| `BOOTSTRAP_ADMIN_EMAIL`   | First Google account allowed to sign in; gets promoted to root                                                                                                | Your Google account email                       | `you@example.com`                                                           |
+| `GOOGLE_OAUTH_CLIENT_ID`  | Backend-side OAuth Client ID — verifies Google ID tokens; also derived by `docker-compose.yml` into the `app` image's `VITE_GOOGLE_OAUTH_CLIENT_ID` build arg | Client ID from §4 step 4                        | `1234-abc.apps.googleusercontent.com`                                       |
+| `VAPID_PUBLIC_KEY`        | Backend-side public key — surfaced via `/v1/push/key`; also derived by `docker-compose.yml` into the `app` image's `VITE_VAPID_PUBLIC_KEY` build arg          | From §5 (`jq -r .publicKey`)                    | `BMyP…` (base64url, 65 bytes)                                               |
+| `VAPID_PRIVATE_KEY`       | Signs push messages — server-only                                                                                                                             | From §5 (`jq -r .privateKey`)                   | `_kS…` (base64url, 32 bytes)                                                |
+| `VAPID_SUBJECT`           | `mailto:` or `https:` contact for push abuse reports                                                                                                          | Your support email                              | `mailto:you@example.com`                                                    |
+| `APP_HOSTNAME`            | Public PWA hostname — used by the workflow's health-check                                                                                                     | The `expenses` subdomain from §3b               | `expenses.example.com`                                                      |
 
-### Optional — automatic `/api/*` ingress
+### Optional — automatic tunnel ingress management
 
-Provide all three to let the workflow rewrite tunnel ingress on every deploy. Skip them and configure ingress manually per §3b instead.
+Provide all three to let the workflow write the tunnel's ingress config (SSH hostname, app hostname, catch-all) on every deploy. Skip them and configure the tunnel's Public Hostnames manually per §3b instead.
 
 | Name            | Purpose                                               | How to obtain                                                                                                                                                                                                                                                                                                                 | Example (redacted)                     |
 | --------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
@@ -299,9 +291,9 @@ You can either push to `main` (auto-trigger is up to you — currently the workf
 3. Watch the run. The job has several steps; the ones that fail loudly when something is misconfigured are:
    - **Configure SSH** — wrong `SSH_KEY`/`SSH_KNOWN_HOST` shows up here.
    - **Ensure Cloudflare tunnel ingress** (only if `CF_API_TOKEN` is set) — wrong account/tunnel ID or insufficient token scope fails with a JSON error from the Cloudflare API.
-   - **Write .env to server** — permission errors here usually mean `/home/deploy/expensesapp/.env` is owned by `root` from an earlier manual edit; fix with `sudo chown deploy:deploy /home/deploy/expensesapp/.env` on the server.
+   - **Write .env to server** — the workflow writes a temp file inside `APP_DIR` and renames it over `.env`, which only requires the `deploy` user to have write permission on the app directory itself, not ownership of the existing `.env` file. Permission errors here usually mean `APP_DIR` (e.g. `/home/deploy/expensesapp`) is not owned/writable by `deploy`; fix with `sudo chown deploy:deploy /home/deploy/expensesapp` on the server.
    - **Pull, build, and restart** — surfaces docker-compose errors. A missing `:?` env (see §6) fails here with a clear message.
-   - **Health check** — final gate. Hits `https://$APP_HOSTNAME/v1/health` up to 6 times with 5-second backoffs. If this passes, the deploy is healthy.
+   - **Health check** — final gate. Hits `https://$APP_HOSTNAME/api/v1/health` up to 6 times with 5-second backoffs. A bare `/v1/health` (no `/api` prefix) would hit the SPA fallback and vacuously return 200, so the health check must go through the `/api/` prefix. If this passes, the deploy is healthy.
 
 After the first successful deploy:
 
@@ -311,7 +303,7 @@ After the first successful deploy:
 
 ### Bootstrapping when the tunnel does not exist yet
 
-The deploy workflow uses the tunnel to reach the server, but the tunnel only exists once cloudflared is running. For the very first start, run `bash /home/deploy/expensesapp/scripts/bootstrap.sh` on the server (via console / local network SSH). The script prompts for the tunnel token, writes `.env`, and starts the containers. Once cloudflared logs `Registered tunnel connection`, GitHub Actions can take over.
+The deploy workflow uses the tunnel to reach the server, but the tunnel only exists once cloudflared is running. For the very first start, run `bash /home/deploy/expensesapp/scripts/bootstrap.sh` on the server (via console / local network SSH). The script requires `CLOUDFLARE_TUNNEL_TOKEN`, `BOOTSTRAP_ADMIN_EMAIL`, `GOOGLE_OAUTH_CLIENT_ID`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` to be set as environment variables — it validates all six are present up front and exits with an error listing any that are missing. It then writes all six to `.env` and starts the containers. Once cloudflared logs `Registered tunnel connection`, GitHub Actions can take over.
 
 ### Smoke checks on the server
 
@@ -319,7 +311,7 @@ The deploy workflow uses the tunnel to reach the server, but the tunnel only exi
 sudo docker compose -f /home/deploy/expensesapp/docker-compose.yml ps
 sudo docker compose -f /home/deploy/expensesapp/docker-compose.yml logs cloudflared | grep -i "registered tunnel"
 sudo docker network inspect expensesapp_tunnel    # app, api, cloudflared only
-curl -fsS https://expenses.example.com/v1/health   # 200 OK from the API
+curl -fsS https://expenses.example.com/api/v1/health   # 200 OK from the API
 ```
 
 ### Debugging the SSH tunnel
@@ -372,7 +364,11 @@ Rotate every 90 days or immediately on suspected compromise.
 
 1. Zero Trust → **Networks** → **Tunnels** → your tunnel → **…** → **Rotate token**.
 2. `gh secret set CLOUDFLARE_TUNNEL_TOKEN --body "<new-token>"`.
-3. Trigger a deploy — the new token is written to `.env` and the container restarts with it.
+3. Trigger a deploy — the new token is written to `.env`, but the deploy workflow deliberately never recreates a running `cloudflared` (`up -d --no-recreate cloudflared`), so the container keeps running on the old token. After the deploy finishes, manually recreate it on the server so it picks up the new value:
+
+   ```bash
+   sudo docker compose -f /home/deploy/expensesapp/docker-compose.yml up -d --force-recreate cloudflared
+   ```
 
 ### Cloudflare Access service token (`CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET`)
 
@@ -381,20 +377,19 @@ Rotate every 90 days or immediately on suspected compromise.
 3. Edit the Access application policy (§3d) — point the Service Token rule at the new token → **Save**.
 4. Trigger a deploy. Once green, delete the old token.
 
-### Google OAuth Client ID (`GOOGLE_OAUTH_CLIENT_ID` / `VITE_GOOGLE_OAUTH_CLIENT_ID`)
+### Google OAuth Client ID (`GOOGLE_OAUTH_CLIENT_ID`)
 
 Create a new OAuth Client in Cloud Console (§4 step 3), then:
 
 ```bash
-gh secret set GOOGLE_OAUTH_CLIENT_ID      --body "<new-client-id>"
-gh secret set VITE_GOOGLE_OAUTH_CLIENT_ID --body "<new-client-id>"
+gh secret set GOOGLE_OAUTH_CLIENT_ID --body "<new-client-id>"
 ```
 
-Trigger a deploy. The frontend bundle is rebuilt with the new ID; existing browser sessions stay valid (the backend continues to honour cookies it has already issued), but any new sign-in must come through the new Client ID. Delete the old OAuth Client in Cloud Console once the deploy is green.
+Trigger a deploy. `docker-compose.yml` derives the `app` image's `VITE_GOOGLE_OAUTH_CLIENT_ID` build arg from this same secret, so the frontend bundle is rebuilt with the new ID; existing browser sessions stay valid (the backend continues to honour cookies it has already issued), but any new sign-in must come through the new Client ID. Delete the old OAuth Client in Cloud Console once the deploy is green.
 
-### VAPID keys (`VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VITE_VAPID_PUBLIC_KEY`)
+### VAPID keys (`VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT`)
 
-Regenerate per §5 and re-`gh secret set` all four entries (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` if it changed, `VITE_VAPID_PUBLIC_KEY`). Trigger a deploy. As noted in §5, all existing push subscriptions are invalidated; users must re-subscribe.
+Regenerate per §5 and re-`gh secret set` all three entries (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` if it changed). Trigger a deploy — `docker-compose.yml` derives the `app` image's `VITE_VAPID_PUBLIC_KEY` build arg from `VAPID_PUBLIC_KEY`, so the frontend bundle is rebuilt too. As noted in §5, all existing push subscriptions are invalidated; users must re-subscribe.
 
 ### Bootstrap admin (`BOOTSTRAP_ADMIN_EMAIL`)
 

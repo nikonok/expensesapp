@@ -36,7 +36,7 @@ The frontend is a React 19 PWA that works fully offline against a local IndexedD
 - **Family sharing** — invite members to a household; shared accounts, categories, budgets, transactions
 - **E2E-encrypted sync** — XChaCha20-Poly1305 record envelopes with a per-family key wrapped to each device's X25519 public key; server stores ciphertext + AAD metadata only
 - **Web Push** — per-device push notifications for sync activity and reminders
-- **Admin panel** — `/admin` route for family ownership transfer, device revocation, snapshots, and quota inspection
+- **Admin panel** — `/admin` route for user list management (suspend/unsuspend, promote/demote admin), email allowlist, device revocation, and audit log
 - **Snapshots & recovery** — server-side ciphertext snapshots; full restore flow for re-installs or new devices
 
 ## Tech Stack
@@ -82,7 +82,7 @@ npm install
 npm run dev       # http://localhost:5173
 ```
 
-The app opens to the configured startup tab (default: Transactions). On first launch a 5-step onboarding flow picks the currency, creates an account, and seeds categories. Sync features are gated behind Google sign-in and a configured backend URL.
+The app opens to the configured startup tab (default: Transactions). On first launch a 6-step onboarding flow picks the currency, creates an account, and seeds categories. Sync features are gated behind Google sign-in and a configured backend URL.
 
 ### Backend
 
@@ -128,7 +128,7 @@ task docker:up    # nginx-served frontend on http://localhost:80
 
 ## State management layers
 
-1. **Dexie + useLiveQuery** — reactive DB reads for all domain data (frontend IndexedDB is currently at **schema v6**; see `src/db/database.ts`).
+1. **Dexie + useLiveQuery** — reactive DB reads for all domain data (the Dexie schema is versioned in `src/db/database.ts`; see `src/db/CLAUDE.md` for the current head version).
 2. **Zustand `ui-store`** — ephemeral UI state (filters, selection, edit mode); lost on reload.
 3. **Zustand `settings-store`** — hydrated from DB on startup, written back on change.
 4. **Sync engine (`src/services/sync/`)** — outbox + cursor tables drain to the backend in the background; conflicts resolved by `(updatedAt, recordId)` last-writer-wins per architecture spec.

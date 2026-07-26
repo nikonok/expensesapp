@@ -5,23 +5,25 @@
 ## Purpose
 
 Context-aware background job runner with graceful shutdown. Owns the schedules
-for daily snapshots, deletion purge, digest push, and held-notification draining.
+for daily snapshots, deletion purge, digest push, held-notification draining,
+and reauth-challenge/grant cleanup.
 
 ## Key files
 
 - `runner.go` — `JobRunner`; `Start(ctx)` launches each job in its own goroutine; `Stop()` cancels and waits.
 - `schedule.go` — `Schedule` interface, `DailyUTC{Hour,Minute}` (fires once per UTC day), `HourlyTick` (fires at the top of each UTC minute, for per-minute reminders).
 - `snapshot_daily.go` — daily 03:00 UTC: create per-family snapshots, prune expired snapshots, prune orphan blobs.
-- `deletion_purge.go` — daily: hard-delete user accounts past the deletion grace period.
+- `deletion_purge.go` — daily 04:00 UTC: hard-delete user accounts past the deletion grace period.
 - `digest_push.go` — periodic digest delivery (record-change roll-up).
 - `held_drainer.go` — drains `held_notifications` whose `deliver_after` has passed (quiet hours queue).
+- `reauth_cleanup.go` — daily 05:00 UTC: deletes expired `reauth_challenges`/`reauth_grants` rows past their retention window.
 
 ## Public surface
 
 - `JobRunner`, `NewJobRunner(jobs ...ScheduledJob)`, `Start`, `Stop`.
 - `Job` (function type), `ScheduledJob` struct, `Schedule` interface.
 - `DailyUTC`, `HourlyTick` implementations.
-- `NewDailySnapshotJob(db)`, `NewDeletionPurgeJob(...)`, `NewDigestPushJob(...)`, `NewHeldDrainerJob(...)` — constructors used in `cmd/api/main.go`.
+- `NewDailySnapshotJob(db)`, `NewDeletionPurgeJob(...)`, `NewDigestPushJob(...)`, `NewHeldDrainerJob(...)`, `NewReauthCleanupJob(db)` — constructors used in `cmd/api/main.go`.
 
 ## Conventions
 

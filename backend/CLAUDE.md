@@ -11,7 +11,7 @@ opaque ciphertext + AAD metadata only.
 ## Key files
 
 - `cmd/api/main.go` — process entrypoint; loads config, opens DB, wires handlers, runs job runner.
-- `internal/server/router.go` — chi router; canonical route table mirrors `docs/backend/architecture.md` §6.2.
+- `internal/server/router.go` — chi router; canonical route table. See the root [ARCHITECTURE.md](../ARCHITECTURE.md) for the documented route overview, or read this file directly for the exact wiring.
 - `internal/config/` — env-tag config (`caarlos0/env`); all knobs come from env vars.
 - `sqlc.yaml` — sqlc codegen config; queries in `internal/db/queries.sql` → `internal/db/gen/`.
 - `Dockerfile` — multi-stage build; final stage embeds migrations and runs as non-root.

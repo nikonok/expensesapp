@@ -65,6 +65,16 @@ jobs:
           APP_HOSTNAME: ${{ secrets.APP_HOSTNAME }}
           SSH_HOSTNAME: ${{ secrets.SSH_HOST }}
         run: |
+          missing=""
+          [ -z "$APP_HOSTNAME" ] && missing="$missing APP_HOSTNAME"
+          [ -z "$CF_ACCOUNT_ID" ] && missing="$missing CF_ACCOUNT_ID"
+          [ -z "$CF_TUNNEL_ID" ] && missing="$missing CF_TUNNEL_ID"
+          [ -z "$SSH_HOSTNAME" ] && missing="$missing SSH_HOST"
+          if [ -n "$missing" ]; then
+            echo "Error: missing required secret(s) for Cloudflare tunnel ingress:$missing" >&2
+            exit 1
+          fi
+
           body=$(jq -nc \
             --arg app "$APP_HOSTNAME" --arg ssh "$SSH_HOSTNAME" \
             '{config:{ingress:[
@@ -146,7 +156,7 @@ jobs:
         if: ${{ env.APP_HOSTNAME != '' }}
         run: |
           set -e
-          url="https://$APP_HOSTNAME/v1/health"
+          url="https://$APP_HOSTNAME/api/v1/health"
           for i in 1 2 3 4 5 6; do
             if curl -fsS --max-time 10 "$url" > /dev/null; then
               echo "Health check passed on attempt $i"

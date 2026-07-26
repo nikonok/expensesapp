@@ -17,8 +17,6 @@ services:
     user: "101:101" # nginx uid/gid — explicit here so it cannot be overridden at runtime
     restart: unless-stopped
     # No host port binding — cloudflared reaches the app via Docker DNS (http://app:80).
-    # Uncomment the line below for local debugging only:
-    # ports: ["127.0.0.1:${APP_PORT:-8080}:80"]
     expose:
       - "80"
     read_only: true
@@ -59,9 +57,10 @@ services:
   # to the app over the internal Docker 'tunnel' network.
   # CLOUDFLARE_TUNNEL_TOKEN is injected from .env (never committed to git).
   cloudflared:
-    # Pin to a specific version for reproducible deploys. Check releases at:
-    # https://github.com/cloudflare/cloudflared/releases
-    # Update this tag periodically (or set up Dependabot for Docker images).
+    # Intentionally tracks `latest` — cloudflared is a thin, frequently-updated
+    # client and staying current avoids protocol/edge compatibility issues.
+    # Pin to a specific tag instead if reproducible deploys are preferred; see
+    # releases at: https://github.com/cloudflare/cloudflared/releases
     image: cloudflare/cloudflared:latest
     container_name: expensesapp-cloudflared
     restart: unless-stopped
@@ -94,36 +93,10 @@ services:
     # their HTTP routes simply return 502 until they become healthy; SSH stays
     # available throughout.
 
-  # ── Future: PostgreSQL ──────────────────────────────────────────────────────
-  # Uncomment this service when a backend is added to the project.
-  # The pgdata volume below is pre-declared and will persist across restarts.
-  # Add 'internal' to the app service networks when enabling the backend.
-  #
-  # db:
-  #   image: postgres:16-alpine
-  #   container_name: expensesapp-db
-  #   restart: unless-stopped
-  #   read_only: true
-  #   cap_drop: [ALL]
-  #   tmpfs: [/var/run/postgresql, /tmp]
-  #   security_opt: ["no-new-privileges:true"]
-  #   environment:
-  #     POSTGRES_DB:       ${POSTGRES_DB:-expensesapp}
-  #     POSTGRES_USER:     ${POSTGRES_USER:-appuser}
-  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
-  #   volumes:
-  #     - pgdata:/var/lib/postgresql/data
-  #   networks:
-  #     - internal          # app + db only; cloudflared has no access to this network
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-
   # ── API backend ────────────────────────────────────────────────────────────
-  # Go API service. cloudflared routes /api/* → api:8080 (set in CF dashboard).
-  # See docs/backend/operator-runbook.md for first-boot instructions.
+  # Go API service. The app (nginx) container proxies /api/ to api:8080 —
+  # see nginx/nginx.conf. See docs/backend/operator-runbook.md for first-boot
+  # instructions.
   api:
     build:
       context: backend
@@ -161,24 +134,12 @@ services:
         max-file: "3"
     networks:
       - tunnel
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/v1/health || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
 
 networks:
   tunnel:
     driver: bridge # app ↔ cloudflared; outbound internet allowed for CF edge connection
-  internal:
-    driver: bridge # future: app ↔ db only; cloudflared is never added to this network
 
 volumes:
-  # Pre-declared for future PostgreSQL use. Persists independently of the
-  # container lifecycle — docker compose down does NOT remove this volume.
-  pgdata:
-    driver: local
   # SQLite database + snapshots for the Go API backend.
   apidata:
     driver: local

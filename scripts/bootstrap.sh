@@ -5,11 +5,11 @@
 # the Cloudflare tunnel online. After this, all deployments go through
 # GitHub Actions via the tunnel.
 #
-# Usage:
+# Usage (all six variables are required):
+#   CLOUDFLARE_TUNNEL_TOKEN=eyJh... BOOTSTRAP_ADMIN_EMAIL=me@example.com \
+#   GOOGLE_OAUTH_CLIENT_ID=xxx.apps.googleusercontent.com \
+#   VAPID_PUBLIC_KEY=xxx VAPID_PRIVATE_KEY=xxx VAPID_SUBJECT=mailto:me@example.com \
 #   bash scripts/bootstrap.sh
-#
-# Or with the token passed via environment to avoid the prompt:
-#   CLOUDFLARE_TUNNEL_TOKEN=eyJh... bash scripts/bootstrap.sh
 
 set -euo pipefail
 
@@ -20,23 +20,35 @@ echo "=== expensesapp bootstrap ==="
 echo "App directory: $APP_DIR"
 echo
 
-# ── Tunnel token ─────────────────────────────────────────────────────────────
+# ── Required variables ────────────────────────────────────────────────────────
 
-if [[ -z "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]]; then
-    read -rsp "Cloudflare tunnel token (input hidden): " CLOUDFLARE_TUNNEL_TOKEN
-    echo
-    if [[ -z "$CLOUDFLARE_TUNNEL_TOKEN" ]]; then
-        echo "Error: tunnel token cannot be empty." >&2
-        exit 1
+missing=""
+for var in CLOUDFLARE_TUNNEL_TOKEN BOOTSTRAP_ADMIN_EMAIL GOOGLE_OAUTH_CLIENT_ID \
+           VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT; do
+    if [[ -z "${!var:-}" ]]; then
+        missing="$missing $var"
     fi
+done
+if [[ -n "$missing" ]]; then
+    echo "Error: the following required environment variable(s) are not set:$missing" >&2
+    exit 1
 fi
 
 # ── Write .env ────────────────────────────────────────────────────────────────
 
 ENV_FILE="$APP_DIR/.env"
-printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' "$CLOUDFLARE_TUNNEL_TOKEN" > "$ENV_FILE"
-chmod 600 "$ENV_FILE"
-chown deploy:deploy "$ENV_FILE"
+ENV_TMP="$(mktemp -p "$APP_DIR" .env.XXXXXX)"
+chmod 600 "$ENV_TMP"
+{
+    printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' "$CLOUDFLARE_TUNNEL_TOKEN"
+    printf 'BOOTSTRAP_ADMIN_EMAIL=%s\n'   "$BOOTSTRAP_ADMIN_EMAIL"
+    printf 'GOOGLE_OAUTH_CLIENT_ID=%s\n'  "$GOOGLE_OAUTH_CLIENT_ID"
+    printf 'VAPID_PUBLIC_KEY=%s\n'        "$VAPID_PUBLIC_KEY"
+    printf 'VAPID_PRIVATE_KEY=%s\n'       "$VAPID_PRIVATE_KEY"
+    printf 'VAPID_SUBJECT=%s\n'           "$VAPID_SUBJECT"
+} > "$ENV_TMP"
+chown deploy:deploy "$ENV_TMP"
+mv "$ENV_TMP" "$ENV_FILE"
 echo "✓ .env written"
 
 # ── Pull latest code ──────────────────────────────────────────────────────────

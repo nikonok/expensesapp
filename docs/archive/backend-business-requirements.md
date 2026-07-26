@@ -183,12 +183,12 @@ All types of notifications are enabled by default if user allows notifications.
 
 Server-sent push notifications cover four event types:
 
-| Event | User-configurable? | Default |
-|---|---|---|
-| **Backup quota warnings / sync errors** | ❌ Mandatory, cannot be disabled | ON |
-| Daily reminder to log expenses | ✅ Yes (on/off + time) | ON |
-| Missed-day reminder | ✅ Yes | ON |
-| Family activity (someone added/edited tx) | ✅ Yes | OFF (to avoid spam) |
+| Event                                     | User-configurable?               | Default             |
+| ----------------------------------------- | -------------------------------- | ------------------- |
+| **Backup quota warnings / sync errors**   | ❌ Mandatory, cannot be disabled | ON                  |
+| Daily reminder to log expenses            | ✅ Yes (on/off + time)           | ON                  |
+| Missed-day reminder                       | ✅ Yes                           | ON                  |
+| Family activity (someone added/edited tx) | ✅ Yes                           | OFF (to avoid spam) |
 
 - Per-user notification settings.
 - Per-event opt-out (except quota/sync warnings, which are mandatory).
@@ -369,24 +369,24 @@ The app ships with **end-to-end encryption from v1**. All user data is encrypted
 
 #### Threat model
 
-| Threat | Defended? | How |
-|---|---|---|
-| Sudo on the host reads the database | ✅ Yes | DB rows are opaque ciphertext blobs |
-| Stolen / leaked backup file (snapshot tarball, restic repo) | ✅ Yes | Backups inherit the ciphertext |
-| Cloud provider snapshots the volume | ✅ Yes | Same |
-| Web admin panel exposes user data | ✅ Yes | Admins see metadata only (§ 3.6) AND cannot decrypt anyway |
-| Compromised backend process | ✅ Yes | Server has no key material to leak |
-| Network in transit | ✅ Yes | TLS required for all backend traffic |
-| Compromised Google account → attacker signs in on a new device | ⚠️ Partially | Attacker can add a new device, BUT existing devices get a security alert ("new device joined") and recovery code is still required if no other devices are present. User has a chance to react. |
-| User loses ALL signed-in devices AND recovery code | ❌ Data is unrecoverable | The hard cost of E2EE. Explicit in the UX. |
+| Threat                                                         | Defended?                | How                                                                                                                                                                                             |
+| -------------------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sudo on the host reads the database                            | ✅ Yes                   | DB rows are opaque ciphertext blobs                                                                                                                                                             |
+| Stolen / leaked backup file (snapshot tarball, restic repo)    | ✅ Yes                   | Backups inherit the ciphertext                                                                                                                                                                  |
+| Cloud provider snapshots the volume                            | ✅ Yes                   | Same                                                                                                                                                                                            |
+| Web admin panel exposes user data                              | ✅ Yes                   | Admins see metadata only (§ 3.6) AND cannot decrypt anyway                                                                                                                                      |
+| Compromised backend process                                    | ✅ Yes                   | Server has no key material to leak                                                                                                                                                              |
+| Network in transit                                             | ✅ Yes                   | TLS required for all backend traffic                                                                                                                                                            |
+| Compromised Google account → attacker signs in on a new device | ⚠️ Partially             | Attacker can add a new device, BUT existing devices get a security alert ("new device joined") and recovery code is still required if no other devices are present. User has a chance to react. |
+| User loses ALL signed-in devices AND recovery code             | ❌ Data is unrecoverable | The hard cost of E2EE. Explicit in the UX.                                                                                                                                                      |
 
 #### Key model
 
-| Key | Generated by | Lives where | Purpose |
-|---|---|---|---|
-| **Family key** (symmetric) | Client device | Inside each authorized device's secure storage; never on the server in plaintext | Encrypts all user/family data |
-| **Device keypair** (asymmetric) | Each device at first sign-in | Public key on server; private key stays on device, non-extractable | Lets existing devices wrap the family key for new devices without server visibility |
-| **Recovery key** (symmetric, derived) | Derived on demand from the user's 24-word recovery phrase | Nowhere by default | Last-resort unwrap when all devices are lost |
+| Key                                   | Generated by                                              | Lives where                                                                      | Purpose                                                                             |
+| ------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| **Family key** (symmetric)            | Client device                                             | Inside each authorized device's secure storage; never on the server in plaintext | Encrypts all user/family data                                                       |
+| **Device keypair** (asymmetric)       | Each device at first sign-in                              | Public key on server; private key stays on device, non-extractable               | Lets existing devices wrap the family key for new devices without server visibility |
+| **Recovery key** (symmetric, derived) | Derived on demand from the user's 24-word recovery phrase | Nowhere by default                                                               | Last-resort unwrap when all devices are lost                                        |
 
 Every user has a family key from day one (a solo user is just "a family of one" internally). The same mechanism handles solo and family use uniformly.
 
@@ -410,37 +410,37 @@ Every user has a family key from day one (a solo user is just "a family of one" 
 
 All existing spec items still hold; here is how each interacts with E2EE:
 
-| Feature | Impact |
-|---|---|
-| Conflict resolution (§ 3.11, LWW per field) | Unaffected — server compares `updatedAt` timestamps (metadata), never values |
-| Continuous sync (§ 3.18) | Unaffected — payloads are ciphertext + metadata |
-| Daily snapshots (§ 3.14) | Snapshots are bundles of ciphertext records; restore is client-side |
-| Quota (§ 3.13, 200 MB) | Ciphertext is slightly larger than plaintext (AEAD tag + IV per record). 200 MB still covers ≥5 years comfortably. |
-| Family activity push (§ 3.21, counts only) | Already metadata-only; perfect fit |
-| Mandatory quota / sync-error pushes | Server knows quota state and sync errors (metadata); can send |
-| Admin panel | Admin still sees only metadata; now metadata is the ONLY thing readable, period |
-| Audit log | Unaffected — emails + admin actions, no financial content |
+| Feature                                     | Impact                                                                                                             |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Conflict resolution (§ 3.11, LWW per field) | Unaffected — server compares `updatedAt` timestamps (metadata), never values                                       |
+| Continuous sync (§ 3.18)                    | Unaffected — payloads are ciphertext + metadata                                                                    |
+| Daily snapshots (§ 3.14)                    | Snapshots are bundles of ciphertext records; restore is client-side                                                |
+| Quota (§ 3.13, 200 MB)                      | Ciphertext is slightly larger than plaintext (AEAD tag + IV per record). 200 MB still covers ≥5 years comfortably. |
+| Family activity push (§ 3.21, counts only)  | Already metadata-only; perfect fit                                                                                 |
+| Mandatory quota / sync-error pushes         | Server knows quota state and sync errors (metadata); can send                                                      |
+| Admin panel                                 | Admin still sees only metadata; now metadata is the ONLY thing readable, period                                    |
+| Audit log                                   | Unaffected — emails + admin actions, no financial content                                                          |
 
 #### Cleartext metadata scope (what the server sees and what it does NOT)
 
 This table is the contract. Anything not listed as cleartext is encrypted inside the payload.
 
-| Field | Cleartext on server? | Reason |
-|---|---|---|
-| `recordId` (opaque UUID) | ✅ Cleartext | Needed for upsert/lookup |
-| `recordType` (transaction / account / category / budget / settings) | ✅ Cleartext | Needed for routing and storage layout |
-| `familyId` (opaque UUID) | ✅ Cleartext | Needed for tenancy / access control |
-| `userId` (opaque UUID, for "who uploaded this") | ✅ Cleartext | Needed for family-activity counts (§ 3.21) and "added by" attribution if enabled |
-| Per-field `updatedAt` timestamps | ✅ Cleartext | Needed for LWW conflict resolution (§ 3.11) |
-| `deletedAt` (tombstone marker) | ✅ Cleartext | Needed for tombstone semantics |
-| Ciphertext byte count | ✅ Cleartext | Needed for quota (§ 3.13) |
-| Version byte (cipher/envelope) | ✅ Cleartext | Needed for migration safety |
-| AEAD nonce | ✅ Cleartext | Standard AEAD requirement |
-| AEAD tag | ✅ Cleartext | Standard AEAD requirement |
-| Owner-user email (on user records only) | ✅ Cleartext | Needed for sign-in, invites, allowlist |
-| Device label (on device records only) | ✅ Cleartext | Needed for the active-devices list and security alerts (§ 3.34) |
-| **Foreign keys** (accountId on tx, categoryId on tx, parentCategoryId, transferGroupId, etc.) | ❌ ENCRYPTED inside payload | Privacy: server must not be able to reconstruct the relationship graph |
-| **Amount, currency, note, account name, category name/icon/color, budget amounts, settings values, anything user-typed** | ❌ ENCRYPTED inside payload | All user data |
+| Field                                                                                                                    | Cleartext on server?        | Reason                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------ | --------------------------- | -------------------------------------------------------------------------------- |
+| `recordId` (opaque UUID)                                                                                                 | ✅ Cleartext                | Needed for upsert/lookup                                                         |
+| `recordType` (transaction / account / category / budget / settings)                                                      | ✅ Cleartext                | Needed for routing and storage layout                                            |
+| `familyId` (opaque UUID)                                                                                                 | ✅ Cleartext                | Needed for tenancy / access control                                              |
+| `userId` (opaque UUID, for "who uploaded this")                                                                          | ✅ Cleartext                | Needed for family-activity counts (§ 3.21) and "added by" attribution if enabled |
+| Per-field `updatedAt` timestamps                                                                                         | ✅ Cleartext                | Needed for LWW conflict resolution (§ 3.11)                                      |
+| `deletedAt` (tombstone marker)                                                                                           | ✅ Cleartext                | Needed for tombstone semantics                                                   |
+| Ciphertext byte count                                                                                                    | ✅ Cleartext                | Needed for quota (§ 3.13)                                                        |
+| Version byte (cipher/envelope)                                                                                           | ✅ Cleartext                | Needed for migration safety                                                      |
+| AEAD nonce                                                                                                               | ✅ Cleartext                | Standard AEAD requirement                                                        |
+| AEAD tag                                                                                                                 | ✅ Cleartext                | Standard AEAD requirement                                                        |
+| Owner-user email (on user records only)                                                                                  | ✅ Cleartext                | Needed for sign-in, invites, allowlist                                           |
+| Device label (on device records only)                                                                                    | ✅ Cleartext                | Needed for the active-devices list and security alerts (§ 3.34)                  |
+| **Foreign keys** (accountId on tx, categoryId on tx, parentCategoryId, transferGroupId, etc.)                            | ❌ ENCRYPTED inside payload | Privacy: server must not be able to reconstruct the relationship graph           |
+| **Amount, currency, note, account name, category name/icon/color, budget amounts, settings values, anything user-typed** | ❌ ENCRYPTED inside payload | All user data                                                                    |
 
 **Consequence:** the server can see _"family X has Y records of type Z modified at these times by these users, totaling N bytes against quota"_ — and nothing else. It cannot see which transaction belongs to which account, cannot reconstruct transfers, cannot count "how many groceries transactions" per family. Referential integrity, account/category linkage, and all semantic validation are the client's responsibility (§ 3.32 cryptographic invariants).
 
@@ -503,13 +503,13 @@ Both are metadata; no user data is exposed. Useful for support conversations ("H
 
 The app aims for GDPR-style hygiene (§ 3.4), but E2EE structurally limits what the operator can offer:
 
-| Right | Can operator honor? | How |
-|---|---|---|
-| Right of access (Art. 15) — "give me a copy of my data" | ⚠️ Only via the user's own working device | The operator has only ciphertext. The user can export their decrypted data from the app on any device where they're signed in. If the user is locked out (lost all devices + recovery code), the operator cannot help. |
-| Right to portability (Art. 20) — machine-readable export | ⚠️ Same as above | Same: in-app export from the user's device, not server-side. |
-| Right to erasure (Art. 17) — "delete my data" | ✅ Yes | Operator can purge all ciphertext, envelopes, snapshots, audit entries for the user (see § 3.19). This works even when the user is locked out. |
-| Right to rectification (Art. 16) | ⚠️ Only via the user's device | Same — operator has no plaintext to rectify. |
-| Right to restrict / object | ✅ Yes | Account suspension by admin (§ 3.6) implements this. |
+| Right                                                    | Can operator honor?                       | How                                                                                                                                                                                                                    |
+| -------------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Right of access (Art. 15) — "give me a copy of my data"  | ⚠️ Only via the user's own working device | The operator has only ciphertext. The user can export their decrypted data from the app on any device where they're signed in. If the user is locked out (lost all devices + recovery code), the operator cannot help. |
+| Right to portability (Art. 20) — machine-readable export | ⚠️ Same as above                          | Same: in-app export from the user's device, not server-side.                                                                                                                                                           |
+| Right to erasure (Art. 17) — "delete my data"            | ✅ Yes                                    | Operator can purge all ciphertext, envelopes, snapshots, audit entries for the user (see § 3.19). This works even when the user is locked out.                                                                         |
+| Right to rectification (Art. 16)                         | ⚠️ Only via the user's device             | Same — operator has no plaintext to rectify.                                                                                                                                                                           |
+| Right to restrict / object                               | ✅ Yes                                    | Account suspension by admin (§ 3.6) implements this.                                                                                                                                                                   |
 
 These limitations MUST be disclosed in any user-facing privacy notice before sign-in. The user is opting into a system where their data is theirs alone — the operator cannot read it, cannot help them recover it, but also cannot be compelled to surrender it.
 

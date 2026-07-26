@@ -22,15 +22,36 @@ Everything below assumes the standard layout: the Compose project lives at `/hom
 | "Something is broken"                 | [Common failure modes](#common-failure-modes)                                     |
 | Update cloudflared or Docker images   | [Updating cloudflared and Docker images](#updating-cloudflared-and-docker-images) |
 | Promote another admin                 | [Onboarding a second admin](#onboarding-a-second-admin)                           |
+| Run a one-off SQL query               | [Running SQL against the database](#running-sql-against-the-database)             |
+
+---
+
+## Running SQL against the database
+
+`expensesapp-api` runs on `gcr.io/distroless/static-debian12:nonroot` — the image contains only the compiled Go binary. There is no shell, no `sqlite3`, no coreutils, nothing else to exec into. **You cannot `docker exec` into the API container** for anything, not even `sh` or `ls`.
+
+To run SQL against `data.db`, start a disposable container that mounts the same named volume (`expensesapp_apidata`, containing `data.db` at its root) instead:
+
+```bash
+sudo docker run --rm -i -v expensesapp_apidata:/data \
+  -e SQL="<sql statement>" \
+  alpine:3 sh -c 'apk add -q sqlite && sqlite3 -header -column /data/data.db "$SQL"'
+```
+
+The rest of this document calls this **the sqlite shell command** and shows it with the `SQL=` value already filled in. Drop `-header -column` for statements that return no rows (`DELETE`/`UPDATE`/`INSERT`).
+
+This is safe to run for reads at any time: `data.db` runs in WAL mode, so a second process can read concurrently with the API's own writes. Writes from this container while the API is running are not recommended — SQLite's file locking prevents corruption, but a second writer can hit `database is locked` / contend with the API's own writes, especially under load. Prefer running `DELETE`/`UPDATE`/`INSERT` through the sqlite shell command in a section that already tells you to stop the API first (see [Restoring the database file](#restoring-the-database-file)), or after you have stopped it yourself with `docker compose stop api`. Where a section below runs a write with the API still up, that has been called out explicitly.
+
+For anything that only needs to talk to the running API over HTTP (not the database file), use `docker exec expensesapp-app wget -qO- http://api:8080/...` instead — the `app` container is Alpine-based nginx and has a shell and `wget`, as shown in [Health checks](#health-checks).
 
 ---
 
 ## Health checks
 
-The API exposes a single liveness endpoint that the Docker healthcheck and the GitHub Actions deploy step both poll.
+The API exposes a single liveness endpoint that the GitHub Actions deploy step polls. The `api` container has no Docker-level healthcheck (it runs on a distroless base image with no shell or `wget`/`curl` binary to probe itself with), so health is verified from outside the container, through nginx.
 
-- **Public (through the tunnel):** `https://<APP_HOSTNAME>/v1/health`
-- **Container-internal (used by the Docker healthcheck):** `http://localhost:8080/v1/health`
+- **Public (through the tunnel and nginx):** `https://<APP_HOSTNAME>/api/v1/health`
+- **From the server, without going out to the internet:** exec into the `app` container (nginx, Alpine-based, has `wget`) and hit `api` over the internal Docker network — you cannot `docker exec` into `expensesapp-api` itself for this; the image has no shell and no extra binaries to run.
 
 Expected response: HTTP `200` with a JSON body:
 
@@ -42,16 +63,17 @@ A handful of quick probes:
 
 ```bash
 # Public health (from your laptop)
-curl -fsS https://expenses.example.com/v1/health | jq .
+curl -fsS https://expenses.example.com/api/v1/health | jq .
 
-# Container-internal (from the server)
-sudo docker exec expensesapp-api wget -qO- http://localhost:8080/v1/health
+# From the server, via the app container's internal network (bypasses nginx's /api/ proxy)
+sudo docker exec expensesapp-app wget -qO- http://api:8080/v1/health
 
-# Compose-level status — should show all three services as "running (healthy)"
+# Compose-level status — api shows plain "Up" (no container healthcheck);
+# app and cloudflared show "Up (healthy)"/"Up" per their own checks
 sudo docker compose -f /home/deploy/expensesapp/docker-compose.yml ps
 ```
 
-If `docker compose ps` shows `unhealthy` for `api`, the next sections under [Reading logs](#reading-logs) and [Common failure modes](#common-failure-modes) are the right starting points.
+If the API is not responding, the next sections under [Reading logs](#reading-logs) and [Common failure modes](#common-failure-modes) are the right starting points.
 
 ---
 
@@ -101,21 +123,25 @@ The daily snapshot job (`job=daily-snapshot`) runs at **03:00 UTC** and:
 
 ### Listing snapshots for a family
 
+Using [the sqlite shell command](#running-sql-against-the-database):
+
 ```bash
-sudo docker exec expensesapp-api sqlite3 -header -column /var/lib/expensesapp/data.db \
-  "SELECT snapshot_date, created_at, expires_at FROM snapshots
+sudo docker run --rm -i -v expensesapp_apidata:/data \
+  -e SQL="SELECT snapshot_date, created_at, expires_at FROM snapshots
    WHERE family_id = '<family-uuid>'
-   ORDER BY snapshot_date DESC LIMIT 30;"
+   ORDER BY snapshot_date DESC LIMIT 30;" \
+  alpine:3 sh -c 'apk add -q sqlite && sqlite3 -header -column /data/data.db "$SQL"'
 ```
 
 ### Inspecting a snapshot's entries
 
 ```bash
-sudo docker exec expensesapp-api sqlite3 -header -column /var/lib/expensesapp/data.db \
-  "SELECT record_type, COUNT(*) AS rows
+sudo docker run --rm -i -v expensesapp_apidata:/data \
+  -e SQL="SELECT record_type, COUNT(*) AS rows
    FROM snapshot_entries
    WHERE snapshot_id = '<snapshot-uuid>'
-   GROUP BY record_type;"
+   GROUP BY record_type;" \
+  alpine:3 sh -c 'apk add -q sqlite && sqlite3 -header -column /data/data.db "$SQL"'
 ```
 
 ### Triggering a snapshot manually
@@ -123,10 +149,11 @@ sudo docker exec expensesapp-api sqlite3 -header -column /var/lib/expensesapp/da
 The job is idempotent on `(family_id, snapshot_date)` — re-running it for the same UTC day is a no-op. To force creation for every family right now, restart the API container shortly before 03:00 UTC, or call the existing service method via a small one-shot SQL insert (see code in `backend/internal/snapshot/service.go`). For ad-hoc inspection, copying the database file is usually simpler:
 
 ```bash
-sudo docker exec expensesapp-api sqlite3 /var/lib/expensesapp/data.db \
-  ".backup /var/lib/expensesapp/snapshots/$(date -u +%Y-%m-%d)-manual.db"
+sudo docker run --rm -i -v expensesapp_apidata:/data \
+  -e SQL=".backup /data/snapshots/$(date -u +%Y-%m-%d)-manual.db" \
+  alpine:3 sh -c 'apk add -q sqlite && mkdir -p /data/snapshots && sqlite3 /data/data.db "$SQL"'
 
-sudo docker exec expensesapp-api ls -lh /var/lib/expensesapp/snapshots/
+sudo docker run --rm -v expensesapp_apidata:/data alpine:3 ls -lh /data/snapshots/
 ```
 
 `sqlite3 .backup` is online-safe (uses the SQLite backup API) and produces a consistent copy without blocking writers.
@@ -182,7 +209,7 @@ sudo rm -f /var/lib/docker/volumes/expensesapp_apidata/_data/data.db-wal \
 sudo docker compose -f /home/deploy/expensesapp/docker-compose.yml start api
 
 # 5. Confirm health.
-curl -fsS https://expenses.example.com/v1/health
+curl -fsS https://expenses.example.com/api/v1/health
 ```
 
 Notes:
@@ -197,32 +224,37 @@ Notes:
 
 Per [`docs/backend/architecture.md`](./architecture.md) §7.7, each family's deduplicated ciphertext usage is tracked incrementally in `families.usage_bytes`. The ceiling is 200 MB per family.
 
+Using [the sqlite shell command](#running-sql-against-the-database):
+
 ```bash
 # Per-family usage, ranked
-sudo docker exec expensesapp-api sqlite3 -header -column /var/lib/expensesapp/data.db \
-  "SELECT id AS family_id, usage_bytes,
+sudo docker run --rm -i -v expensesapp_apidata:/data \
+  -e SQL="SELECT id AS family_id, usage_bytes,
           ROUND(usage_bytes * 100.0 / (200 * 1024 * 1024), 1) AS pct_of_200mb,
           created_at
    FROM families
-   ORDER BY usage_bytes DESC;"
+   ORDER BY usage_bytes DESC;" \
+  alpine:3 sh -c 'apk add -q sqlite && sqlite3 -header -column /data/data.db "$SQL"'
 
 # Reconciled count (defensive — should match the maintained counter)
-sudo docker exec expensesapp-api sqlite3 -header -column /var/lib/expensesapp/data.db \
-  "SELECT f.id AS family_id,
+sudo docker run --rm -i -v expensesapp_apidata:/data \
+  -e SQL="SELECT f.id AS family_id,
           f.usage_bytes AS counter_bytes,
           IFNULL(SUM(b.byte_count), 0) AS actual_bytes
    FROM families f
    LEFT JOIN blobs b ON b.family_id = f.id
    GROUP BY f.id
-   ORDER BY actual_bytes DESC;"
+   ORDER BY actual_bytes DESC;" \
+  alpine:3 sh -c 'apk add -q sqlite && sqlite3 -header -column /data/data.db "$SQL"'
 
 # Blob counts per family (active records, snapshot entries, orphans pending GC)
-sudo docker exec expensesapp-api sqlite3 -header -column /var/lib/expensesapp/data.db \
-  "SELECT f.id AS family_id,
+sudo docker run --rm -i -v expensesapp_apidata:/data \
+  -e SQL="SELECT f.id AS family_id,
           (SELECT COUNT(*) FROM record_meta rm WHERE rm.family_id = f.id AND rm.deleted_at IS NULL) AS live_records,
           (SELECT COUNT(*) FROM record_meta rm WHERE rm.family_id = f.id AND rm.deleted_at IS NOT NULL) AS tombstones,
           (SELECT COUNT(*) FROM blobs b WHERE b.family_id = f.id) AS blobs
-   FROM families f;"
+   FROM families f;" \
+  alpine:3 sh -c 'apk add -q sqlite && sqlite3 -header -column /data/data.db "$SQL"'
 ```
 
 If `counter_bytes` and `actual_bytes` diverge by more than a kilobyte, that is a bug — capture both before mutating anything and file an issue. The nightly reconciliation job is intended to keep them in lock-step.
@@ -260,15 +292,16 @@ Root users cannot be suspended (`403 forbidden` with detail `"cannot suspend roo
 To confirm the change took:
 
 ```bash
-sudo docker exec expensesapp-api sqlite3 -header -column /var/lib/expensesapp/data.db \
-  "SELECT id, email, suspended_at FROM users WHERE id = '<userId>';"
+sudo docker run --rm -i -v expensesapp_apidata:/data \
+  -e SQL="SELECT id, email, suspended_at FROM users WHERE id = '<userId>';" \
+  alpine:3 sh -c 'apk add -q sqlite && sqlite3 -header -column /data/data.db "$SQL"'
 ```
 
 ---
 
 ## Rotating VAPID keys
 
-VAPID (Web Push) keys sign the push messages the backend sends to FCM/Apple. Three GitHub Secrets carry them: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`. A fourth, `VITE_VAPID_PUBLIC_KEY`, is the same public key baked into the Vite bundle at build time.
+VAPID (Web Push) keys sign the push messages the backend sends to FCM/Apple. Three GitHub Secrets carry them: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`. There is no separate `VITE_VAPID_PUBLIC_KEY` secret — `docker-compose.yml` derives the `app` image's `VITE_VAPID_PUBLIC_KEY` build arg from `VAPID_PUBLIC_KEY` in the server `.env`, baking the same public key into the Vite bundle at build time.
 
 **Rotation invalidates every existing push subscription.** Browsers tie a subscription to the public key it was created with — every device must re-subscribe on its next visit. Users will simply stop receiving notifications until they re-open the app and accept the prompt again. Rotate only on suspected compromise.
 
@@ -276,11 +309,10 @@ VAPID (Web Push) keys sign the push messages the backend sends to FCM/Apple. Thr
 # Generate a fresh pair locally
 docker run --rm node:alpine npx -y web-push generate-vapid-keys --json > vapid.json
 
-# Update all four GitHub Secrets
+# Update the three GitHub Secrets
 gh secret set VAPID_PUBLIC_KEY       --body "$(jq -r .publicKey  vapid.json)"
 gh secret set VAPID_PRIVATE_KEY      --body "$(jq -r .privateKey vapid.json)"
 gh secret set VAPID_SUBJECT          --body "mailto:you@example.com"
-gh secret set VITE_VAPID_PUBLIC_KEY  --body "$(jq -r .publicKey  vapid.json)"
 
 # Shred the local copy
 shred -u vapid.json
@@ -293,9 +325,12 @@ After the deploy is green:
 
 - Existing `push_subscriptions` rows in SQLite are now dead. They will be GC'd opportunistically when delivery fails (`push_token_gc` path). You can also wipe them eagerly:
 
+  This is a write while the API stays up — a single `DELETE` is low-risk, but if you hit `database is locked`, retry (or stop the API first, per the note in [Running SQL against the database](#running-sql-against-the-database)):
+
   ```bash
-  sudo docker exec expensesapp-api sqlite3 /var/lib/expensesapp/data.db \
-    "DELETE FROM push_subscriptions;"
+  sudo docker run --rm -i -v expensesapp_apidata:/data \
+    -e SQL="DELETE FROM push_subscriptions;" \
+    alpine:3 sh -c 'apk add -q sqlite && sqlite3 /data/data.db "$SQL"'
   ```
 
 - Watch the API logs for `push: subscribe` lines as devices re-register over the next few days.
@@ -326,11 +361,13 @@ gh workflow run "Deploy to Server"
 Verify after deploy:
 
 ```bash
-sudo docker exec expensesapp-api sqlite3 -header -column /var/lib/expensesapp/data.db \
-  "SELECT id, bootstrap_email, applied_at FROM bootstrap_state;"
+sudo docker run --rm -i -v expensesapp_apidata:/data \
+  -e SQL="SELECT id, bootstrap_email, applied_at FROM bootstrap_state;" \
+  alpine:3 sh -c 'apk add -q sqlite && sqlite3 -header -column /data/data.db "$SQL"'
 
-sudo docker exec expensesapp-api sqlite3 -header -column /var/lib/expensesapp/data.db \
-  "SELECT id, email, is_root, is_admin FROM users WHERE email IN ('old@example.com','new-root@example.com');"
+sudo docker run --rm -i -v expensesapp_apidata:/data \
+  -e SQL="SELECT id, email, is_root, is_admin FROM users WHERE email IN ('old@example.com','new-root@example.com');" \
+  alpine:3 sh -c 'apk add -q sqlite && sqlite3 -header -column /data/data.db "$SQL"'
 ```
 
 If you must restart the API container by hand (no deploy), use:
@@ -371,23 +408,23 @@ Until B5b lands, treat "force key rotation" as **not available**. If a hard rese
 
 ## Common failure modes
 
-| Symptom                                                               | Likely cause                                                                                                                            | Fix                                                                                                                                                                                                                                     |
-| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `docker compose ps` shows `api` as `unhealthy` for >5 min after start | A required env var is missing (`BOOTSTRAP_ADMIN_EMAIL`, `GOOGLE_OAUTH_CLIENT_ID`, `VAPID_*`); migration failed; volume permission error | `docker compose logs api` — the container prints the missing variable name on exit. Set the corresponding GitHub Secret and redeploy.                                                                                                   |
-| `curl https://<host>/v1/health` returns `502` / `503`                 | API container is down or restarting                                                                                                     | `docker compose ps`; if `api` is restarting check the logs. If `cloudflared` is up but `api` is not, the tunnel returns 502.                                                                                                            |
-| `curl https://<host>/v1/health` hangs or DNS-fails                    | Cloudflare tunnel is down                                                                                                               | `docker compose logs cloudflared`; expect `Registered tunnel connection`. If absent, `docker compose restart cloudflared`. If still failing, regenerate the tunnel token in Cloudflare and update `CLOUDFLARE_TUNNEL_TOKEN`.            |
-| Clients get `401 unauthenticated` on every request                    | Session table was wiped, or sessions expired in bulk after a restart                                                                    | Confirm `sessions` row count: `sqlite3 ... "SELECT COUNT(*) FROM sessions WHERE revoked_at IS NULL;"`. Users must sign in again — there is no recovery from a wiped sessions table.                                                     |
-| Clients get `403 forbidden` with detail mentioning CSRF               | Frontend deploy out of sync with backend; missing `X-Requested-With: fetch` header                                                      | Redeploy the frontend so it matches the backend. For curl, always pass `-H "X-Requested-With: fetch"`.                                                                                                                                  |
-| Clients get `403 account-suspended`                                   | The user was suspended (by accident or otherwise)                                                                                       | Unsuspend via admin UI, or `POST /v1/admin/users/{id}/unsuspend` (see above).                                                                                                                                                           |
-| Push notifications stopped working for everyone simultaneously        | VAPID keys were rotated; every subscription is now dead                                                                                 | Expected after a VAPID rotation. Users re-subscribe on next app open.                                                                                                                                                                   |
-| Push notifications stopped for one user only                          | Their browser dropped the subscription (uninstall / private mode / GC)                                                                  | They need to re-open the PWA and accept the prompt again. Inspect their rows: `SELECT * FROM push_subscriptions WHERE device_id IN (SELECT id FROM devices WHERE user_id='...');`                                                       |
-| SSE connections dropping every few minutes                            | Cloudflare default idle timeout (~100s) won the race against the 25s heartbeat                                                          | Confirm `:keepalive` lines in the SSE traffic; if missing the backend has a regression. If present, check Cloudflare tunnel/proxy settings for buffering rules that strip events.                                                       |
-| New sign-ins fail with `403 email-not-allowed`                        | The email is not on the allowlist                                                                                                       | Add via the admin UI's allowlist screen, or `POST /v1/admin/allowlist`. New users only join via this list.                                                                                                                              |
-| `sync.push` returns `413 payload-too-large`                           | Client tried to upload a batch above the server-side body limit                                                                         | Client bug — clients are supposed to chunk batches. Inspect the request, file an issue.                                                                                                                                                 |
-| `sync.push` returns `429 rate-limit-exceeded`                         | Client is in a tight retry loop after a 5xx                                                                                             | Backoff is client-side; nothing for the operator to fix. Check API logs for the underlying 5xx that started the loop.                                                                                                                   |
-| `usage_bytes` won't go down after deleting records                    | Tombstoned records still pin their blob; orphan blobs are GC'd by the daily snapshot job                                                | Wait for the 03:00 UTC `daily-snapshot` job to run, or restart the API to trigger the pruner on next schedule.                                                                                                                          |
-| Tunnel up, API up, but the PWA gets `404` on `/api/*`                 | Tunnel ingress rules don't route `/api/*` to `api:8080`                                                                                 | Check Cloudflare Zero Trust → Networks → Tunnels → your tunnel → Public Hostnames. The `/api/*` rule must come before the catch-all. If you set `CF_API_TOKEN` in GitHub Secrets, re-running the deploy rewrites ingress automatically. |
-| Container restarts in a loop with `database is locked`                | Stale WAL or another process is writing to `data.db`                                                                                    | Stop the API, ensure no other container has the volume mounted, remove stale `data.db-wal` and `data.db-shm`, start again. See [Restoring the database file](#restoring-the-database-file) for the exact paths.                         |
+| Symptom                                                                                                                                                   | Likely cause                                                                                                                            | Fix                                                                                                                                                                                                                                                        |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docker compose ps` shows `api` restarting or exited (it has no container healthcheck, so it never shows `unhealthy` — check state/restart count instead) | A required env var is missing (`BOOTSTRAP_ADMIN_EMAIL`, `GOOGLE_OAUTH_CLIENT_ID`, `VAPID_*`); migration failed; volume permission error | `docker compose logs api` — the container prints the missing variable name on exit. Set the corresponding GitHub Secret and redeploy.                                                                                                                      |
+| `curl https://<host>/api/v1/health` returns `502` / `503`                                                                                                 | API container is down or restarting                                                                                                     | `docker compose ps`; if `api` is restarting check the logs. If `cloudflared` is up but `api` is not, nginx (in `app`) returns 502.                                                                                                                         |
+| `curl https://<host>/api/v1/health` hangs or DNS-fails                                                                                                    | Cloudflare tunnel is down                                                                                                               | `docker compose logs cloudflared`; expect `Registered tunnel connection`. If absent, `docker compose restart cloudflared`. If still failing, regenerate the tunnel token in Cloudflare and update `CLOUDFLARE_TUNNEL_TOKEN`.                               |
+| Clients get `401 unauthenticated` on every request                                                                                                        | Session table was wiped, or sessions expired in bulk after a restart                                                                    | Confirm `sessions` row count with [the sqlite shell command](#running-sql-against-the-database), `SQL="SELECT COUNT(*) FROM sessions WHERE revoked_at IS NULL;"`. Users must sign in again — there is no recovery from a wiped sessions table.             |
+| Clients get `403 forbidden` with detail mentioning CSRF                                                                                                   | Frontend deploy out of sync with backend; missing `X-Requested-With: fetch` header                                                      | Redeploy the frontend so it matches the backend. For curl, always pass `-H "X-Requested-With: fetch"`.                                                                                                                                                     |
+| Clients get `403 account-suspended`                                                                                                                       | The user was suspended (by accident or otherwise)                                                                                       | Unsuspend via admin UI, or `POST /v1/admin/users/{id}/unsuspend` (see above).                                                                                                                                                                              |
+| Push notifications stopped working for everyone simultaneously                                                                                            | VAPID keys were rotated; every subscription is now dead                                                                                 | Expected after a VAPID rotation. Users re-subscribe on next app open.                                                                                                                                                                                      |
+| Push notifications stopped for one user only                                                                                                              | Their browser dropped the subscription (uninstall / private mode / GC)                                                                  | They need to re-open the PWA and accept the prompt again. Inspect their rows with [the sqlite shell command](#running-sql-against-the-database), `SQL="SELECT * FROM push_subscriptions WHERE device_id IN (SELECT id FROM devices WHERE user_id='...');"` |
+| SSE connections dropping every few minutes                                                                                                                | Cloudflare default idle timeout (~100s) won the race against the 25s heartbeat                                                          | Confirm `:keepalive` lines in the SSE traffic; if missing the backend has a regression. If present, check Cloudflare tunnel/proxy settings for buffering rules that strip events.                                                                          |
+| New sign-ins fail with `403 email-not-allowed`                                                                                                            | The email is not on the allowlist                                                                                                       | Add via the admin UI's allowlist screen, or `POST /v1/admin/allowlist`. New users only join via this list.                                                                                                                                                 |
+| `sync.push` returns `413 payload-too-large`                                                                                                               | Client tried to upload a batch above the server-side body limit                                                                         | Client bug — clients are supposed to chunk batches. Inspect the request, file an issue.                                                                                                                                                                    |
+| `sync.push` returns `429 rate-limit-exceeded`                                                                                                             | Client is in a tight retry loop after a 5xx                                                                                             | Backoff is client-side; nothing for the operator to fix. Check API logs for the underlying 5xx that started the loop.                                                                                                                                      |
+| `usage_bytes` won't go down after deleting records                                                                                                        | Tombstoned records still pin their blob; orphan blobs are GC'd by the daily snapshot job                                                | Wait for the 03:00 UTC `daily-snapshot` job to run, or restart the API to trigger the pruner on next schedule.                                                                                                                                             |
+| Tunnel up, API up, but the PWA gets `404` on `/api/*`                                                                                                     | Tunnel ingress rules don't route `/api/*` to `api:8080`                                                                                 | Check Cloudflare Zero Trust → Networks → Tunnels → your tunnel → Public Hostnames. The `/api/*` rule must come before the catch-all. If you set `CF_API_TOKEN` in GitHub Secrets, re-running the deploy rewrites ingress automatically.                    |
+| Container restarts in a loop with `database is locked`                                                                                                    | Stale WAL or another process is writing to `data.db`                                                                                    | Stop the API, ensure no other container has the volume mounted, remove stale `data.db-wal` and `data.db-shm`, start again. See [Restoring the database file](#restoring-the-database-file) for the exact paths.                                            |
 
 For anything not in the table, the loop is always the same: `docker compose ps` → `docker compose logs api` → look up the failing endpoint in [`docs/backend/architecture.md`](./architecture.md) §6 → if the log line includes a `request_id`, grep the rest of the request out of the logs.
 
@@ -414,7 +451,7 @@ If you want a pinned cloudflared (recommended for production), change the image 
 
 ### Refresh API / app images
 
-Just push to `main` (or `gh workflow run "Deploy to Server"`). The workflow rebuilds both images, restarts the containers in order, and waits on the `/v1/health` gate before marking the deploy green. No operator action on the server is required.
+Just push to `main` (or `gh workflow run "Deploy to Server"`). The workflow rebuilds both images, restarts the containers in order, and waits on the `/api/v1/health` gate before marking the deploy green. No operator action on the server is required.
 
 ### Free up disk after many rebuilds
 
@@ -466,17 +503,19 @@ curl -fsS -X POST "https://expenses.example.com/v1/admin/admins/<userId>/promote
 Verify:
 
 ```bash
-sudo docker exec expensesapp-api sqlite3 -header -column /var/lib/expensesapp/data.db \
-  "SELECT id, email, is_admin, is_root, promoter_id, suspended_at FROM users WHERE is_admin = 1 OR is_root = 1;"
+sudo docker run --rm -i -v expensesapp_apidata:/data \
+  -e SQL="SELECT id, email, is_admin, is_root, promoter_id, suspended_at FROM users WHERE is_admin = 1 OR is_root = 1;" \
+  alpine:3 sh -c 'apk add -q sqlite && sqlite3 -header -column /data/data.db "$SQL"'
 ```
 
 Then check the audit trail:
 
 ```bash
-sudo docker exec expensesapp-api sqlite3 -header -column /var/lib/expensesapp/data.db \
-  "SELECT created_at, actor_email, action, target_id FROM audit_log
+sudo docker run --rm -i -v expensesapp_apidata:/data \
+  -e SQL="SELECT created_at, actor_email, action, target_id FROM audit_log
    WHERE action IN ('admin.promote','admin.demote','bootstrap.email.change')
-   ORDER BY created_at DESC LIMIT 20;"
+   ORDER BY created_at DESC LIMIT 20;" \
+  alpine:3 sh -c 'apk add -q sqlite && sqlite3 -header -column /data/data.db "$SQL"'
 ```
 
 ---
