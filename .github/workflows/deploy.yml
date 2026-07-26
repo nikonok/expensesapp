@@ -111,7 +111,12 @@ jobs:
       - name: Pull, build, and restart
         # docker compose commands use -f with the absolute path to match the
         # sudoers rules on the server (which restrict the deploy user to this
-        # specific compose file only).
+        # specific compose file only). Those rules are `build *` / `up *` — a
+        # trailing wildcard that requires at least one argument after the
+        # subcommand, so a bare `build` would NOT match and sudo would prompt
+        # for a password. Every compose invocation below therefore always
+        # carries an argument: the default (cached) path rebuilds via
+        # `up -d --build`; the no_cache path runs an explicit `build --no-cache`.
         env:
           NO_CACHE: ${{ inputs.no_cache && '--no-cache' || '' }}
         run: |
@@ -119,8 +124,12 @@ jobs:
             set -euo pipefail
             COMPOSE="sudo docker compose -f ${{ secrets.APP_DIR }}/docker-compose.yml"
             git -C "${{ secrets.APP_DIR }}" pull origin main
-            \$COMPOSE build ${NO_CACHE}
-            \$COMPOSE up -d
+            if [ -n "${NO_CACHE}" ]; then
+              \$COMPOSE build --no-cache
+              \$COMPOSE up -d
+            else
+              \$COMPOSE up -d --build
+            fi
             \$COMPOSE ps
           ENDSSH
 
